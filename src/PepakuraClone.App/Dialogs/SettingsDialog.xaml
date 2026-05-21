@@ -133,6 +133,8 @@
                       VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled"
                       Padding="16,12">
+            <!-- Single Grid child — all panels share the same cell and toggle Visibility -->
+            <Grid>
 
             <!-- ── 3D View Panel ──────────────────────────────────── -->
             <StackPanel x:Name="Panel3D">
@@ -707,11 +709,14 @@
                             <ComboBox Grid.Column="1"
                                       ItemsSource="{Binding DisplayUnits}"
                                       SelectedItem="{Binding DisplayUnit}"
-                                      ToolTip="Switch between millimetres and inches throughout the app"/>
+                                      Width="120"
+                                      ToolTip="mm = millimetres, inch = inches — affects all dimension labels in the app"/>
                         </Grid>
                     </StackPanel>
                 </GroupBox>
             </StackPanel>
+
+            </Grid><!-- end single-child Grid -->
         </ScrollViewer>
 
         <!-- ═══ Footer ════════════════════════════════════════════════ -->

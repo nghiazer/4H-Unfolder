@@ -54,7 +54,8 @@ public class SvgExporter : IExporter
         sb.AppendLine($"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{F(W)}\" height=\"{F(H)}\" viewBox=\"0 0 {F(W)} {F(H)}\">");
         sb.AppendLine("  <defs>");
         sb.AppendLine("    <style>");
-        sb.AppendLine("      .face { fill:#fffde7; stroke:#aaa; stroke-width:0.3; }");
+        string faceFill = p.GrayscaleOutput ? "#eeeeee" : "#fffde7";
+        sb.AppendLine($"      .face {{ fill:{faceFill}; stroke:#aaa; stroke-width:0.3; }}");
         sb.AppendLine($"      .fold {{ stroke:{foldColor}; stroke-width:{F((float)p.FoldLineWidth)}{foldDash}; fill:none; }}");
         sb.AppendLine($"      .cut  {{ stroke:{cutColor};  stroke-width:{F((float)p.CutLineWidth)}; fill:none; }}");
         sb.AppendLine($"      .tab  {{ fill:{tabFill}; stroke:#2e7d32; stroke-width:0.6; }}");

@@ -49,7 +49,8 @@ public partial class SettingsViewModel : ObservableObject
 
     // ── General ───────────────────────────────────────────────────────────────
     [ObservableProperty] private string _displayUnit = "mm";
-    public IReadOnlyList<string> DisplayUnits { get; } = ["mm (millimetre)", "inch"];
+    // Values must match AppSettings.GeneralSettings.DisplayUnit exactly ("mm" | "inch")
+    public IReadOnlyList<string> DisplayUnits { get; } = ["mm", "inch"];
 
     // ── Print ─────────────────────────────────────────────────────────────────
     [ObservableProperty] private double _marginMm              = 10.0;
@@ -187,7 +188,7 @@ public partial class SettingsViewModel : ObservableObject
         },
         General = new()
         {
-            DisplayUnit = DisplayUnit.StartsWith("inch") ? "inch" : "mm"
+            DisplayUnit = DisplayUnit  // "mm" or "inch" — already stored as the canonical value
         }
     };
 }

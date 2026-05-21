@@ -1,13 +1,13 @@
 # PepakuraClone — Session Progress Log
 
-> **Last updated:** 2026-05-21  
-> **Branch:** `main`  
+> **Last updated:** 2026-05-22  
+> **Branch:** `feat/paper-model-unfolder`  (PR #1 open against `main`)
 > **Target framework:** .NET 8 / WPF  
-> **SDK required:** .NET 8 SDK (`winget install Microsoft.DotNet.SDK.8`)
+> **SDK required:** `winget install Microsoft.DotNet.SDK.8`
 
 ---
 
-## Quick-start (after installing .NET 8 SDK)
+## Quick-start
 
 ```bash
 cd D:\CODING\UNFOLD
@@ -22,163 +22,112 @@ dotnet test tests/PepakuraClone.Tests
 ## Architecture
 
 ```
-PepakuraClone.sln
-├── src/
-│   ├── Domain          – Pure models, no external deps
-│   ├── Geometry        – Algorithms (→ Domain)
-│   ├── Application     – Use-case services (→ Domain, Geometry)
-│   ├── Infrastructure  – OBJ loader, SVG exporter (→ Domain, Application)
-│   └── App (WPF)       – MVVM UI (→ Application, Infrastructure + NuGet)
-└── tests/
-    └── PepakuraClone.Tests   – xunit + FluentAssertions
-```
-
-**Dependency order (no circular deps):**
-```
 Domain → Geometry → Application → Infrastructure → App
 ```
+No circular dependencies. Domain has zero external dependencies.
 
 ---
 
-## Features Implemented (this session)
+## Complete Feature List
 
-### Step 1 — Domain Models
-- `Vertex`, `Edge` (EdgeType: Unknown/Fold/Cut/Boundary), `Face`, `Mesh`
-- `Mesh.AddFace()` auto-builds edge adjacency via canonical `(min,max)` key dict
-- `DualGraph` (GraphNode, GraphEdge) for face adjacency
+### Core pipeline
+| Step | Class | Notes |
+|------|-------|-------|
+| OBJ load | `ObjMeshLoader` | v/vt/f, MTL map_Kd, fan-triangulation, negative-index guard |
+| Dual graph | `DualGraphBuilder` | Dihedral-angle weights; zero-area face guard |
+| MST | `KruskalMstBuilder` | Kruskal + path-compressed Union-Find |
+| Edge marking | `EdgeMarker` | Fold / Cut / Boundary |
+| Unfold | `UnfoldEngine` | BFS circle-circle apex; disconnected components |
+| Overlap | `OverlapDetector` | AABB pre-check + SAT |
+| Tabs | `GlueTabGenerator` | Trapezoidal, tagged with FaceId |
+| Pieces | `PieceComputer` | Union-Find connected components |
+| SVG | `SvgExporter` | Edge-deduplicated; settings-driven; grayscale support |
 
-### Step 2 — Core Algorithms (Geometry layer)
-- `DualGraphBuilder` — weighted by dihedral angle
-- `KruskalMstBuilder` — Kruskal + path-compressed Union-Find
-- `EdgeMarker` — stamps Fold/Cut/Boundary on all mesh edges
-- `UnfoldEngine` — BFS triangle flattening; supports disconnected components (multiple pieces)
-- `OverlapDetector` — O(n²) SAT check
-- `GlueTabGenerator` — trapezoid tabs on cut edges, each tagged with `FaceId + LocalEdgeIdx`
-- `PieceComputer` — Union-Find connected components from fold graph
+### UI features
+- Split 3D/2D viewport (2D hidden until after first Unfold)
+- 3D mouse picking: left-click face → selection overlay (yellow, z-offset) + 2D highlight
+- Right-click 3D face → Detach face / Detach piece / Attach to neighbour
+- Bidirectional 3D↔2D sync (clicking 2D piece updates 3D overlay)
+- Interactive 2D canvas: drag pieces, rotate ±90°, flip H, auto-arrange
+- Grid toggle (fast-path, no rebuild) + Snap to grid
+- Texture load/replace/remove with live preview (Apply/Cancel)
+- Unfold setup dialog: real-world scale + paper size
+- Save/Load `.pmc` project (edge overrides + piece layouts + scale)
+- Export SVG
 
-### Step 3 — OBJ Loader & SVG Exporter
-- `ObjMeshLoader` — parses `v`, `vt`, `f` (v/vt/vn), `mtllib`/`map_Kd`; fan-triangulates n-gons
-- UV coordinates stored in `Mesh.UVs` + per-face `FaceUVs`
-- `SvgExporter` — reads `AppSettings.PrintSettings` for all line/color/margin options
-
-### Step 4 — Application Services
-- `MeshService` — file-exists guard + load
-- `UnfoldService` — full pipeline with optional `edgeOverrides` + scale computation
-- `ProjectSerializer` — JSON `.pmc` with relative + absolute path storage
-- `SettingsService` — singleton, persists to `%AppData%\PepakuraClone\settings.json`
-
-### Step 5 — WPF UI
-| Component | Description |
-|-----------|-------------|
-| `MainWindow.xaml` | Split 3D/2D layout; column widths driven by `IsUnfolded` |
-| `HelixViewport3D` | 3D mesh display; left-click = select face, right-click = detach/attach menu |
-| `PatternCanvasControl` | Interactive 2D canvas: drag pieces, right-click edge = join/split, rotate, auto-arrange |
-| `UnfoldSetupDialog` | Scale target (axis + value + unit) + paper size before unfold |
-| `SettingsDialog` | 3-panel nav (3D View / 2D View / Print); 30+ settings with live color preview |
-
-### Step 6 — Settings System
-Three settings groups (persisted JSON, applied on `SettingsService.SettingsChanged`):
-
-| Group | Key settings |
-|-------|-------------|
-| **3D View** | Background color, display mode (Solid/SolidEdges/Wireframe), face/back-face color + opacity, edge overlay, ambient/directional intensity, **camera FOV + near/far clip planes** |
-| **2D View** | Canvas/paper color, grid show/size/color, face fill, fold/cut line color+width+dash, glue tab color, face numbers, **piece gap (mm)**, default zoom |
-| **Print/Export** | Page margin, bleed, SVG scale, include tabs/fold/cut/page-label, grayscale, print-specific line colors+widths |
-
-### Step 7 — 3D Face Selection + Detach/Attach
-- `HitTestFace()` — `VisualTreeHelper.HitTest` on inner `Viewport3D`, face ID = `minVertexIndex / 3`
-- Selection overlay — semi-transparent yellow `Model3DGroup` offset 0.015 units along normal (prevents z-fighting)
-- 2D ↔ 3D sync: selecting in 3D highlights the 2D piece; clicking a 2D piece updates the 3D overlay
-- **Detach face** — cuts all fold edges of that face
-- **Detach piece** — cuts all fold edges of the entire connected component
-- **Attach faces** — finds shared edge, changes Cut → Fold
-
-### Step 8 — Save / Load Project (`.pmc`)
-Saves and restores:
-- Mesh file path (relative + absolute fallback)
-- Texture file path
-- Real-world scale (`_currentScaleMmPerUnit`)
-- Paper size
-- Edge overrides (user join/split history)
-- Per-piece position + rotation
+### Settings (4-panel dialog)
+| Section | Key options |
+|---------|------------|
+| 3D View | Background, display mode, face/back color, opacity, edge overlay, lighting, camera FOV/clip |
+| 2D View | Canvas/paper color, grid show+size+color, fold/cut colors+widths+dash, glue tabs, face numbers, piece gap, snap-to-grid, default zoom |
+| Print | Margin, bleed, SVG scale, include tabs/fold/cut/label, grayscale, print line colors |
+| General | **Display unit: mm / inch** |
 
 ---
 
-## Bugs Fixed This Session
+## All Bugs Fixed (cumulative)
 
-| # | Bug | Fix |
-|---|-----|-----|
-| 1 | `PatternCanvasControl` drag broken — piece captured mouse, move event on `RootCanvas` never fired | `RootCanvas.CaptureMouse()` / `ReleaseMouseCapture()` |
-| 2 | `BuildProjectState` always saved `ScaleMmPerUnit = 1.0` → pieces wrong size on restore | Use `_currentScaleMmPerUnit` in save + restore |
-| 3 | `MainWindow.xaml.cs` missing `using System.Linq` → compile error on `.ToList()` | Added `using System.Linq;` |
-| 4 | `UnfoldSetupDialog.xaml` custom-size TextBoxes had `IsEnabled="{Binding ElementName=..., Path=Tag}"` (self-binding to null Tag → always disabled) | Changed to `IsEnabled="False"` (code-behind sets dynamically) |
-| 5 | `CommitPreview` had identical ternary branches + confusing self-assignment | Rewrote with explanatory comment |
-| 6 | `EstimateCurrentScale()` dead code after `_currentScaleMmPerUnit` was introduced | Removed |
-| 7 | `DualGraphBuilder.ComputeFaceNormal` returned `NaN` for degenerate zero-area triangles → poisoned edge weights / sort behaviour | Guard: return `Vector3.UnitY` when cross-product magnitude < 1e-10 |
-| 8 | `ObjMeshLoader` didn't handle negative OBJ indices (valid per spec, count from end) | Return -1 for negative indices |
+| Session | Severity | Bug | Fix |
+|---------|----------|-----|-----|
+| 1 | Critical | `PatternCanvasControl` drag broken — wrong mouse-capture element | `RootCanvas.CaptureMouse()` |
+| 1 | Critical | Project save wrote `ScaleMmPerUnit = 1.0` hardcoded | Use `_currentScaleMmPerUnit` |
+| 1 | High | Compile error — `MainWindow.xaml.cs` missing `using System.Linq` | Added import |
+| 1 | High | `UnfoldSetupDialog` custom-size boxes always disabled (self-ref binding) | Code-behind only |
+| 1 | Medium | `CommitPreview` had identical ternary branches | Clarified logic |
+| 1 | Low | Degenerate triangles produced NaN normals → poisoned MST weights | Guard in `DualGraphBuilder` |
+| 1 | Low | OBJ negative vertex indices not handled | Return -1 |
+| 2 | Critical | `SettingsDialog.xaml` — 4 StackPanels as direct children of ScrollViewer (ContentControl allows only one) | Wrapped in `<Grid>` |
+| 2 | High | `SettingsViewModel.DisplayUnits` contained `"mm (millimetre)"` but stored value is `"mm"` → ComboBox always blank | Changed list to `["mm", "inch"]` |
+| 2 | Medium | `PatternCanvasControl._vm!.GridVisible` — null-forgiving could throw | Replaced with null-conditional guard |
+| 2 | Low | `SvgExporter` face fill not greyed when `GrayscaleOutput = true` | CSS fill driven by setting |
 
 ---
 
-## Tech Debt & Known Issues
+## Tech Debt Status
 
-### High Priority
+### Resolved this session
+| ID | Was | Resolution |
+|----|-----|-----------|
+| TD-2 | Shared edges drawn twice in 2D canvas | `HashSet<int>` dedup by mesh edge ID |
+| TD-3 | O(n²) SAT — slow on large meshes | AABB pre-check rejects non-overlapping pairs |
+| TD-4 | Memory leak in PatternCanvasControl (dangling PropertyChanged handlers) | Explicit subscription dict + unsubscribe on rebuild |
+| TD-5 | Selection overlay rebuilt on every click | Frozen `Model3DGroup` cache per group ID |
+| TD-6 | SVG fold/cut lines drawn twice per shared edge | Canonical-key HashSet dedup |
+
+### Still open (LOW priority)
 | ID | Location | Description |
 |----|----------|-------------|
-| TD-1 | `UnfoldEngine` | No overlap-aware repositioning — pieces may stack after join/split. MST may not form a true spanning tree when many user overrides conflict. |
-| TD-2 | `PatternCanvasControl` | Pieces are rendered as individual triangles (not merged outlines). Shared fold edges inside a piece are drawn twice (once per face), causing visual doubling. |
-| TD-3 | `OverlapDetector` | O(n²) SAT — will lag with meshes > ~500 faces. Need spatial index (AABB tree or grid). |
-
-### Medium Priority
-| ID | Location | Description |
-|----|----------|-------------|
-| TD-4 | `PatternCanvasControl` | Memory leak: `piece.PropertyChanged` lambda holds reference to old `Canvas` after `RebuildAll`. No explicit unsubscribe. |
-| TD-5 | `MainViewModel.BuildSelectionOverlay` | Rebuilds entire geometry every selection change. Should diff vs. previous selection. |
-| TD-6 | `SvgExporter` | Does not embed textures into SVG. Fold/cut lines are emitted per face — shared edges drawn twice. |
-| TD-7 | `UnfoldSetupDialog` | No live preview of model at chosen scale. |
-| TD-8 | `ProjectSerializer` | Does not store the `ModelScale` struct — only the computed `ScaleMmPerUnit` double. Re-opening settings shows default values. |
-
-### Low Priority
-| ID | Location | Description |
-|----|----------|-------------|
-| TD-9 | `KruskalMstBuilder` | Flat meshes (all weights ≈ 0) produce arbitrary MST. No heuristic for visually clean unfolding. |
-| TD-10 | `HitTestFace` | Assumes flat-shaded mesh with unshared vertices. If mesh is ever rebuilt with shared vertices, `minVertexIndex / 3` would give wrong face IDs. |
-| TD-11 | `MainWindow.xaml` | `x:Name="Viewport3D"` shadows the `System.Windows.Media.Media3D.Viewport3D` class name in code-behind scope. Works but confusing. |
-| TD-12 | `SettingsDialog` | No undo for "Reset to Defaults" once Apply/OK is pressed. |
+| TD-1 | `UnfoldService` | Fold-edge cycles from user overrides don't affect correctness (BFS skips visited), but are displayed as fold in 2D even though they don't contribute to connectivity |
+| TD-7 | `PatternCanvasControl` | Pieces rendered as individual triangles, not merged outlines → interior edges visible on solid pieces |
+| TD-8 | `SvgExporter` | Texture not embedded in SVG |
+| TD-9 | App-wide | No undo/redo stack for join/split/detach |
 
 ---
 
-## File Inventory (50 source files)
+## File Inventory (57 source files, ~4 700 lines)
 
 ```
-src/PepakuraClone.Domain/
-  Models/          Vertex, Edge, EdgeType, Face, Mesh
-  DualGraph/       DualGraph, GraphNode, GraphEdge
-  Results/         UnfoldedFace, GlueTab, UnfoldResult
-  Settings/        AppSettings (View3D + View2D + Print)
-  Persistence/     ProjectState (JSON DTO)
+Domain/Models/          Vertex Edge EdgeType Face Mesh PaperSizeModel ModelScale
+Domain/DualGraph/       DualGraph GraphNode GraphEdge
+Domain/Results/         UnfoldedFace GlueTab UnfoldResult
+Domain/Settings/        AppSettings (View3D View2D Print General)
+Domain/Persistence/     ProjectState
 
-src/PepakuraClone.Geometry/
-  Algorithms/      DualGraphBuilder, KruskalMstBuilder, EdgeMarker,
-                   UnfoldEngine, OverlapDetector, GlueTabGenerator, PieceComputer
+Geometry/Algorithms/    DualGraphBuilder KruskalMstBuilder EdgeMarker
+                        UnfoldEngine OverlapDetector GlueTabGenerator PieceComputer
 
-src/PepakuraClone.Application/
-  Interfaces/      IMeshLoader, IExporter
-  Services/        MeshService, UnfoldService, ProjectSerializer, SettingsService
+Application/Interfaces/ IMeshLoader IExporter
+Application/Services/   MeshService UnfoldService ProjectSerializer SettingsService
 
-src/PepakuraClone.Infrastructure/
-  Loaders/         ObjMeshLoader
-  Exporters/       SvgExporter
+Infrastructure/         ObjMeshLoader SvgExporter
 
-src/PepakuraClone.App/
-  ViewModels/      MainViewModel, PieceViewModel, SettingsViewModel
-  Controls/        PatternCanvasControl (interactive 2D canvas)
-  Dialogs/         UnfoldSetupDialog, SettingsDialog
-  Converters/      HexColorBrushConverter
-  App.xaml / MainWindow.xaml + code-behind
+App/ViewModels/         MainViewModel PieceViewModel SettingsViewModel
+App/Controls/           PatternCanvasControl
+App/Dialogs/            UnfoldSetupDialog SettingsDialog
+App/Converters/         HexColorBrushConverter
+App/                    MainWindow App
 
-tests/PepakuraClone.Tests/
-  MstAlgorithmTests.cs   (6 tests)
-  UnfoldEngineTests.cs   (9 tests)
+Tests/                  MstAlgorithmTests (6) UnfoldEngineTests (9)
 ```
 
 ---
@@ -186,21 +135,9 @@ tests/PepakuraClone.Tests/
 ## Recommended Next Steps
 
 1. **Install .NET 8 SDK** and verify `dotnet build` passes
-2. **Test with a real OBJ file** (tetrahedron from README is a good start)
-3. **Fix TD-2** (merged piece outlines) — improves visual quality significantly
-4. **Fix TD-3** (overlap detector) — block for large models
-5. **Add PDF export** via a library like `PdfSharp`
-6. **Add undo/redo stack** (`ICommand` history) for join/split/detach operations
-7. **Auto-unfold re-layout** — run a greedy strip-packing after each join/split
-
----
-
-## NuGet Dependencies (App project)
-
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `HelixToolkit.WPF` | 2.25.0 | 3D viewport with orbit controls |
-| `CommunityToolkit.Mvvm` | 8.3.2 | `[ObservableProperty]`, `[RelayCommand]` |
-| `Microsoft.Extensions.DependencyInjection` | 8.0.1 | DI container |
-| `xunit` | 2.7.0 | Unit tests |
-| `FluentAssertions` | 6.12.0 | Readable test assertions |
+2. **Merge PR #1** on GitHub: <https://github.com/nghiazer/PepakuraClone/pull/1>
+3. Fix **TD-7** (merged piece outlines) — biggest visual quality win
+4. Add **PDF export** via `PdfSharp`
+5. Add **undo/redo** using `ICommand` history stack
+6. Performance: replace O(n²) overlap check with spatial grid for meshes > 2 000 faces
+7. Add **auto-unfolding heuristic** (strip-packing aware piece placement)

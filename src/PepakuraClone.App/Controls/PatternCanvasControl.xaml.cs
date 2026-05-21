@@ -71,7 +71,7 @@ public partial class PatternCanvasControl : UserControl
         {
             // Fast-path: just toggle grid line visibility without full rebuild
             case nameof(MainViewModel.GridVisible):
-                Dispatcher.Invoke(() => ApplyGridVisibility(_vm!.GridVisible));
+                if (_vm != null) Dispatcher.Invoke(() => ApplyGridVisibility(_vm.GridVisible));
                 break;
 
             // Settings that affect piece rendering need full rebuild
