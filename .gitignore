@@ -1,0 +1,24 @@
+# Build outputs
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+# NuGet
+packages/
+*.nupkg
+project.lock.json
+
+# Rider / VS / VSCode IDE artefacts
+.idea/
+*.DotSettings.user
+.vscode/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Test results
+TestResults/
+coverage/
