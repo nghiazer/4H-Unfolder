@@ -118,6 +118,12 @@
                             <TextBlock Text="Print / Export" VerticalAlignment="Center"/>
                         </StackPanel>
                     </ListBoxItem>
+                    <ListBoxItem Style="{StaticResource NavItem}" Tag="3">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="⚙" FontSize="15" Margin="0,0,8,0"/>
+                            <TextBlock Text="General" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </ListBoxItem>
                 </ListBox>
             </StackPanel>
         </Border>
@@ -508,19 +514,24 @@
                 </GroupBox>
 
                 <GroupBox Header="Piece Layout">
-                    <Grid Margin="0,4">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="190"/>
-                            <ColumnDefinition Width="140"/>
-                            <ColumnDefinition Width="50"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="Gap between pieces (mm)" Style="{StaticResource FieldLabel}"/>
-                        <Slider Grid.Column="1" Style="{StaticResource SettingSlider}"
-                                Minimum="0" Maximum="30" Value="{Binding PieceGapMm}"/>
-                        <TextBlock Grid.Column="2"
-                                   Text="{Binding PieceGapMm, StringFormat={}{0:F0}}"
-                                   Foreground="#aaaacc" VerticalAlignment="Center" Margin="6,0"/>
-                    </Grid>
+                    <StackPanel>
+                        <Grid Margin="0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="190"/>
+                                <ColumnDefinition Width="140"/>
+                                <ColumnDefinition Width="50"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Gap between pieces (mm)" Style="{StaticResource FieldLabel}"/>
+                            <Slider Grid.Column="1" Style="{StaticResource SettingSlider}"
+                                    Minimum="0" Maximum="30" Value="{Binding PieceGapMm}"/>
+                            <TextBlock Grid.Column="2"
+                                       Text="{Binding PieceGapMm, StringFormat={}{0:F0}}"
+                                       Foreground="#aaaacc" VerticalAlignment="Center" Margin="6,0"/>
+                        </Grid>
+                        <CheckBox Content="Snap pieces to grid when dragging"
+                                  IsChecked="{Binding SnapToGrid}"
+                                  ToolTip="When enabled, piece centroids snap to the nearest grid intersection while dragging"/>
+                    </StackPanel>
                 </GroupBox>
 
                 <GroupBox Header="Glue Tabs &amp; Annotations">
@@ -674,6 +685,29 @@
                             <TextBlock Grid.Column="2"
                                        Text="{Binding PrintCutWidth, StringFormat={}{0:F1}}"
                                        Foreground="#aaaacc" VerticalAlignment="Center" Margin="6,0"/>
+                        </Grid>
+                    </StackPanel>
+                </GroupBox>
+            </StackPanel>
+
+            <!-- ── General Panel ──────────────────────────────────── -->
+            <StackPanel x:Name="PanelGeneral" Visibility="Collapsed">
+                <TextBlock Text="General" FontSize="18" FontWeight="Bold"
+                           Foreground="White" Margin="0,0,0,14"/>
+
+                <GroupBox Header="Display">
+                    <StackPanel>
+                        <Grid Margin="0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="190"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Display unit" Style="{StaticResource FieldLabel}"
+                                       ToolTip="Unit used when showing dimensions in the UI"/>
+                            <ComboBox Grid.Column="1"
+                                      ItemsSource="{Binding DisplayUnits}"
+                                      SelectedItem="{Binding DisplayUnit}"
+                                      ToolTip="Switch between millimetres and inches throughout the app"/>
                         </Grid>
                     </StackPanel>
                 </GroupBox>

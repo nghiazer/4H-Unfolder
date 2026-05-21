@@ -79,6 +79,9 @@ public sealed class AppSettings
         // Piece spacing used during auto-arrange
         public double PieceGapMm        { get; set; } = 5.0;
 
+        // Snap pieces to grid intersections when dragging
+        public bool   SnapToGrid        { get; set; } = false;
+
         // Default zoom when canvas first opens
         public double DefaultPixelsPerMm { get; set; } = 3.0;
     }
@@ -106,5 +109,14 @@ public sealed class AppSettings
         // Output quality
         public double SvgScaleFactor    { get; set; } = 10.0;  // model-mm → SVG px
         public bool   GrayscaleOutput   { get; set; } = false;
+    }
+
+    // ── General ───────────────────────────────────────────────────────────────
+    public GeneralSettings General { get; set; } = new();
+
+    public sealed class GeneralSettings
+    {
+        /// Display unit used throughout the UI: "mm" or "inch"
+        public string DisplayUnit { get; set; } = "mm";
     }
 }

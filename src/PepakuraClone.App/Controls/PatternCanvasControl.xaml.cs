@@ -1,4 +1,5 @@
 using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -12,18 +13,21 @@ namespace PepakuraClone.App.Controls;
 
 /// <summary>
 /// Interactive 2-D layout canvas.
-/// Bind by setting DataContext to MainViewModel; the control auto-discovers
-/// MainViewModel.Pieces, MainViewModel.PaperSizeModel and MainViewModel.PixelsPerMm.
+/// DataContext must be set to MainViewModel.
 /// </summary>
 public partial class PatternCanvasControl : UserControl
 {
     // ── constants ────────────────────────────────────────────────────────────
     private const double PaperMarginPx = 30.0;
+    private const string GridTag       = "GRID";
 
     // ── state ────────────────────────────────────────────────────────────────
-    private MainViewModel?                  _vm;
-    private double                          _pxPerMm = 3.0;
+    private MainViewModel?              _vm;
+    private double                      _pxPerMm = 3.0;
     private readonly Dictionary<int, Canvas> _containers = new();
+
+    // TD-4 fix: explicit subscription tracking to prevent memory leaks
+    private readonly Dictionary<PieceViewModel, PropertyChangedEventHandler> _pieceHandlers = new();
 
     // drag state
     private PieceViewModel? _dragging;
@@ -61,18 +65,32 @@ public partial class PatternCanvasControl : UserControl
     private void OnPiecesChanged(object? s, NotifyCollectionChangedEventArgs e) =>
         Dispatcher.Invoke(RebuildAll);
 
-    private void OnVmPropertyChanged(object? s,
-                                     System.ComponentModel.PropertyChangedEventArgs e)
+    private void OnVmPropertyChanged(object? s, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(MainViewModel.PaperSizeModel) or
-                              nameof(MainViewModel.PixelsPerMm)    or
-                              nameof(MainViewModel.View2DSettings))
-            Dispatcher.Invoke(RebuildAll);
+        switch (e.PropertyName)
+        {
+            // Fast-path: just toggle grid line visibility without full rebuild
+            case nameof(MainViewModel.GridVisible):
+                Dispatcher.Invoke(() => ApplyGridVisibility(_vm!.GridVisible));
+                break;
+
+            // Settings that affect piece rendering need full rebuild
+            case nameof(MainViewModel.PaperSizeModel):
+            case nameof(MainViewModel.PixelsPerMm):
+            case nameof(MainViewModel.View2DSettings):
+                Dispatcher.Invoke(RebuildAll);
+                break;
+        }
     }
 
     // ── full rebuild ─────────────────────────────────────────────────────────
     private void RebuildAll()
     {
+        // TD-4 fix: unsubscribe all tracked PropertyChanged handlers before clearing
+        foreach (var (piece, handler) in _pieceHandlers)
+            piece.PropertyChanged -= handler;
+        _pieceHandlers.Clear();
+
         RootCanvas.Children.Clear();
         _containers.Clear();
 
@@ -95,7 +113,6 @@ public partial class PatternCanvasControl : UserControl
         double pw = paper.WidthMm  * _pxPerMm;
         double ph = paper.HeightMm * _pxPerMm;
 
-        // Canvas background
         RootCanvas.Background = HexBrush(s2d?.CanvasBackground, "#3a3a5a");
 
         var shadow = new DropShadowEffect
@@ -114,10 +131,13 @@ public partial class PatternCanvasControl : UserControl
         Panel.SetZIndex(rect, 0);
         RootCanvas.Children.Add(rect);
 
-        // Dimension label
+        // Paper dimension label (unit-aware via MainViewModel)
+        string labelText = _vm != null
+            ? $"{paper.Name}  ({_vm.FormatMm(paper.WidthMm)} × {_vm.FormatMm(paper.HeightMm)})"
+            : paper.ToString();
         var lbl = new TextBlock
         {
-            Text       = paper.ToString(),
+            Text       = labelText,
             Foreground = Brushes.Gray,
             FontSize   = 10
         };
@@ -126,12 +146,11 @@ public partial class PatternCanvasControl : UserControl
         Panel.SetZIndex(lbl, 0);
         RootCanvas.Children.Add(lbl);
 
-        // Grid — respects settings
-        bool showGrid = s2d?.ShowGrid ?? true;
-        if (!showGrid) return;
-
-        double gridMm  = Math.Max(1, s2d?.GridSizeMm ?? 10);
-        var    gridClr = HexBrush(s2d?.GridColor, "#28000080");
+        // Grid lines — tagged for fast show/hide toggle
+        bool showGrid = _vm?.GridVisible ?? (s2d?.ShowGrid ?? true);
+        double gridMm = Math.Max(1, s2d?.GridSizeMm ?? 10);
+        var   gridClr = HexBrush(s2d?.GridColor, "#28000080");
+        var   gridVis = showGrid ? Visibility.Visible : Visibility.Collapsed;
 
         for (double x = 0; x <= pw; x += gridMm * _pxPerMm)
         {
@@ -139,7 +158,8 @@ public partial class PatternCanvasControl : UserControl
             {
                 X1 = PaperMarginPx + x, Y1 = PaperMarginPx,
                 X2 = PaperMarginPx + x, Y2 = PaperMarginPx + ph,
-                Stroke = gridClr, StrokeThickness = 0.5
+                Stroke = gridClr, StrokeThickness = 0.5,
+                Tag = GridTag, Visibility = gridVis
             };
             Panel.SetZIndex(line, 1);
             RootCanvas.Children.Add(line);
@@ -150,11 +170,21 @@ public partial class PatternCanvasControl : UserControl
             {
                 X1 = PaperMarginPx,      Y1 = PaperMarginPx + y,
                 X2 = PaperMarginPx + pw, Y2 = PaperMarginPx + y,
-                Stroke = gridClr, StrokeThickness = 0.5
+                Stroke = gridClr, StrokeThickness = 0.5,
+                Tag = GridTag, Visibility = gridVis
             };
             Panel.SetZIndex(line, 1);
             RootCanvas.Children.Add(line);
         }
+    }
+
+    // ── grid fast-toggle (no full rebuild needed) ─────────────────────────────
+    private void ApplyGridVisibility(bool show)
+    {
+        var vis = show ? Visibility.Visible : Visibility.Collapsed;
+        foreach (UIElement el in RootCanvas.Children)
+            if (el is FrameworkElement fe && GridTag.Equals(fe.Tag))
+                fe.Visibility = vis;
     }
 
     // ── piece rendering ──────────────────────────────────────────────────────
@@ -163,12 +193,14 @@ public partial class PatternCanvasControl : UserControl
         var container = new Canvas { IsHitTestVisible = true };
         container.Tag = piece;
 
-        // Subscribe to property changes to update selection highlight
-        piece.PropertyChanged += (_, e) =>
+        // TD-4 fix: store handler reference so we can unsubscribe later
+        PropertyChangedEventHandler handler = (_, ev) =>
         {
-            if (e.PropertyName is nameof(PieceViewModel.IsSelected))
-                UpdatePieceFill(container, piece);
+            if (ev.PropertyName is nameof(PieceViewModel.IsSelected))
+                Dispatcher.Invoke(() => RenderPieceShapes(container, piece));
         };
+        _pieceHandlers[piece] = handler;
+        piece.PropertyChanged += handler;
 
         RenderPieceShapes(container, piece);
 
@@ -193,6 +225,9 @@ public partial class PatternCanvasControl : UserControl
         double cutW   = s2d?.CutLineWidth  ?? 1.0;
         var foldDash  = ParseDash(s2d?.FoldLineDash ?? "4,2");
 
+        // TD-2 fix: deduplicate shared edges using mesh edge IDs
+        var drawnEdgeIds = new HashSet<int>();
+
         foreach (var fd in piece.Faces)
         {
             // Face polygon
@@ -208,27 +243,30 @@ public partial class PatternCanvasControl : UserControl
             poly.Tag = piece;
             container.Children.Add(poly);
 
-            // Face number label
+            // Face number label (optional)
             if (s2d?.ShowFaceNumbers == true)
             {
-                var cx = (fd.V0.X + fd.V1.X + fd.V2.X) / 3.0 * _pxPerMm;
-                var cy = (fd.V0.Y + fd.V1.Y + fd.V2.Y) / 3.0 * _pxPerMm;
-                var lbl = new TextBlock
+                double cx = (fd.V0.X + fd.V1.X + fd.V2.X) / 3.0 * _pxPerMm;
+                double cy = (fd.V0.Y + fd.V1.Y + fd.V2.Y) / 3.0 * _pxPerMm;
+                var numLbl = new TextBlock
                 {
-                    Text       = fd.FaceId.ToString(),
-                    FontSize   = Math.Max(6, _pxPerMm * 2),
-                    Foreground = HexBrush(s2d?.FaceNumberColor, "#888888"),
+                    Text             = fd.FaceId.ToString(),
+                    FontSize         = Math.Max(6, _pxPerMm * 2),
+                    Foreground       = HexBrush(s2d?.FaceNumberColor, "#888888"),
                     IsHitTestVisible = false
                 };
-                Canvas.SetLeft(lbl, cx - 6);
-                Canvas.SetTop (lbl, cy - 6);
-                container.Children.Add(lbl);
+                Canvas.SetLeft(numLbl, cx - 6);
+                Canvas.SetTop (numLbl, cy - 6);
+                container.Children.Add(numLbl);
             }
 
-            // Edges
+            // Edges — skip mesh edges already drawn (TD-2 dedup)
             Point[] verts = [fd.V0 * _pxPerMm, fd.V1 * _pxPerMm, fd.V2 * _pxPerMm];
             for (int i = 0; i < 3; i++)
             {
+                int meshEdgeId = fd.MeshEdgeIds[i];
+                if (!drawnEdgeIds.Add(meshEdgeId)) continue; // already drawn in this piece
+
                 bool isFold = fd.EdgeIsFold[i];
                 var line = new Line
                 {
@@ -238,15 +276,14 @@ public partial class PatternCanvasControl : UserControl
                     StrokeThickness = isFold ? foldW : cutW,
                     StrokeDashArray = isFold ? foldDash : null,
                     Cursor          = Cursors.Hand,
-                    Tag             = (PieceId: piece.GroupId, FaceId: fd.FaceId, EdgeIdx: i,
-                                       MeshEdgeId: fd.MeshEdgeIds[i])
+                    Tag             = (PieceId: piece.GroupId, FaceId: fd.FaceId,
+                                       EdgeIdx: i, MeshEdgeId: meshEdgeId)
                 };
                 line.MouseRightButtonDown += Edge_RightClick;
                 container.Children.Add(line);
             }
         }
 
-        // Glue tabs
         // Glue tabs (conditionally shown)
         bool showTabs = s2d?.ShowGlueTabs ?? true;
         if (showTabs)
@@ -266,11 +303,6 @@ public partial class PatternCanvasControl : UserControl
         }
     }
 
-    private void UpdatePieceFill(Canvas container, PieceViewModel piece)
-    {
-        Dispatcher.Invoke(() => RenderPieceShapes(container, piece));
-    }
-
     // ── transform sync ───────────────────────────────────────────────────────
     private void SyncAllTransforms()
     {
@@ -282,10 +314,8 @@ public partial class PatternCanvasControl : UserControl
     {
         if (!_containers.TryGetValue(piece.GroupId, out var c)) return;
 
-        var tg  = new TransformGroup();
-        // Rotate around local origin (piece centroid)
+        var tg = new TransformGroup();
         tg.Children.Add(new RotateTransform(piece.Rotation));
-        // Then translate to paper position
         tg.Children.Add(new TranslateTransform(
             piece.PositionX * _pxPerMm + PaperMarginPx,
             piece.PositionY * _pxPerMm + PaperMarginPx));
@@ -306,7 +336,6 @@ public partial class PatternCanvasControl : UserControl
     {
         if (sender is not Canvas c || c.Tag is not PieceViewModel piece) return;
 
-        // Deselect all others and notify ViewModel (updates 3D overlay too)
         if (_vm != null)
         {
             foreach (var p in _vm.Pieces)
@@ -318,8 +347,6 @@ public partial class PatternCanvasControl : UserControl
         _dragOriginMouse = e.GetPosition(RootCanvas);
         _dragOriginX     = piece.PositionX;
         _dragOriginY     = piece.PositionY;
-        // Capture on RootCanvas (not on the piece container) so that Canvas_MouseMove
-        // continues to fire even when the cursor leaves the piece's canvas bounds.
         RootCanvas.CaptureMouse();
         e.Handled = true;
     }
@@ -329,8 +356,21 @@ public partial class PatternCanvasControl : UserControl
         if (_dragging == null) return;
         var pos   = e.GetPosition(RootCanvas);
         var delta = pos - _dragOriginMouse;
-        _dragging.PositionX = _dragOriginX + delta.X / _pxPerMm;
-        _dragging.PositionY = _dragOriginY + delta.Y / _pxPerMm;
+
+        double newX = _dragOriginX + delta.X / _pxPerMm;
+        double newY = _dragOriginY + delta.Y / _pxPerMm;
+
+        // Snap to grid if enabled
+        var s2d = _vm?.View2DSettings;
+        if ((_vm?.SnapToGrid == true) && s2d != null && s2d.GridSizeMm > 0)
+        {
+            double g = s2d.GridSizeMm;
+            newX = Math.Round(newX / g) * g;
+            newY = Math.Round(newY / g) * g;
+        }
+
+        _dragging.PositionX = newX;
+        _dragging.PositionY = newY;
         SyncTransform(_dragging);
     }
 
@@ -400,7 +440,6 @@ public partial class PatternCanvasControl : UserControl
         {
             if (piece.Faces.Length == 0) continue;
 
-            // Bounding box of piece local coords
             var allX = piece.Faces.SelectMany(f => new[] { f.V0.X, f.V1.X, f.V2.X });
             var allY = piece.Faces.SelectMany(f => new[] { f.V0.Y, f.V1.Y, f.V2.Y });
             double pw = allX.Max() - allX.Min() + gap;
@@ -416,6 +455,14 @@ public partial class PatternCanvasControl : UserControl
         }
     }
 
+    // ── grid toggle (via ViewModel command) ──────────────────────────────────
+    private void GridToggle_Click(object s, RoutedEventArgs e) =>
+        _vm?.ToggleGridCommand.Execute(null);
+
+    // ── snap toggle (via ViewModel command) ──────────────────────────────────
+    private void SnapToggle_Click(object s, RoutedEventArgs e) =>
+        _vm?.ToggleSnapCommand.Execute(null);
+
     // ── zoom ─────────────────────────────────────────────────────────────────
     private void Zoom_Changed(object s, RoutedPropertyChangedEventArgs<double> e)
     {
@@ -423,36 +470,31 @@ public partial class PatternCanvasControl : UserControl
         ZoomLabel.Text = $"{_pxPerMm:F1} px/mm";
         if (_vm != null) { _vm.PixelsPerMm = _pxPerMm; RebuildAll(); }
     }
-}
 
-// Helper: multiply WPF Point by a scalar for scaling to pixels
     // ── color/dash helpers ────────────────────────────────────────────────────
-
     private static Brush HexBrush(string? hex, string fallback)
     {
         try
         {
-            var src = string.IsNullOrEmpty(hex) ? fallback : hex;
+            var src   = string.IsNullOrEmpty(hex) ? fallback : hex;
             var color = (Color)System.Windows.Media.ColorConverter.ConvertFromString(src);
-            var b = new SolidColorBrush(color); b.Freeze(); return b;
+            var b     = new SolidColorBrush(color); b.Freeze(); return b;
         }
         catch { return Brushes.Transparent; }
     }
 
     private static DoubleCollection? ParseDash(string dashStr)
     {
-        if (string.IsNullOrEmpty(dashStr) || dashStr.Equals("Solid", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrEmpty(dashStr) ||
+            dashStr.Equals("Solid", StringComparison.OrdinalIgnoreCase))
             return null;
-        try
-        {
-            var parts = dashStr.Split(',').Select(double.Parse).ToArray();
-            return new DoubleCollection(parts);
-        }
+        try { return new DoubleCollection(dashStr.Split(',').Select(double.Parse)); }
         catch { return new DoubleCollection([4, 2]); }
     }
 }
 
 file static class PointExtensions
 {
-    public static Point operator *(Point p, double s) => new(p.X * s, p.Y * s);
+    public static System.Windows.Point operator *(System.Windows.Point p, double s) =>
+        new(p.X * s, p.Y * s);
 }

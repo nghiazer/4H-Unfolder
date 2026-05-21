@@ -45,6 +45,19 @@
                 <Button Content="✦ Auto-arrange" Click="AutoArrange_Click"
                         Padding="8,3" Margin="2" Cursor="Hand"
                         ToolTip="Pack all pieces onto the paper automatically"/>
+                <Separator Margin="8,0"/>
+                <ToggleButton x:Name="GridToggleBtn"
+                              Content="⊞ Grid"
+                              IsChecked="{Binding GridVisible, Mode=OneWay}"
+                              Click="GridToggle_Click"
+                              Padding="8,3" Margin="2" Cursor="Hand"
+                              ToolTip="Show / hide the grid (does not require rebuild)"/>
+                <ToggleButton x:Name="SnapToggleBtn"
+                              Content="⊟ Snap"
+                              IsChecked="{Binding SnapToGrid, Mode=OneWay}"
+                              Click="SnapToggle_Click"
+                              Padding="8,3" Margin="2" Cursor="Hand"
+                              ToolTip="Snap pieces to grid when dragging"/>
             </StackPanel>
         </Border>
     </Grid>

@@ -50,6 +50,10 @@ public class SettingsService
 
     // ── persistence ───────────────────────────────────────────────────────────
 
+    /// Persists the current settings object as-is (no event fired).
+    /// Use when a single field was mutated directly and only persistence is needed.
+    public void SaveCurrent() => Save();
+
     private void Save()
     {
         try

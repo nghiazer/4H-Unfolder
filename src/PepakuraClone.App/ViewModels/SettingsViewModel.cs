@@ -44,7 +44,12 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private bool   _showFaceNumbers       = false;
     [ObservableProperty] private string _faceNumberColor       = "#888888";
     [ObservableProperty] private double _pieceGapMm            = 5.0;
+    [ObservableProperty] private bool   _snapToGrid            = false;
     [ObservableProperty] private double _defaultPixelsPerMm    = 3.0;
+
+    // ── General ───────────────────────────────────────────────────────────────
+    [ObservableProperty] private string _displayUnit = "mm";
+    public IReadOnlyList<string> DisplayUnits { get; } = ["mm (millimetre)", "inch"];
 
     // ── Print ─────────────────────────────────────────────────────────────────
     [ObservableProperty] private double _marginMm              = 10.0;
@@ -102,7 +107,11 @@ public partial class SettingsViewModel : ObservableObject
         ShowFaceNumbers    = s.View2D.ShowFaceNumbers;
         FaceNumberColor    = s.View2D.FaceNumberColor;
         PieceGapMm         = s.View2D.PieceGapMm;
+        SnapToGrid         = s.View2D.SnapToGrid;
         DefaultPixelsPerMm = s.View2D.DefaultPixelsPerMm;
+
+        // General
+        DisplayUnit = s.General.DisplayUnit;
 
         // Print
         MarginMm        = s.Print.MarginMm;
@@ -157,6 +166,7 @@ public partial class SettingsViewModel : ObservableObject
             ShowFaceNumbers    = ShowFaceNumbers,
             FaceNumberColor    = FaceNumberColor,
             PieceGapMm         = PieceGapMm,
+            SnapToGrid         = SnapToGrid,
             DefaultPixelsPerMm = DefaultPixelsPerMm
         },
         Print = new()
@@ -174,6 +184,10 @@ public partial class SettingsViewModel : ObservableObject
             CutLineWidth    = PrintCutWidth,
             SvgScaleFactor  = SvgScaleFactor,
             GrayscaleOutput = GrayscaleOutput
+        },
+        General = new()
+        {
+            DisplayUnit = DisplayUnit.StartsWith("inch") ? "inch" : "mm"
         }
     };
 }

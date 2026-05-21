@@ -35,6 +35,10 @@ public partial class MainViewModel : ObservableObject
     // edge overrides: mesh edge ID → EdgeType (user's join/split operations)
     private readonly Dictionary<int, EdgeType> _edgeOverrides = new();
 
+    // TD-5: selection overlay cache — avoid rebuilding geometry on every click
+    private int?          _cachedOverlayGroupId;
+    private Model3DGroup? _cachedOverlayModel;
+
     // ── observable properties ─────────────────────────────────────────────────
     [ObservableProperty] private Model3DGroup? _meshModel;
     [ObservableProperty] private Model3DGroup? _selectionOverlayModel;  // 3D highlight
@@ -55,6 +59,10 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private double          _pixelsPerMm    = 3.0;
     public ObservableCollection<PieceViewModel> Pieces { get; } = new();
 
+    // ── grid / snap (fast-path toggles, kept in sync with settings) ───────────
+    [ObservableProperty] private bool _gridVisible = true;
+    [ObservableProperty] private bool _snapToGrid  = false;
+
     // ── settings-derived 3D viewport bindings ─────────────────────────────────
     public Brush  Viewport3DBackground       => ParseBrush(S.View3D.BackgroundColor, "#0d0d1a");
     public bool   Show3DCoordinateSystem     => S.View3D.ShowCoordinateSystem;
@@ -69,6 +77,12 @@ public partial class MainViewModel : ObservableObject
 
     // Expose current settings for PatternCanvasControl
     public AppSettings.View2DSettings View2DSettings => S.View2D;
+
+    // ── unit display helpers ──────────────────────────────────────────────────
+    private bool   IsInches   => S.General?.DisplayUnit == "inch";
+    public  string UnitLabel  => IsInches ? "in" : "mm";
+    public string FormatMm(double mm) =>
+        IsInches ? $"{mm / 25.4:F3} {UnitLabel}" : $"{mm:F1} {UnitLabel}";
 
     // ── derived visibility ────────────────────────────────────────────────────
     public Visibility TexturePanelVisible   => _currentMesh != null ? Visibility.Visible : Visibility.Collapsed;
@@ -101,8 +115,10 @@ public partial class MainViewModel : ObservableObject
         _serializer      = serializer;
         _settingsService = settingsService;
 
-        // Apply 2D default zoom from settings
+        // Apply initial values from settings
         _pixelsPerMm = settingsService.Current.View2D.DefaultPixelsPerMm;
+        _gridVisible  = settingsService.Current.View2D.ShowGrid;
+        _snapToGrid   = settingsService.Current.View2D.SnapToGrid;
 
         _settingsService.SettingsChanged += OnSettingsChanged;
     }
@@ -113,30 +129,55 @@ public partial class MainViewModel : ObservableObject
     // ── settings changed handler ──────────────────────────────────────────────
     private void OnSettingsChanged(object? sender, EventArgs e)
     {
-        // Refresh all settings-derived bindings
+        // Sync fast-path toggles from new settings
+        GridVisible = S.View2D.ShowGrid;
+        SnapToGrid  = S.View2D.SnapToGrid;
+
         OnPropertyChanged(nameof(Viewport3DBackground));
         OnPropertyChanged(nameof(Show3DCoordinateSystem));
         OnPropertyChanged(nameof(Show3DViewCube));
         OnPropertyChanged(nameof(View2DSettings));
+        OnPropertyChanged(nameof(UnitLabel));
         OnPropertyChanged(nameof(CameraFOV));
         OnPropertyChanged(nameof(CameraNearPlane));
         OnPropertyChanged(nameof(CameraFarPlane));
         CameraSettingsVersion++;
         OnPropertyChanged(nameof(CameraSettingsVersion));
 
-        // Rebuild 3D model with new face color / opacity
         if (_currentMesh != null)
         {
             var tex = LoadBitmapImage(_committedTexturePath);
             MeshModel = BuildWpfModel(_currentMesh, tex);
         }
-        // The PatternCanvasControl observes View2DSettings via the ViewModel property
-        // and will rebuild when it receives a PropertyChanged for View2DSettings.
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    //  SETTINGS COMMAND
+    //  SETTINGS + GRID/SNAP COMMANDS
     // ══════════════════════════════════════════════════════════════════════════
+
+    [RelayCommand]
+    private void ToggleGrid()
+    {
+        GridVisible = !GridVisible;
+        // Persist to settings without triggering full canvas rebuild —
+        // PatternCanvasControl listens to GridVisible separately for a fast path.
+        PatchSettings(s => s.View2D.ShowGrid = GridVisible);
+    }
+
+    [RelayCommand]
+    private void ToggleSnap()
+    {
+        SnapToGrid = !SnapToGrid;
+        PatchSettings(s => s.View2D.SnapToGrid = SnapToGrid);
+    }
+
+    // Applies a single settings mutation without going through SettingsService.Apply
+    // (which would fire SettingsChanged and trigger a full 3D+2D rebuild).
+    private void PatchSettings(Action<AppSettings> mutate)
+    {
+        mutate(_settingsService.Current);
+        _settingsService.SaveCurrent();
+    }
 
     [RelayCommand]
     private void OpenSettings()
@@ -168,6 +209,7 @@ public partial class MainViewModel : ObservableObject
             _currentMeshPath   = dlg.FileName;
             _currentMesh       = _meshService.LoadFromFile(dlg.FileName);
             _edgeOverrides.Clear();
+            InvalidateOverlayCache();
 
             CancelPreviewSilently();
             _committedTexturePath = _currentMesh.SuggestedTexturePath;
@@ -438,13 +480,22 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    // ── selection overlay ──────────────────────────────────────────────────────
+    // ── selection overlay (TD-5: cached per piece group) ────────────────────────
 
     private void BuildSelectionOverlay(PieceViewModel? piece)
     {
         if (piece == null || _currentMesh == null)
         {
             SelectionOverlayModel = null;
+            _cachedOverlayGroupId = null;
+            _cachedOverlayModel   = null;
+            return;
+        }
+
+        // Return cached model if same piece is re-selected
+        if (_cachedOverlayGroupId == piece.GroupId && _cachedOverlayModel != null)
+        {
+            SelectionOverlayModel = _cachedOverlayModel;
             return;
         }
 
@@ -459,10 +510,12 @@ public partial class MainViewModel : ObservableObject
             var vb = _currentMesh.Vertices[mf.B].Position;
             var vc = _currentMesh.Vertices[mf.C].Position;
 
-            // Offset 0.5% along face normal to prevent z-fighting
+            // Offset along face normal to prevent z-fighting
             var ab  = new System.Numerics.Vector3(vb.X - va.X, vb.Y - va.Y, vb.Z - va.Z);
             var ac  = new System.Numerics.Vector3(vc.X - va.X, vc.Y - va.Y, vc.Z - va.Z);
-            var n   = System.Numerics.Vector3.Normalize(System.Numerics.Vector3.Cross(ab, ac)) * 0.015f;
+            var cross = System.Numerics.Vector3.Cross(ab, ac);
+            float len = cross.Length();
+            var n = (len > 1e-10f ? cross / len : System.Numerics.Vector3.UnitY) * 0.015f;
 
             positions.Add(new Point3D(va.X + n.X, va.Y + n.Y, va.Z + n.Z));
             positions.Add(new Point3D(vb.X + n.X, vb.Y + n.Y, vb.Z + n.Z));
@@ -470,13 +523,24 @@ public partial class MainViewModel : ObservableObject
             indices.Add(baseIdx); indices.Add(baseIdx + 1); indices.Add(baseIdx + 2);
         }
 
-        var geo = new MeshGeometry3D { Positions = positions, TriangleIndices = indices };
-        var mat = new DiffuseMaterial(
-            new SolidColorBrush(Color.FromArgb(160, 255, 210, 30)));
-        var model   = new GeometryModel3D(geo, mat);
-        var group   = new Model3DGroup();
+        var geo   = new MeshGeometry3D { Positions = positions, TriangleIndices = indices };
+        var mat   = new DiffuseMaterial(new SolidColorBrush(Color.FromArgb(160, 255, 210, 30)));
+        var model = new GeometryModel3D(geo, mat);
+        var group = new Model3DGroup();
         group.Children.Add(model);
+        group.Freeze();
+
+        _cachedOverlayGroupId = piece.GroupId;
+        _cachedOverlayModel   = group;
         SelectionOverlayModel = group;
+    }
+
+    private void InvalidateOverlayCache()
+    {
+        _cachedOverlayGroupId = null;
+        _cachedOverlayModel   = null;
+        SelectionOverlayModel = null;
+        SelectedFaceId        = -1;
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -497,9 +561,8 @@ public partial class MainViewModel : ObservableObject
                 if (oldPos.TryGetValue(p.GroupId, out var pos))
                 { p.PositionX = pos.PositionX; p.PositionY = pos.PositionY; p.Rotation = pos.Rotation; }
 
-        // Refresh selection overlay for the newly rebuilt pieces
-        SelectedFaceId = -1;
-        SelectionOverlayModel = null;
+        // Invalidate overlay cache — mesh topology changed
+        InvalidateOverlayCache();
     }
 
     private void RebuildPieces(UnfoldResult result, List<List<int>> groups, double scale)

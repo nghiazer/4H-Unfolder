@@ -73,7 +73,11 @@ public class SvgExporter : IExporter
             sb.AppendLine($"  <polygon points=\"{pts}\" class=\"face\"/>");
         }
 
-        // Fold / cut lines
+        // Fold / cut lines (TD-6: deduplicate shared edges drawn by adjacent faces)
+        // Key = canonical (minX,minY,maxX,maxY) coordinate tuple — exact float equality
+        // is safe here because shared edges have identical float values.
+        var drawnEdges = new HashSet<(float, float, float, float)>();
+
         foreach (var face in result.Faces)
         {
             var verts = face.Vertices;
@@ -85,6 +89,13 @@ public class SvgExporter : IExporter
 
                 var pa  = verts[i];
                 var pb  = verts[(i + 1) % 3];
+
+                // Canonical key: always put the lexicographically smaller endpoint first
+                var key = pa.X < pb.X || (pa.X == pb.X && pa.Y <= pb.Y)
+                    ? (pa.X, pa.Y, pb.X, pb.Y)
+                    : (pb.X, pb.Y, pa.X, pa.Y);
+                if (!drawnEdges.Add(key)) continue;
+
                 var cls = isFold ? "fold" : "cut";
                 sb.AppendLine($"  <line x1=\"{Sx(pa.X)}\" y1=\"{Sy(pa.Y)}\" " +
                               $"x2=\"{Sx(pb.X)}\" y2=\"{Sy(pb.Y)}\" class=\"{cls}\"/>");

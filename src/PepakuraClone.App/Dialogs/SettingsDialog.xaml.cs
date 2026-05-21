@@ -29,9 +29,10 @@ public partial class SettingsDialog : Window
     private void NavList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         int idx = NavList.SelectedIndex;
-        Panel3D   .Visibility = idx == 0 ? Visibility.Visible : Visibility.Collapsed;
-        Panel2D   .Visibility = idx == 1 ? Visibility.Visible : Visibility.Collapsed;
-        PanelPrint.Visibility = idx == 2 ? Visibility.Visible : Visibility.Collapsed;
+        Panel3D     .Visibility = idx == 0 ? Visibility.Visible : Visibility.Collapsed;
+        Panel2D     .Visibility = idx == 1 ? Visibility.Visible : Visibility.Collapsed;
+        PanelPrint  .Visibility = idx == 2 ? Visibility.Visible : Visibility.Collapsed;
+        PanelGeneral.Visibility = idx == 3 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     // ── Buttons ───────────────────────────────────────────────────────────────
