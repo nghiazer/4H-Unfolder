@@ -43,7 +43,7 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string _glueTabColor          = "#7850c850";
     [ObservableProperty] private bool   _showFaceNumbers       = false;
     [ObservableProperty] private string _faceNumberColor       = "#888888";
-    [ObservableProperty] private double _pieceGapMm            = 5.0;
+    [ObservableProperty] private double _pieceGapMm            = 10.0;
     [ObservableProperty] private bool   _snapToGrid            = false;
     [ObservableProperty] private double _defaultPixelsPerMm    = 3.0;
 

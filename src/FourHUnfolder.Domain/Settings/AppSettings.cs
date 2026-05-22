@@ -77,7 +77,7 @@ public sealed class AppSettings
         public string FaceNumberColor   { get; set; } = "#888888";
 
         // Piece spacing used during auto-arrange
-        public double PieceGapMm        { get; set; } = 5.0;
+        public double PieceGapMm        { get; set; } = 10.0;
 
         // Snap pieces to grid intersections when dragging
         public bool   SnapToGrid        { get; set; } = false;

@@ -68,6 +68,12 @@ public partial class MainViewModel : ObservableObject
     // paper canvas
     [ObservableProperty] private PaperSizeModel _paperSizeModel = PaperSizeModel.A4;
     [ObservableProperty] private double          _pixelsPerMm    = 3.0;
+    [ObservableProperty] private int             _pagesWide      = 1;
+    [ObservableProperty] private int             _pagesTall      = 1;
+
+    /// Visual gap between adjacent pages on the canvas (mm).
+    public const double PageSepMm = 20.0;
+
     public ObservableCollection<PieceViewModel> Pieces { get; } = new();
 
     // ── grid / snap (fast-path toggles, kept in sync with settings) ───────────
@@ -330,13 +336,14 @@ public partial class MainViewModel : ObservableObject
             var    pieces       = _unfoldService.ComputePieces(_currentMesh);
 
             RebuildPieces(unfoldResult, pieces, scale);
+            RunAutoArrange();   // place pieces without overlap, set PagesWide/PagesTall
 
             CanExport  = true;
             IsUnfolded = true;
             RefreshColumnBindings();
 
             var overlap = unfoldResult.HasOverlaps ? "  ⚠ overlaps" : string.Empty;
-            StatusText = $"Unfolded — {Pieces.Count} pieces, " +
+            StatusText = $"Unfolded — {Pieces.Count} pieces on {PagesWide * PagesTall} page(s), " +
                          $"{unfoldResult.GlueTabs.Count} glue tabs.{overlap}";
         }
         catch (Exception ex) { Error("Unfold failed", ex); }
@@ -677,6 +684,79 @@ public partial class MainViewModel : ObservableObject
             var vm      = PieceViewModel.Create(groupId, groups[g], result, _currentMesh!, scale);
             Pieces.Add(vm);
         }
+    }
+
+    // ── auto-arrange ───────────────────────────────────────────────────────────
+
+    [RelayCommand]
+    private void AutoArrange() => RunAutoArrange();
+
+    /// Strip-packs all pieces without overlap onto a grid of pages.
+    /// Updates PagesWide / PagesTall as needed.
+    private void RunAutoArrange()
+    {
+        if (Pieces.Count == 0) return;
+
+        double gap    = _settingsService.Current.View2D.PieceGapMm;
+        double paperW = PaperSizeModel.WidthMm;
+        double paperH = PaperSizeModel.HeightMm;
+
+        double curX = gap, curY = gap, rowH = 0;
+        int newPagesTall = 1;
+
+        foreach (var piece in Pieces)
+        {
+            if (piece.Faces.Length == 0) continue;
+
+            // Bounding box in piece-local mm coords
+            var lx = piece.Faces.SelectMany(f => new[] { f.V0.X, f.V1.X, f.V2.X });
+            var ly = piece.Faces.SelectMany(f => new[] { f.V0.Y, f.V1.Y, f.V2.Y });
+            double lMinX = lx.Min(), lMaxX = lx.Max();
+            double lMinY = ly.Min(), lMaxY = ly.Max();
+            double pw = lMaxX - lMinX;
+            double ph = lMaxY - lMinY;
+
+            // Wrap to next row when piece doesn't fit on current row (within one page width)
+            if (curX > gap && curX + pw > paperW - gap)
+            {
+                curX  = gap;
+                curY += rowH + gap;
+                rowH  = 0;
+            }
+
+            // Start on a new page (vertically) if current row overflows page height
+            double pageBottom = newPagesTall * paperH + (newPagesTall - 1) * PageSepMm;
+            if (curY + ph > pageBottom - gap)
+            {
+                newPagesTall++;
+                curY = (newPagesTall - 1) * (paperH + PageSepMm) + gap;
+                curX = gap;
+                rowH = 0;
+            }
+
+            // Place piece: PositionX/Y is the centroid; shift so left/top of bbox is at curX/curY
+            piece.PositionX = curX - lMinX;
+            piece.PositionY = curY - lMinY;
+
+            curX += pw + gap;
+            rowH  = Math.Max(rowH, ph);
+        }
+
+        // Apply new page counts — property setters fire PropertyChanged, canvas reacts
+        PagesWide = 1;          // single column of pages (pieces flow downward)
+        PagesTall = newPagesTall;
+    }
+
+    /// Expands the page grid if a piece has been dragged beyond the current page boundary.
+    public void EnsurePageForPosition(double posX, double posY)
+    {
+        double paperW     = PaperSizeModel.WidthMm;
+        double paperH     = PaperSizeModel.HeightMm;
+        double rightEdge  = PagesWide  * paperW + (PagesWide  - 1) * PageSepMm;
+        double bottomEdge = PagesTall  * paperH + (PagesTall  - 1) * PageSepMm;
+
+        if (posX > rightEdge)  PagesWide++;
+        if (posY > bottomEdge) PagesTall++;
     }
 
     private ProjectState BuildProjectState()
