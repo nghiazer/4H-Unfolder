@@ -39,6 +39,14 @@ public partial class MainViewModel : ObservableObject
     private int?          _cachedOverlayGroupId;
     private Model3DGroup? _cachedOverlayModel;
 
+    // TD-9: undo/redo — snapshots of (_edgeOverrides, piece layouts)
+    private readonly record struct EditSnapshot(
+        IReadOnlyDictionary<int, EdgeType> EdgeOverrides,
+        IReadOnlyDictionary<int, (double X, double Y, double Rot)> PieceLayouts);
+
+    private readonly Stack<EditSnapshot> _undoStack = new();
+    private readonly Stack<EditSnapshot> _redoStack = new();
+
     // ── observable properties ─────────────────────────────────────────────────
     [ObservableProperty] private Model3DGroup? _meshModel;
     [ObservableProperty] private Model3DGroup? _selectionOverlayModel;  // 3D highlight
@@ -186,7 +194,66 @@ public partial class MainViewModel : ObservableObject
         {
             Owner = Application.Current.MainWindow
         };
-        dlg.ShowDialog();  // Apply is called inside the dialog
+        dlg.ShowDialog();
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  UNDO / REDO  (TD-9)
+    // ══════════════════════════════════════════════════════════════════════════
+
+    public bool CanUndo => _undoStack.Count > 0;
+    public bool CanRedo => _redoStack.Count > 0;
+
+    [RelayCommand(CanExecute = nameof(CanUndo))]
+    private void Undo()
+    {
+        if (_undoStack.Count == 0) return;
+        _redoStack.Push(TakeSnapshot());
+        RestoreSnapshot(_undoStack.Pop());
+        NotifyUndoRedo();
+        StatusText = $"Undo — {_undoStack.Count} step(s) remaining.";
+    }
+
+    [RelayCommand(CanExecute = nameof(CanRedo))]
+    private void Redo()
+    {
+        if (_redoStack.Count == 0) return;
+        _undoStack.Push(TakeSnapshot());
+        RestoreSnapshot(_redoStack.Pop());
+        NotifyUndoRedo();
+        StatusText = $"Redo — {_redoStack.Count} step(s) remaining.";
+    }
+
+    /// Call before any operation that modifies edge overrides.
+    private void PushUndoState()
+    {
+        _undoStack.Push(TakeSnapshot());
+        _redoStack.Clear();
+        NotifyUndoRedo();
+    }
+
+    private EditSnapshot TakeSnapshot() => new(
+        new Dictionary<int, EdgeType>(_edgeOverrides),
+        Pieces.ToDictionary(p => p.GroupId,
+                            p => (p.PositionX, p.PositionY, p.Rotation)));
+
+    private void RestoreSnapshot(EditSnapshot snap)
+    {
+        _edgeOverrides.Clear();
+        foreach (var (id, t) in snap.EdgeOverrides) _edgeOverrides[id] = t;
+        RerunUnfold(preservePositions: false);
+        // Restore saved piece positions (best-effort: group IDs may differ after re-run)
+        foreach (var piece in Pieces)
+            if (snap.PieceLayouts.TryGetValue(piece.GroupId, out var pos))
+            { piece.PositionX = pos.X; piece.PositionY = pos.Y; piece.Rotation = pos.Rot; }
+    }
+
+    private void NotifyUndoRedo()
+    {
+        UndoCommand.NotifyCanExecuteChanged();
+        RedoCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(CanUndo));
+        OnPropertyChanged(nameof(CanRedo));
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -209,6 +276,9 @@ public partial class MainViewModel : ObservableObject
             _currentMeshPath   = dlg.FileName;
             _currentMesh       = _meshService.LoadFromFile(dlg.FileName);
             _edgeOverrides.Clear();
+            _undoStack.Clear();
+            _redoStack.Clear();
+            NotifyUndoRedo();
             InvalidateOverlayCache();
 
             CancelPreviewSilently();
@@ -287,7 +357,8 @@ public partial class MainViewModel : ObservableObject
         {
             // Re-run unfold to get a fresh UnfoldResult for SVG
             var result = _unfoldService.Unfold(_currentMesh, _edgeOverrides);
-            _exporter.Export(result, dlg.FileName);
+            // TD-8: pass committed texture path so SVG can embed it when UV data is present
+            _exporter.Export(result, dlg.FileName, _committedTexturePath);
             StatusText = $"Exported to {Path.GetFileName(dlg.FileName)}";
         }
         catch (Exception ex) { Error("Export failed", ex); }
@@ -369,6 +440,7 @@ public partial class MainViewModel : ObservableObject
     public void ToggleEdge(int meshEdgeId)
     {
         if (_currentMesh == null) return;
+        PushUndoState();
         var current = IsEdgeFold(meshEdgeId) ? EdgeType.Fold : EdgeType.Cut;
         _edgeOverrides[meshEdgeId] = current == EdgeType.Fold ? EdgeType.Cut : EdgeType.Fold;
         try
@@ -421,9 +493,15 @@ public partial class MainViewModel : ObservableObject
         {
             var e = _currentMesh.Edges[eid];
             if (e.Type == EdgeType.Fold && e.ConnectsFaces)
-            { _edgeOverrides[eid] = EdgeType.Cut; changed = true; }
+            { changed = true; break; }
         }
         if (!changed) { StatusText = "Face is already detached."; return; }
+        PushUndoState();
+        foreach (var eid in face.EdgeIds)
+        {
+            var e = _currentMesh.Edges[eid];
+            if (e.Type == EdgeType.Fold && e.ConnectsFaces) _edgeOverrides[eid] = EdgeType.Cut;
+        }
         try { RerunUnfold(); StatusText = $"Detached face {faceId}."; }
         catch (Exception ex) { Error("Detach failed", ex); }
     }
@@ -435,6 +513,7 @@ public partial class MainViewModel : ObservableObject
         var piece = Pieces.FirstOrDefault(p => p.Faces.Any(f => f.FaceId == faceId));
         if (piece == null) { StatusText = "No piece found for that face."; return; }
 
+        PushUndoState();
         foreach (var fd in piece.Faces)
         {
             var mf = _currentMesh.Faces[fd.FaceId];
@@ -459,6 +538,7 @@ public partial class MainViewModel : ObservableObject
             var e = _currentMesh.Edges[eid];
             if (e.ConnectsFaces && (e.FaceA == faceIdB || e.FaceB == faceIdB))
             {
+                PushUndoState();
                 _edgeOverrides[eid] = EdgeType.Fold;
                 try { RerunUnfold(); StatusText = $"Attached face {faceIdA} → {faceIdB}."; }
                 catch (Exception ex) { Error("Attach failed", ex); }

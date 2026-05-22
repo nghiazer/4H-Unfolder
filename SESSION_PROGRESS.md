@@ -1,6 +1,6 @@
 # PepakuraClone — Session Progress Log
 
-> **Last updated:** 2026-05-22  
+> **Last updated:** 2026-05-22 (session 3)  
 > **Branch:** `feat/paper-model-unfolder`  (PR #1 open against `main`)
 > **Target framework:** .NET 8 / WPF  
 > **SDK required:** `winget install Microsoft.DotNet.SDK.8`
@@ -94,13 +94,14 @@ No circular dependencies. Domain has zero external dependencies.
 | TD-5 | Selection overlay rebuilt on every click | Frozen `Model3DGroup` cache per group ID |
 | TD-6 | SVG fold/cut lines drawn twice per shared edge | Canonical-key HashSet dedup |
 
-### Still open (LOW priority)
-| ID | Location | Description |
-|----|----------|-------------|
-| TD-1 | `UnfoldService` | Fold-edge cycles from user overrides don't affect correctness (BFS skips visited), but are displayed as fold in 2D even though they don't contribute to connectivity |
-| TD-7 | `PatternCanvasControl` | Pieces rendered as individual triangles, not merged outlines → interior edges visible on solid pieces |
-| TD-8 | `SvgExporter` | Texture not embedded in SVG |
-| TD-9 | App-wide | No undo/redo stack for join/split/detach |
+### All resolved ✓
+
+| ID | Was | Resolution |
+|----|-----|-----------|
+| TD-1 | Fold-cycle display inconsistency | **By design** — cycles are valid fold edges; BFS skips visited faces, but both faces are in the same piece so showing as Fold is correct |
+| TD-7 | Triangle-grid visible on pieces; boundary edges indistinguishable from cut edges | Removed polygon stroke; boundary edges drawn as thin dark grey; `EdgeIsBoundary[]` propagated through `UnfoldedFace` from `UnfoldEngine` |
+| TD-8 | Texture not embedded in SVG | UV coords (`UVCoords[]`) added to `UnfoldedFace`; `SvgExporter` computes per-face affine transform, embeds texture as base-64 data URI with clip paths |
+| TD-9 | No undo/redo | `EditSnapshot` record (edge overrides + piece positions); `_undoStack`/`_redoStack`; `UndoCommand`/`RedoCommand`; `PushUndoState()` called in ToggleEdge, DetachFace, DetachPiece, AttachFaces; Ctrl+Z/Y keyboard shortcuts |
 
 ---
 
@@ -134,10 +135,10 @@ Tests/                  MstAlgorithmTests (6) UnfoldEngineTests (9)
 
 ## Recommended Next Steps
 
-1. **Install .NET 8 SDK** and verify `dotnet build` passes
+1. **Install .NET 8 SDK** and verify `dotnet build` passes; run tests
 2. **Merge PR #1** on GitHub: <https://github.com/nghiazer/PepakuraClone/pull/1>
-3. Fix **TD-7** (merged piece outlines) — biggest visual quality win
-4. Add **PDF export** via `PdfSharp`
-5. Add **undo/redo** using `ICommand` history stack
-6. Performance: replace O(n²) overlap check with spatial grid for meshes > 2 000 faces
-7. Add **auto-unfolding heuristic** (strip-packing aware piece placement)
+3. Add **PDF export** via `PdfSharp`
+4. Add **piece outline merging** (compute union polygon of face triangles) for cleaner visuals
+5. Performance: replace O(n²) overlap check with spatial grid for meshes > 2 000 faces
+6. **Undo scope** — currently covers edge ops only; extend to cover piece position moves
+7. Add **auto-unfolding layout heuristic** (strip-packing aware placement)
