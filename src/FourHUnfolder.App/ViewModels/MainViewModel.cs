@@ -1,5 +1,6 @@
 ﻿using System.Collections.ObjectModel;
 using System.IO;
+using System.Numerics;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -38,6 +39,9 @@ public partial class MainViewModel : ObservableObject
     // edge overrides: mesh edge ID → EdgeType (user's join/split operations)
     private readonly Dictionary<int, EdgeType> _edgeOverrides = new();
 
+    // cached result from last unfold — used by SVG export to retrieve UV coords
+    private UnfoldResult? _lastUnfoldResult;
+
     // TD-5: selection overlay cache — avoid rebuilding geometry on every click
     private int?          _cachedOverlayGroupId;
     private Model3DGroup? _cachedOverlayModel;
@@ -68,6 +72,12 @@ public partial class MainViewModel : ObservableObject
     // paper canvas
     [ObservableProperty] private PaperSizeModel _paperSizeModel = PaperSizeModel.A4;
     [ObservableProperty] private double          _pixelsPerMm    = 3.0;
+    [ObservableProperty] private int             _pagesWide      = 1;
+    [ObservableProperty] private int             _pagesTall      = 1;
+
+    /// Visual gap between adjacent pages on the canvas (mm).
+    public const double PageSepMm = 20.0;
+
     public ObservableCollection<PieceViewModel> Pieces { get; } = new();
 
     // ── grid / snap (fast-path toggles, kept in sync with settings) ───────────
@@ -326,17 +336,18 @@ public partial class MainViewModel : ObservableObject
 
             double scale        = UnfoldService.ComputeScale(_currentMesh, setup.Scale);
             _currentScaleMmPerUnit = scale;
-            var    unfoldResult = _unfoldService.Unfold(_currentMesh, _edgeOverrides);
+            var    unfoldResult = _unfoldService.Unfold(_currentMesh, _edgeOverrides, _settingsService.Current.Print);
             var    pieces       = _unfoldService.ComputePieces(_currentMesh);
 
             RebuildPieces(unfoldResult, pieces, scale);
+            RunAutoArrange();   // place pieces without overlap, set PagesWide/PagesTall
 
             CanExport  = true;
             IsUnfolded = true;
             RefreshColumnBindings();
 
             var overlap = unfoldResult.HasOverlaps ? "  ⚠ overlaps" : string.Empty;
-            StatusText = $"Unfolded — {Pieces.Count} pieces, " +
+            StatusText = $"Unfolded — {Pieces.Count} pieces on {PagesWide * PagesTall} page(s), " +
                          $"{unfoldResult.GlueTabs.Count} glue tabs.{overlap}";
         }
         catch (Exception ex) { Error("Unfold failed", ex); }
@@ -358,9 +369,8 @@ public partial class MainViewModel : ObservableObject
 
         try
         {
-            // Re-run unfold to get a fresh UnfoldResult for SVG
-            var result = _unfoldService.Unfold(_currentMesh, _edgeOverrides);
-            // TD-8: pass committed texture path so SVG can embed it when UV data is present
+            // Use current canvas layout (positions/rotations applied) instead of re-running unfold
+            var result = BuildExportLayout();
             _exporter.Export(result, dlg.FileName, _committedTexturePath);
             StatusText = $"Exported to {Path.GetFileName(dlg.FileName)}";
         }
@@ -635,7 +645,7 @@ public partial class MainViewModel : ObservableObject
         if (_currentMesh == null) return;
         var oldPos = Pieces.ToDictionary(p => p.GroupId,
                                          p => (p.PositionX, p.PositionY, p.Rotation));
-        var result = _unfoldService.Unfold(_currentMesh, _edgeOverrides);
+        var result = _unfoldService.Unfold(_currentMesh, _edgeOverrides, _settingsService.Current.Print);
         var groups = _unfoldService.ComputePieces(_currentMesh);
         RebuildPieces(result, groups, _currentScaleMmPerUnit);
 
@@ -670,6 +680,7 @@ public partial class MainViewModel : ObservableObject
 
     private void RebuildPieces(UnfoldResult result, List<List<int>> groups, double scale)
     {
+        _lastUnfoldResult = result;   // cache for BuildExportLayout
         Pieces.Clear();
         for (int g = 0; g < groups.Count; g++)
         {
@@ -679,6 +690,131 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    // ── SVG export layout builder ─────────────────────────────────────────────
+
+    /// Builds an UnfoldResult whose face/tab coordinates are in canvas-absolute mm,
+    /// reflecting the piece positions and rotations the user has set on the 2D canvas.
+    private UnfoldResult BuildExportLayout()
+    {
+        // Fast UV lookup: FaceId → UV coords from the last unfold
+        var uvByFaceId = _lastUnfoldResult?.Faces
+            .Where(f => f.UVCoords != null)
+            .ToDictionary(f => f.FaceId, f => f.UVCoords!) ?? new();
+
+        var faces = new List<UnfoldedFace>();
+        var tabs  = new List<GlueTab>();
+
+        foreach (var piece in Pieces)
+        {
+            double posX   = piece.PositionX;
+            double posY   = piece.PositionY;
+            double rotRad = piece.Rotation * Math.PI / 180.0;
+            double cosR   = Math.Cos(rotRad);
+            double sinR   = Math.Sin(rotRad);
+
+            // Rotate local (mm) → translate to canvas (mm)
+            Vector2 ToCanvas(double lx, double ly) => new(
+                (float)(lx * cosR - ly * sinR + posX),
+                (float)(lx * sinR + ly * cosR + posY));
+
+            foreach (var fd in piece.Faces)
+            {
+                uvByFaceId.TryGetValue(fd.FaceId, out var uvCoords);
+                faces.Add(new UnfoldedFace(
+                    fd.FaceId,
+                    ToCanvas(fd.V0.X, fd.V0.Y),
+                    ToCanvas(fd.V1.X, fd.V1.Y),
+                    ToCanvas(fd.V2.X, fd.V2.Y),
+                    fd.EdgeIsFold, fd.EdgeIsBoundary, uvCoords));
+            }
+
+            foreach (var tab in piece.GlueTabs)
+            {
+                var pts = tab.Points;
+                tabs.Add(new GlueTab(0, 0,
+                    ToCanvas(pts[0].X, pts[0].Y),
+                    ToCanvas(pts[1].X, pts[1].Y),
+                    ToCanvas(pts[2].X, pts[2].Y),
+                    ToCanvas(pts[3].X, pts[3].Y)));
+            }
+        }
+
+        return new UnfoldResult(faces, tabs, false);
+    }
+
+    // ── auto-arrange ───────────────────────────────────────────────────────────
+
+    [RelayCommand]
+    private void AutoArrange() => RunAutoArrange();
+
+    /// Strip-packs all pieces without overlap onto a grid of pages.
+    /// Updates PagesWide / PagesTall as needed.
+    private void RunAutoArrange()
+    {
+        if (Pieces.Count == 0) return;
+
+        double gap    = _settingsService.Current.View2D.PieceGapMm;
+        double paperW = PaperSizeModel.WidthMm;
+        double paperH = PaperSizeModel.HeightMm;
+
+        double curX = gap, curY = gap, rowH = 0;
+        int newPagesTall = 1;
+
+        foreach (var piece in Pieces)
+        {
+            if (piece.Faces.Length == 0) continue;
+
+            // Bounding box in piece-local mm coords
+            var lx = piece.Faces.SelectMany(f => new[] { f.V0.X, f.V1.X, f.V2.X });
+            var ly = piece.Faces.SelectMany(f => new[] { f.V0.Y, f.V1.Y, f.V2.Y });
+            double lMinX = lx.Min(), lMaxX = lx.Max();
+            double lMinY = ly.Min(), lMaxY = ly.Max();
+            double pw = lMaxX - lMinX;
+            double ph = lMaxY - lMinY;
+
+            // Wrap to next row when piece doesn't fit on current row (within one page width)
+            if (curX > gap && curX + pw > paperW - gap)
+            {
+                curX  = gap;
+                curY += rowH + gap;
+                rowH  = 0;
+            }
+
+            // Start on a new page (vertically) if current row overflows page height
+            double pageBottom = newPagesTall * paperH + (newPagesTall - 1) * PageSepMm;
+            if (curY + ph > pageBottom - gap)
+            {
+                newPagesTall++;
+                curY = (newPagesTall - 1) * (paperH + PageSepMm) + gap;
+                curX = gap;
+                rowH = 0;
+            }
+
+            // Place piece: PositionX/Y is the centroid; shift so left/top of bbox is at curX/curY
+            piece.PositionX = curX - lMinX;
+            piece.PositionY = curY - lMinY;
+
+            curX += pw + gap;
+            rowH  = Math.Max(rowH, ph);
+        }
+
+        // Apply new page counts — property setters fire PropertyChanged, canvas reacts
+        PagesWide = 1;          // single column of pages (pieces flow downward)
+        PagesTall = newPagesTall;
+    }
+
+    /// Expands the page grid if a piece has been dragged beyond the current page boundary.
+    public void EnsurePageForPosition(double posX, double posY)
+    {
+        double paperW     = PaperSizeModel.WidthMm;
+        double paperH     = PaperSizeModel.HeightMm;
+        double rightEdge  = PagesWide  * paperW + (PagesWide  - 1) * PageSepMm;
+        double bottomEdge = PagesTall  * paperH + (PagesTall  - 1) * PageSepMm;
+
+        if (posX > rightEdge)  PagesWide++;
+        if (posY > bottomEdge) PagesTall++;
+    }
+
     private ProjectState BuildProjectState()
     {
         var state = new ProjectState
@@ -686,6 +822,8 @@ public partial class MainViewModel : ObservableObject
             MeshPath       = _currentMeshPath,
             TexturePath    = _committedTexturePath,
             ScaleMmPerUnit = _currentScaleMmPerUnit,
+            PagesWide      = PagesWide,
+            PagesTall      = PagesTall,
             Paper          = new ProjectState.PaperDto
             {
                 Name     = PaperSizeModel.Name,
@@ -732,7 +870,7 @@ public partial class MainViewModel : ObservableObject
         PaperSizeModel = new PaperSizeModel(state.Paper.Name, state.Paper.WidthMm, state.Paper.HeightMm);
 
         // Re-run unfold
-        var unfoldResult = _unfoldService.Unfold(_currentMesh, _edgeOverrides);
+        var unfoldResult = _unfoldService.Unfold(_currentMesh, _edgeOverrides, _settingsService.Current.Print);
         var pieces       = _unfoldService.ComputePieces(_currentMesh);
         var layoutMap    = state.Layouts.ToDictionary(l => l.GroupId);
 
@@ -750,6 +888,10 @@ public partial class MainViewModel : ObservableObject
             }
         }
 
+        // Restore page layout
+        PagesWide = Math.Max(1, state.PagesWide);
+        PagesTall = Math.Max(1, state.PagesTall);
+
         // Restore texture
         _committedTexturePath = state.TexturePath;
         var tex = LoadBitmapImage(_committedTexturePath);
@@ -762,7 +904,10 @@ public partial class MainViewModel : ObservableObject
         RefreshDerivedVisibility();
         RefreshColumnBindings();
 
-        StatusText = $"Project loaded — {Pieces.Count} pieces.";
+        if (state.Warnings.Count > 0)
+            StatusText = $"Project loaded with warnings: {string.Join("; ", state.Warnings)}";
+        else
+            StatusText = $"Project loaded — {Pieces.Count} pieces.";
     }
 
     // ── texture helpers ───────────────────────────────────────────────────────

@@ -4,6 +4,8 @@ using FourHUnfolder.Domain.Models;
 
 namespace FourHUnfolder.Geometry.Algorithms;
 
+using static FourHUnfolder.Geometry.GeometryConstants;
+
 /// <summary>
 /// Builds a dual graph from a triangle mesh.
 /// One node per face; one graph edge per interior mesh edge (shared by two faces).
@@ -50,6 +52,6 @@ public class DualGraphBuilder
         var cross  = Vector3.Cross(b - a, c - a);
         float len  = cross.Length();
         // Guard against degenerate (zero-area) triangles
-        return len > 1e-10f ? cross / len : Vector3.UnitY;
+        return len > GeometryConstants.DegenerateFace ? cross / len : Vector3.UnitY;
     }
 }

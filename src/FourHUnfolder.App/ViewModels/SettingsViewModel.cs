@@ -43,7 +43,7 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string _glueTabColor          = "#7850c850";
     [ObservableProperty] private bool   _showFaceNumbers       = false;
     [ObservableProperty] private string _faceNumberColor       = "#888888";
-    [ObservableProperty] private double _pieceGapMm            = 5.0;
+    [ObservableProperty] private double _pieceGapMm            = 10.0;
     [ObservableProperty] private bool   _snapToGrid            = false;
     [ObservableProperty] private double _defaultPixelsPerMm    = 3.0;
 
@@ -53,6 +53,8 @@ public partial class SettingsViewModel : ObservableObject
     public IReadOnlyList<string> DisplayUnits { get; } = ["mm", "inch"];
 
     // ── Print ─────────────────────────────────────────────────────────────────
+    [ObservableProperty] private double _glueTabDepthMm         = 4.0;
+    [ObservableProperty] private double _glueTabInsetRatio      = 0.15;
     [ObservableProperty] private double _marginMm              = 10.0;
     [ObservableProperty] private double _bleedMm               = 3.0;
     [ObservableProperty] private bool   _includeGlueTabs       = true;
@@ -115,6 +117,8 @@ public partial class SettingsViewModel : ObservableObject
         DisplayUnit = s.General.DisplayUnit;
 
         // Print
+        GlueTabDepthMm    = s.Print.GlueTabDepthMm;
+        GlueTabInsetRatio = s.Print.GlueTabInsetRatio;
         MarginMm        = s.Print.MarginMm;
         BleedMm         = s.Print.BleedMm;
         IncludeGlueTabs = s.Print.IncludeGlueTabs;
@@ -172,6 +176,8 @@ public partial class SettingsViewModel : ObservableObject
         },
         Print = new()
         {
+            GlueTabDepthMm    = GlueTabDepthMm,
+            GlueTabInsetRatio = GlueTabInsetRatio,
             MarginMm        = MarginMm,
             BleedMm         = BleedMm,
             IncludeGlueTabs = IncludeGlueTabs,

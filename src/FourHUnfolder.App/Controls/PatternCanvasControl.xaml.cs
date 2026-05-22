@@ -78,6 +78,8 @@ public partial class PatternCanvasControl : UserControl
             case nameof(MainViewModel.PaperSizeModel):
             case nameof(MainViewModel.PixelsPerMm):
             case nameof(MainViewModel.View2DSettings):
+            case nameof(MainViewModel.PagesWide):
+            case nameof(MainViewModel.PagesTall):
                 Dispatcher.Invoke(RebuildAll);
                 break;
         }
@@ -110,10 +112,27 @@ public partial class PatternCanvasControl : UserControl
     private void DrawPaper(PaperSizeModel paper)
     {
         var s2d = _vm?.View2DSettings;
+        RootCanvas.Background = HexBrush(s2d?.CanvasBackground, "#3a3a5a");
+
+        int pagesWide = _vm?.PagesWide ?? 1;
+        int pagesTall = _vm?.PagesTall ?? 1;
+        double sep    = MainViewModel.PageSepMm;
+
+        for (int row = 0; row < pagesTall; row++)
+        for (int col = 0; col < pagesWide; col++)
+        {
+            double ox = (col * (paper.WidthMm  + sep)) * _pxPerMm + PaperMarginPx;
+            double oy = (row * (paper.HeightMm + sep)) * _pxPerMm + PaperMarginPx;
+            DrawPageAt(paper, s2d, ox, oy, col, row);
+        }
+    }
+
+    private void DrawPageAt(PaperSizeModel paper,
+                            Domain.Settings.AppSettings.View2DSettings? s2d,
+                            double ox, double oy, int col, int row)
+    {
         double pw = paper.WidthMm  * _pxPerMm;
         double ph = paper.HeightMm * _pxPerMm;
-
-        RootCanvas.Background = HexBrush(s2d?.CanvasBackground, "#3a3a5a");
 
         var shadow = new DropShadowEffect
             { BlurRadius = 12, Opacity = 0.5, ShadowDepth = 4, Color = Colors.Black };
@@ -126,23 +145,21 @@ public partial class PatternCanvasControl : UserControl
             StrokeThickness = 1,
             Effect = shadow
         };
-        Canvas.SetLeft(rect, PaperMarginPx);
-        Canvas.SetTop (rect, PaperMarginPx);
+        Canvas.SetLeft(rect, ox);
+        Canvas.SetTop (rect, oy);
         Panel.SetZIndex(rect, 0);
         RootCanvas.Children.Add(rect);
 
-        // Paper dimension label (unit-aware via MainViewModel)
-        string labelText = _vm != null
-            ? $"{paper.Name}  ({_vm.FormatMm(paper.WidthMm)} × {_vm.FormatMm(paper.HeightMm)})"
-            : paper.ToString();
+        // Page label
+        string pageLabel = (_vm?.PagesWide * _vm?.PagesTall > 1)
+            ? $"{paper.Name}  p.{row * (_vm?.PagesWide ?? 1) + col + 1}"
+            : $"{paper.Name}  ({_vm?.FormatMm(paper.WidthMm) ?? ""} × {_vm?.FormatMm(paper.HeightMm) ?? ""})";
         var lbl = new TextBlock
         {
-            Text       = labelText,
-            Foreground = Brushes.Gray,
-            FontSize   = 10
+            Text = pageLabel, Foreground = Brushes.Gray, FontSize = 10
         };
-        Canvas.SetLeft(lbl, PaperMarginPx);
-        Canvas.SetTop (lbl, PaperMarginPx - 16);
+        Canvas.SetLeft(lbl, ox);
+        Canvas.SetTop (lbl, oy - 16);
         Panel.SetZIndex(lbl, 0);
         RootCanvas.Children.Add(lbl);
 
@@ -156,8 +173,8 @@ public partial class PatternCanvasControl : UserControl
         {
             var line = new Line
             {
-                X1 = PaperMarginPx + x, Y1 = PaperMarginPx,
-                X2 = PaperMarginPx + x, Y2 = PaperMarginPx + ph,
+                X1 = ox + x, Y1 = oy,
+                X2 = ox + x, Y2 = oy + ph,
                 Stroke = gridClr, StrokeThickness = 0.5,
                 Tag = GridTag, Visibility = gridVis
             };
@@ -168,8 +185,8 @@ public partial class PatternCanvasControl : UserControl
         {
             var line = new Line
             {
-                X1 = PaperMarginPx,      Y1 = PaperMarginPx + y,
-                X2 = PaperMarginPx + pw, Y2 = PaperMarginPx + y,
+                X1 = ox,      Y1 = oy + y,
+                X2 = ox + pw, Y2 = oy + y,
                 Stroke = gridClr, StrokeThickness = 0.5,
                 Tag = GridTag, Visibility = gridVis
             };
@@ -196,8 +213,18 @@ public partial class PatternCanvasControl : UserControl
         // TD-4 fix: store handler reference so we can unsubscribe later
         PropertyChangedEventHandler handler = (_, ev) =>
         {
-            if (ev.PropertyName is nameof(PieceViewModel.IsSelected))
-                Dispatcher.Invoke(() => RenderPieceShapes(container, piece));
+            switch (ev.PropertyName)
+            {
+                case nameof(PieceViewModel.IsSelected):
+                    Dispatcher.Invoke(() => RenderPieceShapes(container, piece));
+                    break;
+                // Sync canvas transform whenever piece position or rotation changes in the VM
+                case nameof(PieceViewModel.PositionX):
+                case nameof(PieceViewModel.PositionY):
+                case nameof(PieceViewModel.Rotation):
+                    Dispatcher.Invoke(() => SyncTransform(piece));
+                    break;
+            }
         };
         _pieceHandlers[piece] = handler;
         piece.PropertyChanged += handler;
@@ -332,10 +359,13 @@ public partial class PatternCanvasControl : UserControl
     private void UpdateCanvasSize()
     {
         if (_vm == null) return;
-        double pw = _vm.PaperSizeModel.WidthMm  * _pxPerMm + PaperMarginPx * 2;
-        double ph = _vm.PaperSizeModel.HeightMm * _pxPerMm + PaperMarginPx * 2;
-        RootCanvas.Width  = Math.Max(pw, 400);
-        RootCanvas.Height = Math.Max(ph, 400);
+        double sep    = MainViewModel.PageSepMm;
+        double totalW = (_vm.PagesWide * _vm.PaperSizeModel.WidthMm  + (_vm.PagesWide - 1) * sep) * _pxPerMm
+                        + PaperMarginPx * 2;
+        double totalH = (_vm.PagesTall * _vm.PaperSizeModel.HeightMm + (_vm.PagesTall - 1) * sep) * _pxPerMm
+                        + PaperMarginPx * 2;
+        RootCanvas.Width  = Math.Max(totalW, 400);
+        RootCanvas.Height = Math.Max(totalH, 400);
     }
 
     // ── drag handling ────────────────────────────────────────────────────────
@@ -385,6 +415,8 @@ public partial class PatternCanvasControl : UserControl
     {
         if (_dragging == null) return;
         RootCanvas.ReleaseMouseCapture();
+        // Expand page grid if piece was dragged beyond current pages
+        _vm?.EnsurePageForPosition(_dragging.PositionX, _dragging.PositionY);
         _dragging = null;
     }
 
@@ -435,32 +467,8 @@ public partial class PatternCanvasControl : UserControl
         SyncTransform(piece);
     }
 
-    private void AutoArrange_Click(object s, RoutedEventArgs e)
-    {
-        if (_vm == null) return;
-
-        double gap    = _vm.View2DSettings?.PieceGapMm ?? 5.0;
-        double paperW = _vm.PaperSizeModel.WidthMm;
-        double curX   = gap, curY = gap, rowH = 0;
-
-        foreach (var piece in _vm.Pieces)
-        {
-            if (piece.Faces.Length == 0) continue;
-
-            var allX = piece.Faces.SelectMany(f => new[] { f.V0.X, f.V1.X, f.V2.X });
-            var allY = piece.Faces.SelectMany(f => new[] { f.V0.Y, f.V1.Y, f.V2.Y });
-            double pw = allX.Max() - allX.Min() + gap;
-            double ph = allY.Max() - allY.Min() + gap;
-
-            if (curX + pw > paperW) { curX = gap; curY += rowH + gap; rowH = 0; }
-
-            piece.PositionX = curX + pw / 2;
-            piece.PositionY = curY + ph / 2;
-            curX += pw + gap;
-            rowH  = Math.Max(rowH, ph);
-            SyncTransform(piece);
-        }
-    }
+    private void AutoArrange_Click(object s, RoutedEventArgs e) =>
+        _vm?.AutoArrangeCommand.Execute(null);
 
     // ── grid toggle (via ViewModel command) ──────────────────────────────────
     private void GridToggle_Click(object s, RoutedEventArgs e) =>

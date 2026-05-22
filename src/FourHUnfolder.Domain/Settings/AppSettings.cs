@@ -77,7 +77,7 @@ public sealed class AppSettings
         public string FaceNumberColor   { get; set; } = "#888888";
 
         // Piece spacing used during auto-arrange
-        public double PieceGapMm        { get; set; } = 5.0;
+        public double PieceGapMm        { get; set; } = 10.0;
 
         // Snap pieces to grid intersections when dragging
         public bool   SnapToGrid        { get; set; } = false;
@@ -105,6 +105,10 @@ public sealed class AppSettings
         public string CutLineColor      { get; set; } = "#ff0000";
         public double CutLineWidth      { get; set; } = 1.2;
         public string FoldLineDash      { get; set; } = "4,2";
+
+        // Glue tab geometry
+        public double GlueTabDepthMm    { get; set; } = 4.0;   // perpendicular depth of tab
+        public double GlueTabInsetRatio { get; set; } = 0.15;  // inset from each end as fraction of edge length
 
         // Output quality
         public double SvgScaleFactor    { get; set; } = 10.0;  // model-mm → SVG px

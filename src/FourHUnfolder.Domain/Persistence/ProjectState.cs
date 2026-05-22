@@ -17,11 +17,19 @@ public sealed class ProjectState
 
     public PaperDto Paper { get; set; } = new();
 
+    // ── Multi-page canvas layout ──────────────────────────────────────────────
+    public int PagesWide { get; set; } = 1;
+    public int PagesTall { get; set; } = 1;
+
     // ── User edge overrides (mesh edge id → "Fold" or "Cut") ─────────────────
     public Dictionary<int, string> EdgeOverrides { get; set; } = new();
 
     // ── Piece positions on the paper (one entry per connected component) ─────
     public List<PieceLayoutDto> Layouts { get; set; } = new();
+
+    // ── Load-time warnings (not serialised) ──────────────────────────────────
+    [System.Text.Json.Serialization.JsonIgnore]
+    public List<string> Warnings { get; } = new();
 
     // ── Nested DTOs ───────────────────────────────────────────────────────────
 
