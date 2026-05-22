@@ -128,5 +128,6 @@ public class ObjMeshLoader : IMeshLoader
     }
 
     private static float F(string s) =>
-        float.Parse(s, CultureInfo.InvariantCulture);
+        float.TryParse(s, System.Globalization.NumberStyles.Float,
+                       CultureInfo.InvariantCulture, out var v) ? v : 0f;
 }

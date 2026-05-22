@@ -326,7 +326,7 @@ public partial class MainViewModel : ObservableObject
 
             double scale        = UnfoldService.ComputeScale(_currentMesh, setup.Scale);
             _currentScaleMmPerUnit = scale;
-            var    unfoldResult = _unfoldService.Unfold(_currentMesh, _edgeOverrides);
+            var    unfoldResult = _unfoldService.Unfold(_currentMesh, _edgeOverrides, _settingsService.Current.Print);
             var    pieces       = _unfoldService.ComputePieces(_currentMesh);
 
             RebuildPieces(unfoldResult, pieces, scale);
@@ -359,7 +359,7 @@ public partial class MainViewModel : ObservableObject
         try
         {
             // Re-run unfold to get a fresh UnfoldResult for SVG
-            var result = _unfoldService.Unfold(_currentMesh, _edgeOverrides);
+            var result = _unfoldService.Unfold(_currentMesh, _edgeOverrides, _settingsService.Current.Print);
             // TD-8: pass committed texture path so SVG can embed it when UV data is present
             _exporter.Export(result, dlg.FileName, _committedTexturePath);
             StatusText = $"Exported to {Path.GetFileName(dlg.FileName)}";
@@ -635,7 +635,7 @@ public partial class MainViewModel : ObservableObject
         if (_currentMesh == null) return;
         var oldPos = Pieces.ToDictionary(p => p.GroupId,
                                          p => (p.PositionX, p.PositionY, p.Rotation));
-        var result = _unfoldService.Unfold(_currentMesh, _edgeOverrides);
+        var result = _unfoldService.Unfold(_currentMesh, _edgeOverrides, _settingsService.Current.Print);
         var groups = _unfoldService.ComputePieces(_currentMesh);
         RebuildPieces(result, groups, _currentScaleMmPerUnit);
 
@@ -732,7 +732,7 @@ public partial class MainViewModel : ObservableObject
         PaperSizeModel = new PaperSizeModel(state.Paper.Name, state.Paper.WidthMm, state.Paper.HeightMm);
 
         // Re-run unfold
-        var unfoldResult = _unfoldService.Unfold(_currentMesh, _edgeOverrides);
+        var unfoldResult = _unfoldService.Unfold(_currentMesh, _edgeOverrides, _settingsService.Current.Print);
         var pieces       = _unfoldService.ComputePieces(_currentMesh);
         var layoutMap    = state.Layouts.ToDictionary(l => l.GroupId);
 
@@ -762,7 +762,10 @@ public partial class MainViewModel : ObservableObject
         RefreshDerivedVisibility();
         RefreshColumnBindings();
 
-        StatusText = $"Project loaded — {Pieces.Count} pieces.";
+        if (state.Warnings.Count > 0)
+            StatusText = $"Project loaded with warnings: {string.Join("; ", state.Warnings)}";
+        else
+            StatusText = $"Project loaded — {Pieces.Count} pieces.";
     }
 
     // ── texture helpers ───────────────────────────────────────────────────────

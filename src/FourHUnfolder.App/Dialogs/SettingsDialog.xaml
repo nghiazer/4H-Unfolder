@@ -609,6 +609,39 @@
                     </StackPanel>
                 </GroupBox>
 
+                <GroupBox Header="Glue Tab Geometry">
+                    <StackPanel>
+                        <Grid Margin="0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="190"/>
+                                <ColumnDefinition Width="140"/>
+                                <ColumnDefinition Width="40"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Tab depth (mm)" Style="{StaticResource FieldLabel}"/>
+                            <Slider Grid.Column="1" Style="{StaticResource SettingSlider}"
+                                    Minimum="1" Maximum="15"
+                                    Value="{Binding GlueTabDepthMm}"/>
+                            <TextBlock Grid.Column="2"
+                                       Text="{Binding GlueTabDepthMm, StringFormat={}{0:F1}}"
+                                       Foreground="#aaaacc" VerticalAlignment="Center" Margin="6,0"/>
+                        </Grid>
+                        <Grid Margin="0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="190"/>
+                                <ColumnDefinition Width="140"/>
+                                <ColumnDefinition Width="40"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Tab inset ratio" Style="{StaticResource FieldLabel}"/>
+                            <Slider Grid.Column="1" Style="{StaticResource SettingSlider}"
+                                    Minimum="0.05" Maximum="0.4"
+                                    Value="{Binding GlueTabInsetRatio}"/>
+                            <TextBlock Grid.Column="2"
+                                       Text="{Binding GlueTabInsetRatio, StringFormat={}{0:F2}}"
+                                       Foreground="#aaaacc" VerticalAlignment="Center" Margin="6,0"/>
+                        </Grid>
+                    </StackPanel>
+                </GroupBox>
+
                 <GroupBox Header="Content">
                     <StackPanel>
                         <CheckBox Content="Include glue tabs"      IsChecked="{Binding IncludeGlueTabs}"/>

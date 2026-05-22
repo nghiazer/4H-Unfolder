@@ -3,6 +3,8 @@ using FourHUnfolder.Domain.Results;
 
 namespace FourHUnfolder.Geometry.Algorithms;
 
+using static FourHUnfolder.Geometry.GeometryConstants;
+
 /// <summary>
 /// Overlap detection using a two-phase approach:
 ///   1. Fast AABB (axis-aligned bounding box) pre-check — O(n²) comparisons of cheap box tests
@@ -61,14 +63,17 @@ public class OverlapDetector
     {
         for (int i = 0; i < 3; i++)
         {
-            var edge = a[(i + 1) % 3] - a[i];
-            var axis = new Vector2(-edge.Y, edge.X);
+            var edge     = a[(i + 1) % 3] - a[i];
+            var axis     = new Vector2(-edge.Y, edge.X);
+            float axLen  = axis.Length();
 
             var (minA, maxA) = Project(a, axis);
             var (minB, maxB) = Project(b, axis);
 
-            // Add small epsilon to ignore near-touching edges
-            if (maxA <= minB + 1e-5f || maxB <= minA + 1e-5f) return true;
+            // Epsilon is scaled by axis length to give a consistent geometric tolerance
+            // regardless of edge length (avoids false overlaps on shared fold edges).
+            float eps = SatTouchEpsilon * (axLen > 0f ? axLen : 1f);
+            if (maxA <= minB + eps || maxB <= minA + eps) return true;
         }
         return false;
     }

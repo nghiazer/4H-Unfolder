@@ -49,7 +49,7 @@ public class UnfoldEngineTests
         var dg          = new DualGraphBuilder().Build(mesh);
         var mst         = new KruskalMstBuilder().Build(dg);
         var foldEdgeIds = mst.Select(e => e.SharedMeshEdgeId).ToHashSet();
-        new EdgeMarker().Mark(mesh, mst);
+        new EdgeMarker().Mark(mesh, mst.Select(e => e.SharedMeshEdgeId).ToHashSet());
         return new UnfoldEngine().Unfold(mesh, foldEdgeIds);
     }
 
@@ -134,7 +134,7 @@ public class UnfoldEngineTests
         var mesh = SimpleCube();
         var dg   = new DualGraphBuilder().Build(mesh);
         var mst  = new KruskalMstBuilder().Build(dg);
-        new EdgeMarker().Mark(mesh, mst);
+        new EdgeMarker().Mark(mesh, mst.Select(e => e.SharedMeshEdgeId).ToHashSet());
 
         mesh.Edges.Count(e => e.Type == EdgeType.Fold).Should().Be(11);
     }
@@ -145,7 +145,7 @@ public class UnfoldEngineTests
         var mesh = SimpleCube();
         var dg   = new DualGraphBuilder().Build(mesh);
         var mst  = new KruskalMstBuilder().Build(dg);
-        new EdgeMarker().Mark(mesh, mst);
+        new EdgeMarker().Mark(mesh, mst.Select(e => e.SharedMeshEdgeId).ToHashSet());
 
         mesh.Edges.Where(e => e.ConnectsFaces).Should()
             .OnlyContain(e => e.Type == EdgeType.Fold || e.Type == EdgeType.Cut);
@@ -167,7 +167,7 @@ public class UnfoldEngineTests
         // Force all interior edges to Cut
         var dg  = new DualGraphBuilder().Build(mesh);
         var mst = new KruskalMstBuilder().Build(dg);
-        new EdgeMarker().Mark(mesh, mst);
+        new EdgeMarker().Mark(mesh, mst.Select(e => e.SharedMeshEdgeId).ToHashSet());
 
         // Override the fold edge to cut
         foreach (var e in mesh.Edges.Where(e => e.Type == EdgeType.Fold))

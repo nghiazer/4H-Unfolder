@@ -23,6 +23,10 @@ public sealed class ProjectState
     // ── Piece positions on the paper (one entry per connected component) ─────
     public List<PieceLayoutDto> Layouts { get; set; } = new();
 
+    // ── Load-time warnings (not serialised) ──────────────────────────────────
+    [System.Text.Json.Serialization.JsonIgnore]
+    public List<string> Warnings { get; } = new();
+
     // ── Nested DTOs ───────────────────────────────────────────────────────────
 
     public sealed class PaperDto

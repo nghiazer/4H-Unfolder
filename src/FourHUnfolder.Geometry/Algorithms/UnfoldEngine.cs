@@ -4,6 +4,8 @@ using FourHUnfolder.Domain.Results;
 
 namespace FourHUnfolder.Geometry.Algorithms;
 
+using static FourHUnfolder.Geometry.GeometryConstants;
+
 /// <summary>
 /// BFS unfold. Accepts a set of fold-edge mesh IDs (from Kruskal MST ± user overrides)
 /// and places each triangle in 2-D, preserving 3-D edge lengths.
@@ -39,12 +41,20 @@ public class UnfoldEngine
                 if (visited.Contains(faceId)) continue;
                 visited.Add(faceId);
 
-                placed[faceId] = PlaceChildFace(
-                    mesh,
-                    mesh.Faces[faceId],
-                    mesh.Faces[parentId],
-                    placed[parentId],
-                    mesh.Edges[sharedEdgeId]);
+                try
+                {
+                    placed[faceId] = PlaceChildFace(
+                        mesh,
+                        mesh.Faces[faceId],
+                        mesh.Faces[parentId],
+                        placed[parentId],
+                        mesh.Edges[sharedEdgeId]);
+                }
+                catch (InvalidOperationException)
+                {
+                    // Malformed topology: skip this face, place it at origin as fallback
+                    placed[faceId] = [Vector2.Zero, Vector2.One, new Vector2(0f, 1f)];
+                }
 
                 foreach (var (nbId, eId) in adj[faceId])
                     if (!visited.Contains(nbId))
@@ -144,7 +154,7 @@ public class UnfoldEngine
     {
         var ab    = p2 - p1;
         float len = ab.Length();
-        if (len < 1e-6f) return p1 + new Vector2(da, 0f);
+        if (len < GeometryConstants.DegenerateEdge) return p1 + new Vector2(da, 0f);
         float t  = (da * da - db * db + len * len) / (2f * len * len);
         var   ft = p1 + t * ab;
         float h  = MathF.Sqrt(MathF.Max(0f, da * da - t * t * len * len));
@@ -178,6 +188,9 @@ public class UnfoldEngine
         var r = new int[2]; int n = 0;
         for (int i = 0; i < 3 && n < 2; i++)
             if (vids[i] == edge.V1 || vids[i] == edge.V2) r[n++] = i;
+        if (n < 2)
+            throw new InvalidOperationException(
+                $"Mesh topology error: edge ({edge.V1},{edge.V2}) shares fewer than 2 vertices with face [{string.Join(",", vids)}].");
         return r;
     }
 

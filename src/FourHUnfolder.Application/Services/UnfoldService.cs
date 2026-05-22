@@ -1,5 +1,6 @@
 ﻿using FourHUnfolder.Domain.Models;
 using FourHUnfolder.Domain.Results;
+using FourHUnfolder.Domain.Settings;
 using FourHUnfolder.Geometry.Algorithms;
 
 namespace FourHUnfolder.Application.Services;
@@ -13,6 +14,7 @@ public class UnfoldService
 {
     private readonly DualGraphBuilder  _graphBuilder    = new();
     private readonly KruskalMstBuilder _mstBuilder      = new();
+    private readonly EdgeMarker        _edgeMarker      = new();
     private readonly UnfoldEngine      _unfoldEngine    = new();
     private readonly OverlapDetector   _overlapDetector = new();
     private readonly GlueTabGenerator  _tabGenerator    = new();
@@ -25,7 +27,8 @@ public class UnfoldService
     /// </param>
     public UnfoldResult Unfold(
         Mesh mesh,
-        IReadOnlyDictionary<int, EdgeType>? edgeOverrides = null)
+        IReadOnlyDictionary<int, EdgeType>? edgeOverrides = null,
+        AppSettings.PrintSettings? printSettings = null)
     {
         // 1. Build dual graph + MST
         var dualGraph    = _graphBuilder.Build(mesh);
@@ -44,17 +47,14 @@ public class UnfoldService
         }
 
         // 3. Stamp edge types on the mesh
-        foreach (var edge in mesh.Edges)
-        {
-            edge.Type = edge.ConnectsFaces
-                ? (foldEdgeIds.Contains(edge.Id) ? EdgeType.Fold : EdgeType.Cut)
-                : EdgeType.Boundary;
-        }
+        _edgeMarker.Mark(mesh, foldEdgeIds);
 
         // 4. BFS unfold
         var rawResult   = _unfoldEngine.Unfold(mesh, foldEdgeIds);
         var hasOverlaps = _overlapDetector.HasOverlaps(rawResult.Faces);
-        var tabs        = _tabGenerator.Generate(rawResult.Faces);
+        var tabs        = _tabGenerator.Generate(rawResult.Faces,
+                              (float)(printSettings?.GlueTabDepthMm    ?? 4.0),
+                              (float)(printSettings?.GlueTabInsetRatio ?? 0.15));
 
         return new UnfoldResult(rawResult.Faces, tabs, hasOverlaps);
     }

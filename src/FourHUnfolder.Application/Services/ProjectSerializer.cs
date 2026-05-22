@@ -28,17 +28,31 @@ public class ProjectSerializer
         File.WriteAllText(filePath, json);
     }
 
+    public const int CurrentVersion = 2;
+
     public ProjectState Load(string filePath)
     {
         var json  = File.ReadAllText(filePath);
         var state = JsonSerializer.Deserialize<ProjectState>(json, JsonOpts)
                     ?? throw new InvalidDataException("Invalid project file.");
 
+        if (state.Version > CurrentVersion)
+            throw new InvalidDataException(
+                $"Project was saved by a newer version of 4H-Unfolder (file version {state.Version}, " +
+                $"supported up to {CurrentVersion}). Please update the application.");
+
         var dir = Path.GetDirectoryName(filePath) ?? string.Empty;
 
-        // Resolve paths
+        // Resolve paths — record a warning if a saved path can no longer be found
+        string? rawMesh    = state.MeshPath;
+        string? rawTexture = state.TexturePath;
         state.MeshPath    = Resolve(state.MeshPath,    dir);
         state.TexturePath = Resolve(state.TexturePath, dir);
+
+        if (!string.IsNullOrEmpty(rawMesh)    && state.MeshPath    == null)
+            state.Warnings.Add($"Mesh file not found: {rawMesh}");
+        if (!string.IsNullOrEmpty(rawTexture) && state.TexturePath == null)
+            state.Warnings.Add($"Texture file not found: {rawTexture}");
 
         return state;
     }

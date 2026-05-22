@@ -1,5 +1,4 @@
-﻿using FourHUnfolder.Domain.DualGraph;
-using FourHUnfolder.Domain.Models;
+﻿using FourHUnfolder.Domain.Models;
 
 namespace FourHUnfolder.Geometry.Algorithms;
 
@@ -11,14 +10,12 @@ namespace FourHUnfolder.Geometry.Algorithms;
 /// </summary>
 public class EdgeMarker
 {
-    public void Mark(Mesh mesh, IReadOnlyList<GraphEdge> mstEdges)
+    public void Mark(Mesh mesh, IReadOnlySet<int> foldEdgeIds)
     {
-        var mstSet = new HashSet<int>(mstEdges.Select(e => e.SharedMeshEdgeId));
-
         foreach (var edge in mesh.Edges)
         {
             edge.Type = edge.ConnectsFaces
-                ? (mstSet.Contains(edge.Id) ? EdgeType.Fold : EdgeType.Cut)
+                ? (foldEdgeIds.Contains(edge.Id) ? EdgeType.Fold : EdgeType.Cut)
                 : EdgeType.Boundary;
         }
     }
