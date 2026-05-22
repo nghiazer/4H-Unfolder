@@ -62,8 +62,12 @@ public partial class PatternCanvasControl : UserControl
         RebuildAll();
     }
 
-    private void OnPiecesChanged(object? s, NotifyCollectionChangedEventArgs e) =>
+    private void OnPiecesChanged(object? s, NotifyCollectionChangedEventArgs e)
+    {
+        // Suppress per-Add/Clear rebuilds during batch RebuildPieces; PiecesVersion fires one rebuild
+        if (_vm?.BatchingPieces == true) return;
         Dispatcher.Invoke(RebuildAll);
+    }
 
     private void OnVmPropertyChanged(object? s, PropertyChangedEventArgs e)
     {
@@ -74,12 +78,13 @@ public partial class PatternCanvasControl : UserControl
                 if (_vm != null) Dispatcher.Invoke(() => ApplyGridVisibility(_vm.GridVisible));
                 break;
 
-            // Settings that affect piece rendering need full rebuild
+            // Settings / state that affect piece rendering need full rebuild
             case nameof(MainViewModel.PaperSizeModel):
             case nameof(MainViewModel.PixelsPerMm):
             case nameof(MainViewModel.View2DSettings):
             case nameof(MainViewModel.PagesWide):
             case nameof(MainViewModel.PagesTall):
+            case nameof(MainViewModel.PiecesVersion):   // single rebuild after batch RebuildPieces
                 Dispatcher.Invoke(RebuildAll);
                 break;
         }
@@ -415,8 +420,17 @@ public partial class PatternCanvasControl : UserControl
     {
         if (_dragging == null) return;
         RootCanvas.ReleaseMouseCapture();
-        // Expand page grid if piece was dragged beyond current pages
-        _vm?.EnsurePageForPosition(_dragging.PositionX, _dragging.PositionY);
+
+        // Expand page grid based on the piece's actual bounding box right/bottom edge
+        if (_vm != null && _dragging.Faces.Length > 0)
+        {
+            var allX = _dragging.Faces.SelectMany(f => new[] { f.V0.X, f.V1.X, f.V2.X });
+            var allY = _dragging.Faces.SelectMany(f => new[] { f.V0.Y, f.V1.Y, f.V2.Y });
+            double rightMm  = _dragging.PositionX + allX.Max();
+            double bottomMm = _dragging.PositionY + allY.Max();
+            _vm.EnsurePageForPosition(rightMm, bottomMm);
+        }
+
         _dragging = null;
     }
 
