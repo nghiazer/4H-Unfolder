@@ -42,6 +42,12 @@ public partial class MainViewModel : ObservableObject
     // cached result from last unfold — used by SVG export to retrieve UV coords
     private UnfoldResult? _lastUnfoldResult;
 
+    // suppress canvas CollectionChanged rebuilds during batch Pieces.Add() in RebuildPieces
+    internal bool BatchingPieces;
+
+    // bumped after each RebuildPieces() to trigger a single canvas rebuild
+    [ObservableProperty] private int _piecesVersion;
+
     // TD-5: selection overlay cache — avoid rebuilding geometry on every click
     private int?          _cachedOverlayGroupId;
     private Model3DGroup? _cachedOverlayModel;
@@ -147,6 +153,12 @@ public partial class MainViewModel : ObservableObject
     // ── settings shortcut ─────────────────────────────────────────────────────
     private AppSettings S => _settingsService.Current;
 
+    // Hash of View3D fields that require a 3D model rebuild when changed
+    private string _lastView3DHash = string.Empty;
+
+    private static string View3DHash(AppSettings.View3DSettings v) =>
+        $"{v.FaceColor}|{v.BackFaceColor}|{v.FaceOpacity:F4}|{v.DisplayMode}|{v.EdgeOverlayColor}|{v.EdgeOverlayThickness:F4}";
+
     // ── settings changed handler ──────────────────────────────────────────────
     private void OnSettingsChanged(object? sender, EventArgs e)
     {
@@ -165,8 +177,11 @@ public partial class MainViewModel : ObservableObject
         CameraSettingsVersion++;
         OnPropertyChanged(nameof(CameraSettingsVersion));
 
-        if (_currentMesh != null)
+        // Only rebuild expensive 3D model when View3D appearance settings actually changed
+        var newHash = View3DHash(S.View3D);
+        if (_currentMesh != null && newHash != _lastView3DHash)
         {
+            _lastView3DHash = newHash;
             var tex = LoadBitmapImage(_committedTexturePath);
             MeshModel = BuildWpfModel(_currentMesh, tex);
         }
@@ -298,6 +313,7 @@ public partial class MainViewModel : ObservableObject
             _committedTexturePath = _currentMesh.SuggestedTexturePath;
 
             var tex    = LoadBitmapImage(_committedTexturePath);
+            _lastView3DHash = View3DHash(S.View3D);   // sync hash so OnSettingsChanged skips rebuild
             MeshModel  = BuildWpfModel(_currentMesh, tex);
             CanUnfold  = true;
             CanExport  = false;
@@ -681,6 +697,9 @@ public partial class MainViewModel : ObservableObject
     private void RebuildPieces(UnfoldResult result, List<List<int>> groups, double scale)
     {
         _lastUnfoldResult = result;   // cache for BuildExportLayout
+
+        // Suppress per-Add canvas rebuilds; fire one rebuild via PiecesVersion at the end
+        BatchingPieces = true;
         Pieces.Clear();
         for (int g = 0; g < groups.Count; g++)
         {
@@ -688,6 +707,8 @@ public partial class MainViewModel : ObservableObject
             var vm      = PieceViewModel.Create(groupId, groups[g], result, _currentMesh!, scale);
             Pieces.Add(vm);
         }
+        BatchingPieces = false;
+        PiecesVersion++;   // triggers exactly one RebuildAll in the canvas
     }
 
     // ── SVG export layout builder ─────────────────────────────────────────────
@@ -747,7 +768,8 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void AutoArrange() => RunAutoArrange();
 
-    /// Strip-packs all pieces without overlap onto a grid of pages.
+    /// Strip-packs all pieces without overlap into a horizontal grid of pages.
+    /// Pages grow to the right (PagesWide) when a page overflows vertically.
     /// Updates PagesWide / PagesTall as needed.
     private void RunAutoArrange()
     {
@@ -757,8 +779,9 @@ public partial class MainViewModel : ObservableObject
         double paperW = PaperSizeModel.WidthMm;
         double paperH = PaperSizeModel.HeightMm;
 
-        double curX = gap, curY = gap, rowH = 0;
-        int newPagesTall = 1;
+        // Page-local cursor (within the current page column)
+        double localX = gap, localY = gap, rowH = 0;
+        int pageCol = 0, newPagesWide = 1;
 
         foreach (var piece in Pieces)
         {
@@ -772,47 +795,48 @@ public partial class MainViewModel : ObservableObject
             double pw = lMaxX - lMinX;
             double ph = lMaxY - lMinY;
 
-            // Wrap to next row when piece doesn't fit on current row (within one page width)
-            if (curX > gap && curX + pw > paperW - gap)
+            // Wrap row within the current page when piece doesn't fit (and not at row start)
+            if (localX > gap && localX + pw > paperW - gap)
             {
-                curX  = gap;
-                curY += rowH + gap;
-                rowH  = 0;
+                localX  = gap;
+                localY += rowH + gap;
+                rowH    = 0;
             }
 
-            // Start on a new page (vertically) if current row overflows page height
-            double pageBottom = newPagesTall * paperH + (newPagesTall - 1) * PageSepMm;
-            if (curY + ph > pageBottom - gap)
+            // If piece overflows current page height → advance to next page (horizontally)
+            if (localY + ph > paperH - gap)
             {
-                newPagesTall++;
-                curY = (newPagesTall - 1) * (paperH + PageSepMm) + gap;
-                curX = gap;
-                rowH = 0;
+                pageCol++;
+                newPagesWide = Math.Max(newPagesWide, pageCol + 1);
+                localX = gap;
+                localY = gap;
+                rowH   = 0;
             }
 
-            // Place piece: PositionX/Y is the centroid; shift so left/top of bbox is at curX/curY
-            piece.PositionX = curX - lMinX;
-            piece.PositionY = curY - lMinY;
+            // Absolute canvas position = page origin + page-local position - bbox min
+            piece.PositionX = pageCol * (paperW + PageSepMm) + localX - lMinX;
+            piece.PositionY = localY - lMinY;
 
-            curX += pw + gap;
-            rowH  = Math.Max(rowH, ph);
+            localX += pw + gap;
+            rowH    = Math.Max(rowH, ph);
         }
 
-        // Apply new page counts — property setters fire PropertyChanged, canvas reacts
-        PagesWide = 1;          // single column of pages (pieces flow downward)
-        PagesTall = newPagesTall;
+        PagesWide = newPagesWide;
+        PagesTall = 1;   // auto-arrange fills horizontally; drag pieces down for extra rows
     }
 
-    /// Expands the page grid if a piece has been dragged beyond the current page boundary.
-    public void EnsurePageForPosition(double posX, double posY)
+    /// Expands the page grid if a piece's bounding box extends beyond the current pages.
+    /// <param name="rightMm">Rightmost mm coordinate of the piece's bounding box.</param>
+    /// <param name="bottomMm">Bottommost mm coordinate of the piece's bounding box.</param>
+    public void EnsurePageForPosition(double rightMm, double bottomMm)
     {
         double paperW     = PaperSizeModel.WidthMm;
         double paperH     = PaperSizeModel.HeightMm;
-        double rightEdge  = PagesWide  * paperW + (PagesWide  - 1) * PageSepMm;
-        double bottomEdge = PagesTall  * paperH + (PagesTall  - 1) * PageSepMm;
+        double rightEdge  = PagesWide * paperW + (PagesWide - 1) * PageSepMm;
+        double bottomEdge = PagesTall * paperH + (PagesTall - 1) * PageSepMm;
 
-        if (posX > rightEdge)  PagesWide++;
-        if (posY > bottomEdge) PagesTall++;
+        if (rightMm  > rightEdge)  PagesWide++;
+        if (bottomMm > bottomEdge) PagesTall++;
     }
 
     private ProjectState BuildProjectState()
