@@ -1,10 +1,12 @@
 ﻿using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Numerics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
+using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using FourHUnfolder.App.ViewModels;
 using FourHUnfolder.Domain.Models;
@@ -88,6 +90,7 @@ public partial class PatternCanvasControl : UserControl
             case nameof(MainViewModel.PagesWide):
             case nameof(MainViewModel.PagesTall):
             case nameof(MainViewModel.PiecesVersion):   // single rebuild after batch RebuildPieces
+            case nameof(MainViewModel.Canvas2DTexture): // texture added/removed/changed
                 Dispatcher.Invoke(RebuildAll);
                 break;
         }
@@ -248,11 +251,11 @@ public partial class PatternCanvasControl : UserControl
     private void RenderPieceShapes(Canvas container, PieceViewModel piece)
     {
         container.Children.Clear();
-        var s2d = _vm?.View2DSettings;
+        var s2d     = _vm?.View2DSettings;
+        var texture = _vm?.Canvas2DTexture;
 
-        var faceFill = HexBrush(s2d?.FaceFillColor, "#c8fffde2");
-        var selFill  = new SolidColorBrush(Color.FromArgb(180, 160, 210, 255));
-        var fill     = piece.IsSelected ? selFill : faceFill;
+        var solidFill = HexBrush(s2d?.FaceFillColor, "#c8fffde2");
+        var selFill   = new SolidColorBrush(Color.FromArgb(180, 160, 210, 255));
 
         var foldBrush  = HexBrush(s2d?.FoldLineColor, "#4169e1");
         var cutBrush   = HexBrush(s2d?.CutLineColor,  "#ff0000");
@@ -267,6 +270,24 @@ public partial class PatternCanvasControl : UserControl
 
         foreach (var fd in piece.Faces)
         {
+            // Per-face fill: texture when UV data available, else solid; selection overrides all
+            Brush fill;
+            if (piece.IsSelected)
+            {
+                fill = selFill;
+            }
+            else if (texture != null && fd.UVCoords is { Length: >= 3 })
+            {
+                fill = BuildTextureBrush(texture,
+                           Sc(fd.V0), Sc(fd.V1), Sc(fd.V2),
+                           fd.UVCoords[0], fd.UVCoords[1], fd.UVCoords[2])
+                       ?? solidFill;
+            }
+            else
+            {
+                fill = solidFill;
+            }
+
             // TD-7: remove triangle border stroke — fold/cut/boundary lines handle all outlines
             var poly = new Polygon
             {
@@ -531,6 +552,57 @@ public partial class PatternCanvasControl : UserControl
         if (ZoomLabel == null) return;
         ZoomLabel.Text = $"{_pxPerMm:F1} px/mm";
         if (_vm != null) { _vm.PixelsPerMm = _pxPerMm; RebuildAll(); }
+    }
+
+    // ── affine UV texture mapping ─────────────────────────────────────────────
+    /// <summary>
+    /// Builds an ImageBrush whose MatrixTransform maps the image so that each
+    /// canvas-pixel vertex (p0/p1/p2) samples from the corresponding UV coordinate.
+    ///
+    /// WPF ImageBrush.Transform is a FORWARD transform (image-space → canvas-space):
+    ///   canvas_pixel = M * image_pixel
+    /// We solve for M using Cramer's rule on the three vertex constraints.
+    /// </summary>
+    private static Brush? BuildTextureBrush(
+        BitmapImage texture,
+        System.Windows.Point p0, System.Windows.Point p1, System.Windows.Point p2,
+        Vector2 uv0, Vector2 uv1, Vector2 uv2)
+    {
+        double w = texture.PixelWidth, h = texture.PixelHeight;
+        if (w < 1 || h < 1) return null;
+
+        // Image pixel coords — flip V for OBJ convention (v=0 is bottom, image y=0 is top)
+        double tx0 = uv0.X * w, ty0 = (1.0 - uv0.Y) * h;
+        double tx1 = uv1.X * w, ty1 = (1.0 - uv1.Y) * h;
+        double tx2 = uv2.X * w, ty2 = (1.0 - uv2.Y) * h;
+
+        // Determinant of source triangle (image pixels)
+        double det = tx0 * (ty1 - ty2) + tx1 * (ty2 - ty0) + tx2 * (ty0 - ty1);
+        if (Math.Abs(det) < 1e-4) return null;  // degenerate UV triangle
+
+        double p0x = p0.X, p0y = p0.Y;
+        double p1x = p1.X, p1y = p1.Y;
+        double p2x = p2.X, p2y = p2.Y;
+
+        // Solve M(ti) = pi  →  WPF Matrix: x' = m11*x + m21*y + offX
+        double m11  = (p0x * (ty1 - ty2) + p1x * (ty2 - ty0) + p2x * (ty0 - ty1)) / det;
+        double m21  = (tx0 * (p1x - p2x) + tx1 * (p2x - p0x) + tx2 * (p0x - p1x)) / det;
+        double offX = (tx0 * (ty1 * p2x - ty2 * p1x) + tx1 * (ty2 * p0x - ty0 * p2x) + tx2 * (ty0 * p1x - ty1 * p0x)) / det;
+
+        double m12  = (p0y * (ty1 - ty2) + p1y * (ty2 - ty0) + p2y * (ty0 - ty1)) / det;
+        double m22  = (tx0 * (p1y - p2y) + tx1 * (p2y - p0y) + tx2 * (p0y - p1y)) / det;
+        double offY = (tx0 * (ty1 * p2y - ty2 * p1y) + tx1 * (ty2 * p0y - ty0 * p2y) + tx2 * (ty0 * p1y - ty1 * p0y)) / det;
+
+        var brush = new ImageBrush(texture)
+        {
+            ViewportUnits = BrushMappingMode.Absolute,
+            Viewport      = new Rect(0, 0, w, h),
+            TileMode      = TileMode.None,
+            Stretch       = Stretch.None,
+            Transform     = new MatrixTransform(m11, m12, m21, m22, offX, offY)
+        };
+        brush.Freeze();
+        return brush;
     }
 
     // ── color/dash helpers ────────────────────────────────────────────────────

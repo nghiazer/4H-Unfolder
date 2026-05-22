@@ -9,6 +9,7 @@
     <NoWarn>NU1701</NoWarn>
     <RootNamespace>FourHUnfolder.App</RootNamespace>
     <AssemblyName>4H-Unfolder</AssemblyName>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
 
   </PropertyGroup>
   <ItemGroup>
@@ -19,5 +20,9 @@
     <PackageReference Include="HelixToolkit.WPF"                        Version="2.25.0" />
     <PackageReference Include="CommunityToolkit.Mvvm"                   Version="8.3.2"  />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1"  />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Assets\app.ico"/>
+    <Resource Include="Assets\logo.png"/>
   </ItemGroup>
 </Project>
