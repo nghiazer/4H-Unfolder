@@ -27,6 +27,9 @@ public sealed class ProjectState
     // ── Piece positions on the paper (one entry per connected component) ─────
     public List<PieceLayoutDto> Layouts { get; set; } = new();
 
+    // ── Bundle format (.4hu): extension of embedded texture, null for .pmc ──
+    public string? BundledTextureExt { get; set; }
+
     // ── Load-time warnings (not serialised) ──────────────────────────────────
     [System.Text.Json.Serialization.JsonIgnore]
     public List<string> Warnings { get; } = new();

@@ -32,6 +32,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private Mesh?   _currentMesh;
     private string? _currentMeshPath;
     private string? _committedTexturePath;
+    private string? _tempBundleDir; // temp extract dir for .4hu bundles; deleted on next load or Dispose
     private string? _pendingTexturePath;
     private bool    _previewActive;
     private double  _currentScaleMmPerUnit = 1.0;   // persisted between re-runs
@@ -176,6 +177,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
         GridVisible = S.View2D.ShowGrid;
         SnapToGrid  = S.View2D.SnapToGrid;
 
+        // Update paper size if the default changed
+        var matchedPaper = PaperSizeModel.Presets
+            .FirstOrDefault(p => p.Name == S.View2D.DefaultPaperSizeName);
+        if (matchedPaper != null) PaperSizeModel = matchedPaper;
+
         OnPropertyChanged(nameof(Viewport3DBackground));
         OnPropertyChanged(nameof(Show3DCoordinateSystem));
         OnPropertyChanged(nameof(Show3DViewCube));
@@ -310,6 +316,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         try
         {
+            CleanupTempBundle();
             StatusText = $"Loading {Path.GetFileName(dlg.FileName)} …";
             _currentMeshPath   = dlg.FileName;
             _currentMesh       = _meshService.LoadFromFile(dlg.FileName);
@@ -407,21 +414,22 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void SaveProject()
     {
-        if (_currentMesh == null) { StatusText = "Nothing to save."; return; }
+        if (_currentMesh == null || string.IsNullOrEmpty(_currentMeshPath))
+        { StatusText = "Nothing to save."; return; }
 
         var dlg = new SaveFileDialog
         {
             Title      = "Save Project",
-            Filter     = "FourHUnfolder project (*.pmc)|*.pmc",
-            DefaultExt = "pmc",
-            FileName   = Path.GetFileNameWithoutExtension(_currentMeshPath ?? "project")
+            Filter     = "4H-Unfolder bundle (*.4hu)|*.4hu",
+            DefaultExt = "4hu",
+            FileName   = Path.GetFileNameWithoutExtension(_currentMeshPath)
         };
         if (dlg.ShowDialog() != true) return;
 
         try
         {
             var state = BuildProjectState();
-            _serializer.Save(state, dlg.FileName);
+            _serializer.SaveBundle(state, _currentMeshPath!, _committedTexturePath, dlg.FileName);
             StatusText = $"Project saved: {Path.GetFileName(dlg.FileName)}";
         }
         catch (Exception ex) { Error("Save failed", ex); }
@@ -433,16 +441,28 @@ public partial class MainViewModel : ObservableObject, IDisposable
         var dlg = new OpenFileDialog
         {
             Title  = "Open Project",
-            Filter = "FourHUnfolder project (*.pmc)|*.pmc|All files (*.*)|*.*"
+            Filter = "4H-Unfolder bundle (*.4hu)|*.4hu|Legacy project (*.pmc)|*.pmc|All files (*.*)|*.*"
         };
         if (dlg.ShowDialog() != true) return;
 
         try
         {
-            var state = _serializer.Load(dlg.FileName);
+            CleanupTempBundle();
+            ProjectState state;
+            if (dlg.FileName.EndsWith(".4hu", StringComparison.OrdinalIgnoreCase))
+                state = _serializer.LoadBundle(dlg.FileName, out _tempBundleDir);
+            else
+                state = _serializer.Load(dlg.FileName);
             RestoreProjectState(state);
         }
         catch (Exception ex) { Error("Load project failed", ex); }
+    }
+
+    private void CleanupTempBundle()
+    {
+        if (_tempBundleDir == null) return;
+        try { Directory.Delete(_tempBundleDir, recursive: true); } catch { /* best-effort */ }
+        _tempBundleDir = null;
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -516,9 +536,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
             : $"Selected face {faceId}  (no 2D piece — unfold first)";
     }
 
-    /// Called from 2D canvas when empty space is clicked (deselect all).
+    /// Called when empty space is clicked (deselect all).
     public void ClearSelection()
     {
+        foreach (var p in Pieces) p.IsSelected = false;
         SelectionOverlayModel = null;
         _cachedOverlayGroupId = null;
         _cachedOverlayModel   = null;
@@ -1123,6 +1144,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         _settingsService.SettingsChanged -= OnSettingsChanged;
+        CleanupTempBundle();
     }
 
     private void Error(string title, Exception ex)

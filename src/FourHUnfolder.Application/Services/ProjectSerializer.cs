@@ -1,12 +1,11 @@
-﻿using System.Text.Json;
+﻿using System.IO.Compression;
+using System.Text.Json;
 using FourHUnfolder.Domain.Persistence;
 
 namespace FourHUnfolder.Application.Services;
 
 /// <summary>
-/// Saves and loads a <see cref="ProjectState"/> to/from a .pmc JSON file.
-/// File paths are stored relative to the .pmc file for portability,
-/// with an absolute fallback embedded in the value (separated by '|').
+/// Saves and loads a <see cref="ProjectState"/> to/from a .pmc JSON file or a self-contained .4hu ZIP bundle.
 /// </summary>
 public class ProjectSerializer
 {
@@ -14,6 +13,100 @@ public class ProjectSerializer
     {
         WriteIndented = true
     };
+
+    // ── .4hu bundle constants ─────────────────────────────────────────────────
+    public const string BundleExtension = ".4hu";
+    private const string StateEntry     = "state.json";
+    private const string MeshEntry      = "mesh.obj";
+    private const string TexturePrefix  = "texture";
+
+    // ── .4hu: save self-contained bundle ─────────────────────────────────────
+
+    /// <summary>
+    /// Creates a .4hu ZIP bundle: embeds the mesh file, optional texture, and project state.
+    /// The resulting file is binary — not readable by text editors.
+    /// </summary>
+    public void SaveBundle(ProjectState state, string meshPath, string? texturePath, string outputPath)
+    {
+        if (!File.Exists(meshPath))
+            throw new FileNotFoundException($"Mesh file not found: {meshPath}");
+
+        var textureExt = string.IsNullOrEmpty(texturePath)
+            ? null
+            : Path.GetExtension(texturePath).TrimStart('.').ToLowerInvariant();
+
+        var copy = Clone(state);
+        copy.MeshPath         = null;
+        copy.TexturePath      = null;
+        copy.BundledTextureExt = textureExt;
+
+        using var fs      = File.Create(outputPath);
+        using var archive = new ZipArchive(fs, ZipArchiveMode.Create, leaveOpen: false);
+
+        // state.json
+        var stateEntry = archive.CreateEntry(StateEntry, CompressionLevel.Fastest);
+        using (var sw = new StreamWriter(stateEntry.Open()))
+            sw.Write(JsonSerializer.Serialize(copy, JsonOpts));
+
+        // mesh.obj
+        AddFileToArchive(archive, meshPath, MeshEntry);
+
+        // texture (optional)
+        if (!string.IsNullOrEmpty(texturePath) && !string.IsNullOrEmpty(textureExt) && File.Exists(texturePath))
+            AddFileToArchive(archive, texturePath, $"{TexturePrefix}.{textureExt}");
+    }
+
+    private static void AddFileToArchive(ZipArchive archive, string sourcePath, string entryName)
+    {
+        var entry = archive.CreateEntry(entryName, CompressionLevel.Optimal);
+        using var src  = File.OpenRead(sourcePath);
+        using var dest = entry.Open();
+        src.CopyTo(dest);
+    }
+
+    // ── .4hu: load bundle ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Loads a .4hu bundle by extracting embedded files to a temporary directory.
+    /// The caller owns <paramref name="tempDirOut"/> and must delete it when finished.
+    /// </summary>
+    public ProjectState LoadBundle(string inputPath, out string tempDirOut)
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "4hu_" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(tempDir);
+        tempDirOut = tempDir;
+
+        using (var archive = ZipFile.OpenRead(inputPath))
+            archive.ExtractToDirectory(tempDir, overwriteFiles: true);
+
+        var statePath = Path.Combine(tempDir, StateEntry);
+        if (!File.Exists(statePath))
+            throw new InvalidDataException("Invalid .4hu file: missing state.json.");
+
+        var state = JsonSerializer.Deserialize<ProjectState>(File.ReadAllText(statePath), JsonOpts)
+                    ?? throw new InvalidDataException("Invalid .4hu file: state.json could not be parsed.");
+
+        if (state.Version > CurrentVersion)
+            throw new InvalidDataException(
+                $"Project was saved by a newer version (file v{state.Version}, supported up to v{CurrentVersion}).");
+
+        state.MeshPath = File.Exists(Path.Combine(tempDir, MeshEntry))
+            ? Path.Combine(tempDir, MeshEntry)
+            : null;
+
+        if (!string.IsNullOrEmpty(state.BundledTextureExt))
+        {
+            var texPath = Path.Combine(tempDir, $"{TexturePrefix}.{state.BundledTextureExt}");
+            state.TexturePath = File.Exists(texPath) ? texPath : null;
+        }
+
+        if (state.MeshPath == null)
+            state.Warnings.Add("Embedded mesh not found in project bundle.");
+
+        return state;
+    }
+
+    // ── .pmc: legacy JSON format ──────────────────────────────────────────────
 
     public void Save(ProjectState state, string filePath)
     {
