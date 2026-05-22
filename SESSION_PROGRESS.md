@@ -1,6 +1,6 @@
 ﻿# 4H-Unfolder — Session Progress Log
 
-> **Last updated:** 2026-05-22 (session 14 — UX overhaul v2)  
+> **Last updated:** 2026-05-22 (session 15 — .4hu self-contained bundle format)  
 > **Branch:** `feat/paper-model-unfolder`  (PR #1 open against `main`)
 > **Target framework:** .NET 8 / WPF  
 > **SDK required:** `winget install Microsoft.DotNet.SDK.8`
@@ -56,7 +56,7 @@ No circular dependencies. Domain has zero external dependencies.
 - **2D canvas texture rendering**: per-triangle affine UV mapping (Cramer's rule) — 2D pieces reflect texture in real-time; updates on change/remove
 - **App icon** (`Assets/app.ico`, 6 sizes 16–256px) embedded in exe and window title bar
 - Unfold setup dialog: real-world scale + paper size
-- Save/Load `.pmc` project (edge overrides + piece layouts + scale)
+- **Save/Load `.4hu` project bundle** — self-contained ZIP: embeds mesh + texture + state; not readable in text editors; backward-compatible load of legacy `.pmc` files
 - Export SVG
 
 ### Settings (4-panel dialog)
@@ -74,12 +74,10 @@ No circular dependencies. Domain has zero external dependencies.
 | Item | Result |
 |------|--------|
 | `dotnet build 4H-Unfolder.sln` | ✅ 0 errors, 0 warnings |
-| `dotnet test` | ✅ 16 / 16 passed |
+| `dotnet test` | ✅ 29 / 29 passed |
 | `dotnet run --project src/FourHUnfolder.App` | ✅ App mở, không crash |
-| Published `4H-Unfolder.exe` (win-x64, self-contained) | ✅ Chạy được, Unfold/Export active |
-| SVG export applies canvas layout (position + rotation) | ✅ Fixed session 8 |
-| Multi-page layout persisted in .pmc | ✅ Fixed session 8 |
-| `dotnet test` | ✅ 29 / 29 passed (16 original + 13 new) |
+| Published `4H-Unfolder.exe` (win-x64, self-contained) | ✅ Session 15 |
+| `.4hu` bundle save/load | ✅ Session 15 |
 | 2D texture mapping (affine UV per triangle, DPI-agnostic) | ✅ Session 12 fix |
 | App icon embedded in exe | ✅ Session 11 |
 | Rotate/flip pieces are now undoable (Ctrl+Z) | ✅ Session 12 |
