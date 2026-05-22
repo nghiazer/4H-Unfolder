@@ -4,6 +4,7 @@
         xmlns:helix="http://helix-toolkit.org/wpf"
         xmlns:ctrl="clr-namespace:FourHUnfolder.App.Controls"
         Title="4H-Unfolder — Paper Model Unfolder"
+        Icon="Assets/app.ico"
         Width="1400" Height="900"
         WindowStartupLocation="CenterScreen"
         Background="#1a1a2e">

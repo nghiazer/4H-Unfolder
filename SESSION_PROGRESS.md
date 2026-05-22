@@ -1,6 +1,6 @@
 ﻿# 4H-Unfolder — Session Progress Log
 
-> **Last updated:** 2026-05-22 (session 10 — fix all remaining bugs and tech debt)  
+> **Last updated:** 2026-05-22 (session 11 — app icon + 2D texture mapping)  
 > **Branch:** `feat/paper-model-unfolder`  (PR #1 open against `main`)
 > **Target framework:** .NET 8 / WPF  
 > **SDK required:** `winget install Microsoft.DotNet.SDK.8`
@@ -51,6 +51,8 @@ No circular dependencies. Domain has zero external dependencies.
 - Interactive 2D canvas: drag pieces, rotate ±90°, flip H, auto-arrange
 - Grid toggle (fast-path, no rebuild) + Snap to grid
 - Texture load/replace/remove with live preview (Apply/Cancel)
+- **2D canvas texture rendering**: per-triangle affine UV mapping (Cramer's rule) — 2D pieces reflect texture in real-time; updates on change/remove
+- **App icon** (`Assets/app.ico`, 6 sizes 16–256px) embedded in exe and window title bar
 - Unfold setup dialog: real-world scale + paper size
 - Save/Load `.pmc` project (edge overrides + piece layouts + scale)
 - Export SVG
@@ -76,6 +78,8 @@ No circular dependencies. Domain has zero external dependencies.
 | SVG export applies canvas layout (position + rotation) | ✅ Fixed session 8 |
 | Multi-page layout persisted in .pmc | ✅ Fixed session 8 |
 | `dotnet test` | ✅ 29 / 29 passed (16 original + 13 new) |
+| 2D texture mapping (affine UV per triangle) | ✅ Session 11 |
+| App icon embedded in exe | ✅ Session 11 |
 
 ---
 
@@ -204,7 +208,8 @@ App/Dialogs/            UnfoldSetupDialog SettingsDialog
 App/Converters/         HexColorBrushConverter
 App/                    MainWindow App
 
-Tests/                  MstAlgorithmTests (6) UnfoldEngineTests (9)
+Tests/                  MstAlgorithmTests (6) UnfoldEngineTests (9) GeometryAlgorithmTests (13: OverlapDetector×4, GlueTabGenerator×5, ObjMeshLoader×4)
+App/Assets/             app.ico (6 sizes) logo.png
 ```
 
 ---
@@ -216,9 +221,8 @@ Tests/                  MstAlgorithmTests (6) UnfoldEngineTests (9)
 2. **SvgExporter.AffineTransform** tests — complex to isolate unit test for matrix math
 
 ### Future features
-9. **Merge PR #1**: <https://github.com/nghiazer/4H-Unfolder/pull/1>
-10. Add **PDF export** via `PdfSharp`
-11. Add **piece outline merging** (compute union polygon of face triangles) for cleaner visuals
-12. Performance: replace O(n²) overlap check with spatial grid for meshes > 2 000 faces
-12. **TD-N4** — expand test suite to cover geometry edge cases
-13. Add **auto-unfolding layout heuristic** (strip-packing aware placement)
+1. **Merge PR #1**: <https://github.com/nghiazer/4H-Unfolder/pull/1>
+2. Add **PDF export** via `PdfSharp`
+3. Add **piece outline merging** (compute union polygon of face triangles) for cleaner visuals
+4. Performance: replace O(n²) overlap check with spatial grid for meshes > 2 000 faces
+5. Add **auto-unfolding layout heuristic** (strip-packing aware placement)

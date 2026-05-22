@@ -43,15 +43,20 @@ public partial class PieceViewModel : ObservableObject
         public bool[]  EdgeIsFold     { get; }   // [e01, e12, e20]
         public bool[]  EdgeIsBoundary { get; }   // true = outer mesh boundary, no adjacent face
 
+        /// UV texture coordinates for V0, V1, V2.  Null when the mesh has no UV data.
+        public Vector2[]? UVCoords { get; }
+
         public FaceData(int faceId, int[] meshEdgeIds,
                         Point v0, Point v1, Point v2,
-                        bool[] edgeIsFold, bool[]? edgeIsBoundary = null)
+                        bool[] edgeIsFold, bool[]? edgeIsBoundary = null,
+                        Vector2[]? uvCoords = null)
         {
             FaceId         = faceId;
             MeshEdgeIds    = meshEdgeIds;
             V0             = v0; V1 = v1; V2 = v2;
             EdgeIsFold     = edgeIsFold;
             EdgeIsBoundary = edgeIsBoundary ?? [false, false, false];
+            UVCoords       = uvCoords;
         }
     }
 
@@ -91,7 +96,8 @@ public partial class PieceViewModel : ObservableObject
                 uf.FaceId,
                 mf.EdgeIds.ToArray(),
                 ToLocal(uf.V0), ToLocal(uf.V1), ToLocal(uf.V2),
-                uf.EdgeIsFold, uf.EdgeIsBoundary);
+                uf.EdgeIsFold, uf.EdgeIsBoundary,
+                uf.UVCoords);
         }).ToArray();
 
         // Glue tabs belonging to faces in this piece

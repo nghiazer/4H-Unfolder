@@ -74,6 +74,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     // texture
     [ObservableProperty] private ImageSource?  _activeTextureThumbnail;
+    [ObservableProperty] private BitmapImage?  _canvas2DTexture;
     [ObservableProperty] private string        _textureStatusText = "No texture";
     [ObservableProperty] private string        _previewLabelText  = string.Empty;
     [ObservableProperty] private bool          _hasTexture;
@@ -992,6 +993,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private void UpdateTextureUI(BitmapImage? tex, string? path, bool isPreview)
     {
         ActiveTextureThumbnail = tex;
+        Canvas2DTexture        = tex;   // 2D canvas always reflects the currently displayed texture
         HasTexture             = _committedTexturePath != null;
         if (isPreview)
         {
