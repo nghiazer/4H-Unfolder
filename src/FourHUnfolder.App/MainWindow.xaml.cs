@@ -21,7 +21,14 @@ public partial class MainWindow : Window
         InitializeComponent();
         DataContext = App.Services.GetRequiredService<MainViewModel>();
         Loaded     += OnLoaded;
+        Closing    += OnClosing;
         Vm.PropertyChanged += OnVmPropertyChanged;
+    }
+
+    private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        if (!Vm.ConfirmDiscardIfDirty("exit"))
+            e.Cancel = true;
     }
 
     // ── startup ───────────────────────────────────────────────────────────────

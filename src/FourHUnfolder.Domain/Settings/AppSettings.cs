@@ -117,12 +117,12 @@ public sealed class AppSettings
         public string FoldLineDash      { get; set; } = "4,2";
 
         // Glue tab geometry
-        public double GlueTabDepthMm    { get; set; } = 4.0;   // perpendicular depth of tab
-        public double GlueTabInsetRatio { get; set; } = 0.15;  // inset from each end as fraction of edge length
+        public double GlueTabDepthMm      { get; set; } = 5.0;   // perpendicular depth of tab (mm)
+        public double GlueTabSideAngleDeg { get; set; } = 45.0;  // angle of side wall vs edge (1–90°)
         // Tab shape: "Trapezoid" | "Rectangle" | "Triangle"
-        public string GlueTabShape      { get; set; } = "Trapezoid";
+        public string GlueTabShape        { get; set; } = "Trapezoid";
         // Alternate flap placement: only one face per cut edge pair gets a tab
-        public bool   AlternateFlaps    { get; set; } = false;
+        public bool   AlternateFlaps      { get; set; } = false;
 
         // Output quality
         public double SvgScaleFactor    { get; set; } = 10.0;  // model-mm → SVG px

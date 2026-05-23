@@ -54,8 +54,8 @@ public partial class SettingsViewModel : ObservableObject
     public IReadOnlyList<string> DisplayUnits { get; } = ["mm", "inch"];
 
     // ── Print ─────────────────────────────────────────────────────────────────
-    [ObservableProperty] private double _glueTabDepthMm    = 4.0;
-    [ObservableProperty] private double _glueTabInsetRatio = 0.15;
+    [ObservableProperty] private double _glueTabDepthMm      = 5.0;
+    [ObservableProperty] private double _glueTabSideAngleDeg = 45.0;
     [ObservableProperty] private string _glueTabShape      = "Trapezoid";
     [ObservableProperty] private bool   _alternateFlaps    = false;
     [ObservableProperty] private double _marginMm          = 10.0;
@@ -125,8 +125,8 @@ public partial class SettingsViewModel : ObservableObject
         DisplayUnit = s.General.DisplayUnit;
 
         // Print
-        GlueTabDepthMm    = s.Print.GlueTabDepthMm;
-        GlueTabInsetRatio = s.Print.GlueTabInsetRatio;
+        GlueTabDepthMm      = s.Print.GlueTabDepthMm;
+        GlueTabSideAngleDeg = s.Print.GlueTabSideAngleDeg;
         GlueTabShape      = s.Print.GlueTabShape;
         AlternateFlaps    = s.Print.AlternateFlaps;
         MarginMm          = s.Print.MarginMm;
@@ -190,8 +190,8 @@ public partial class SettingsViewModel : ObservableObject
         },
         Print = new()
         {
-            GlueTabDepthMm    = GlueTabDepthMm,
-            GlueTabInsetRatio = GlueTabInsetRatio,
+            GlueTabDepthMm      = GlueTabDepthMm,
+            GlueTabSideAngleDeg = GlueTabSideAngleDeg,
             GlueTabShape      = GlueTabShape,
             AlternateFlaps    = AlternateFlaps,
             MarginMm          = MarginMm,

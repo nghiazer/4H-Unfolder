@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Numerics;
 using FourHUnfolder.Application.Interfaces;
 using FourHUnfolder.Domain.Models;
@@ -6,9 +6,8 @@ using FourHUnfolder.Domain.Models;
 namespace FourHUnfolder.Infrastructure.Loaders;
 
 /// <summary>
-/// Parses Wavefront OBJ files including UV texture coordinates.
+/// Parses Wavefront OBJ files including UV texture coordinates and multiple materials.
 /// Supports "v/vt", "v/vt/vn", "v//vn" face tokens and fan-triangulates n-gons.
-/// Also reads the companion MTL file (if present) to extract the diffuse texture path.
 /// </summary>
 public class ObjMeshLoader : IMeshLoader
 {
@@ -16,6 +15,13 @@ public class ObjMeshLoader : IMeshLoader
     {
         var mesh  = new Mesh();
         var lines = File.ReadAllLines(filePath);
+
+        // State for multi-material tracking
+        int currentMaterialId = -1;
+        var materialNameToId  = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        // deferred MTL loads: will be processed before first usemtl is encountered
+        string? pendingMtlFile = null;
+        string objDir = Path.GetDirectoryName(filePath) ?? string.Empty;
 
         foreach (var rawLine in lines)
         {
@@ -36,14 +42,31 @@ public class ObjMeshLoader : IMeshLoader
                     break;
 
                 case "f" when parts.Length >= 4:
-                    ParseFace(mesh, parts);
+                    ParseFace(mesh, parts, currentMaterialId);
                     break;
 
-                case "mtllib" when parts.Length >= 2:
-                    TryLoadMtl(mesh, filePath, parts[1]);
+                case "mtllib" when line.Length > 7:
+                    // Use rest of line (after "mtllib ") to preserve filenames with spaces
+                    pendingMtlFile = line[7..].Trim();
+                    TryLoadMtl(mesh, objDir, pendingMtlFile, materialNameToId);
+                    break;
+
+                case "usemtl" when parts.Length >= 2:
+                    var matName = string.Join(" ", parts.Skip(1));
+                    if (!materialNameToId.TryGetValue(matName, out currentMaterialId))
+                    {
+                        // Material not in MTL yet — register on-the-fly
+                        currentMaterialId = mesh.MaterialNames.Count;
+                        materialNameToId[matName] = currentMaterialId;
+                        mesh.MaterialNames.Add(matName);
+                        mesh.MaterialTexturePaths.Add(null);
+                    }
                     break;
             }
         }
+
+        // Back-compat: set SuggestedTexturePath to first non-null material texture
+        mesh.SuggestedTexturePath = mesh.MaterialTexturePaths.FirstOrDefault(p => p != null);
 
         return mesh;
     }
@@ -67,43 +90,45 @@ public class ObjMeshLoader : IMeshLoader
 
     // ── face parsing ─────────────────────────────────────────────────────
 
-    private static void ParseFace(Mesh mesh, string[] parts)
+    private static void ParseFace(Mesh mesh, string[] parts, int materialId)
     {
         var tokens = parts.Skip(1).ToArray();
 
-        // Each token may be: "v", "v/vt", "v/vt/vn", "v//vn"
         var posIdx = tokens.Select(t => SlotIndex(t, 0)).ToArray();
         var uvIdx  = tokens.Select(t => SlotIndex(t, 1)).ToArray();
         int vCount = mesh.Vertices.Count;
 
-        // Fan triangulation — skip faces with out-of-bounds vertex references
         for (int i = 1; i < posIdx.Length - 1; i++)
         {
             int a = posIdx[0], b = posIdx[i], c = posIdx[i + 1];
             if (a < 0 || a >= vCount || b < 0 || b >= vCount || c < 0 || c >= vCount)
                 continue;
+
+            int faceId = mesh.Faces.Count;
             mesh.AddFace(a, b, c, uvIdx[0], uvIdx[i], uvIdx[i + 1]);
+            if (faceId < mesh.Faces.Count)
+                mesh.Faces[faceId].MaterialId = materialId;
         }
     }
 
-    /// Parses one "v/vt/vn" token and returns the 0-based index for the given slot
-    /// (0=position, 1=uv, 2=normal).  Returns -1 when absent or empty.
     private static int SlotIndex(string token, int slot)
     {
         var segs = token.Split('/');
         if (slot >= segs.Length || string.IsNullOrEmpty(segs[slot])) return -1;
         int idx = int.Parse(segs[slot], CultureInfo.InvariantCulture);
-        // OBJ is 1-based; negative indices count from the end — treat them as absent
         return idx > 0 ? idx - 1 : -1;
     }
 
     // ── MTL loading ───────────────────────────────────────────────────────
 
-    private static void TryLoadMtl(Mesh mesh, string objPath, string mtlName)
+    private static void TryLoadMtl(Mesh mesh, string objDir, string mtlName,
+                                   Dictionary<string, int> materialNameToId)
     {
-        var dir     = Path.GetDirectoryName(objPath) ?? string.Empty;
-        var mtlPath = Path.Combine(dir, mtlName);
+        var mtlPath = Path.Combine(objDir, mtlName);
         if (!File.Exists(mtlPath)) return;
+
+        string? currentMatName = null;
+        int     currentMatId   = -1;
 
         foreach (var rawLine in File.ReadAllLines(mtlPath))
         {
@@ -111,25 +136,35 @@ public class ObjMeshLoader : IMeshLoader
             if (line.Length == 0 || line[0] == '#') continue;
 
             var parts = line.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length < 2) continue;
+            if (parts.Length < 1) continue;
 
-            // map_Kd is the diffuse texture map
-            if (!parts[0].Equals("map_Kd", StringComparison.OrdinalIgnoreCase)) continue;
-
-            var texFile = parts[1].Trim();
-            var texPath = Path.IsPathRooted(texFile)
-                ? texFile
-                : Path.Combine(dir, texFile);
-
-            if (File.Exists(texPath))
+            if (parts[0].Equals("newmtl", StringComparison.OrdinalIgnoreCase) && parts.Length >= 2)
             {
-                mesh.SuggestedTexturePath = texPath;
-                return;
+                currentMatName = parts[1].Trim();
+                if (!materialNameToId.TryGetValue(currentMatName, out currentMatId))
+                {
+                    currentMatId = mesh.MaterialNames.Count;
+                    materialNameToId[currentMatName] = currentMatId;
+                    mesh.MaterialNames.Add(currentMatName);
+                    mesh.MaterialTexturePaths.Add(null);
+                }
+                continue;
+            }
+
+            if (parts[0].Equals("map_Kd", StringComparison.OrdinalIgnoreCase)
+                && parts.Length >= 2 && currentMatId >= 0)
+            {
+                var texFile = parts[1].Trim();
+                var texPath = Path.IsPathRooted(texFile)
+                    ? texFile
+                    : Path.Combine(objDir, texFile);
+
+                if (File.Exists(texPath))
+                    mesh.MaterialTexturePaths[currentMatId] = texPath;
             }
         }
     }
 
     private static float F(string s) =>
-        float.TryParse(s, System.Globalization.NumberStyles.Float,
-                       CultureInfo.InvariantCulture, out var v) ? v : 0f;
+        float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : 0f;
 }

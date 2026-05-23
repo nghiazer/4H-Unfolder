@@ -54,8 +54,8 @@ public class UnfoldService
         var hasOverlaps = _overlapDetector.HasOverlaps(rawResult.Faces);
         var tabs = _tabGenerator.Generate(
             rawResult.Faces,
-            (float)(printSettings?.GlueTabDepthMm    ?? 4.0),
-            (float)(printSettings?.GlueTabInsetRatio ?? 0.15),
+            (float)(printSettings?.GlueTabDepthMm      ?? 5.0),
+            (float)(printSettings?.GlueTabSideAngleDeg ?? 45.0),
             printSettings?.GlueTabShape   ?? "Trapezoid",
             printSettings?.AlternateFlaps ?? false,
             mesh);

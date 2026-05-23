@@ -15,6 +15,7 @@ using FourHUnfolder.Domain.Models;
 using FourHUnfolder.Domain.Persistence;
 using FourHUnfolder.Domain.Results;
 using FourHUnfolder.Domain.Settings;
+using FourHUnfolder.Infrastructure.Exporters;
 // Alias to avoid ambiguity with FourHUnfolder.Application namespace
 using WpfApp = System.Windows.Application;
 
@@ -25,6 +26,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private readonly MeshService       _meshService;
     private readonly UnfoldService     _unfoldService;
     private readonly IExporter         _exporter;
+    private readonly PdfExporter       _pdfExporter;
     private readonly ProjectSerializer _serializer;
     private readonly SettingsService   _settingsService;
 
@@ -35,7 +37,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private string? _tempBundleDir; // temp extract dir for .4hu bundles; deleted on next load or Dispose
     private string? _pendingTexturePath;
     private bool    _previewActive;
-    private double  _currentScaleMmPerUnit = 1.0;   // persisted between re-runs
+    private double ScaleMmPerUnit { get; set; } = 1.0;
+
+    // dirty tracking — true when there are unsaved changes
+    private bool _isDirty;
+    public bool IsDirty => _isDirty;
+    private void MarkDirty()  { _isDirty = true; }
+    private void MarkClean()  { _isDirty = false; }
 
     // edge overrides: mesh edge ID → EdgeType (user's join/split operations)
     private readonly Dictionary<int, EdgeType> _edgeOverrides = new();
@@ -73,12 +81,50 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool          _isUnfolded;
     [ObservableProperty] private int           _selectedFaceId = -1;
 
-    // texture
+    // texture — single (legacy / default)
     [ObservableProperty] private ImageSource?  _activeTextureThumbnail;
     [ObservableProperty] private BitmapImage?  _canvas2DTexture;
     [ObservableProperty] private string        _textureStatusText = "No texture";
     [ObservableProperty] private string        _previewLabelText  = string.Empty;
     [ObservableProperty] private bool          _hasTexture;
+
+    // multi-material texture slots (for TextureDialog)
+    public ObservableCollection<MaterialTextureViewModel> MaterialTextureSlots { get; } = new();
+
+    // cached loaded bitmaps per materialId (rebuilt when slots change)
+    private readonly Dictionary<int, BitmapImage?> _materialBitmaps = new();
+
+    /// Returns the bitmap for the given materialId (from multi-material slots), or
+    /// falls back to Canvas2DTexture if no per-material texture is defined.
+    public BitmapImage? GetCanvas2DTexture(int materialId)
+    {
+        if (materialId >= 0 && _materialBitmaps.TryGetValue(materialId, out var bmp))
+            return bmp;
+        return Canvas2DTexture;
+    }
+
+    /// Called by TextureDialog when user loads/removes a texture for a specific material slot.
+    public void SetMaterialTexture(int materialId, string? path)
+    {
+        var slot = MaterialTextureSlots.FirstOrDefault(s => s.MaterialId == materialId);
+        if (slot == null) return;
+        slot.TexturePath = path;
+        var bmp = LoadBitmapImage(path);
+        slot.Thumbnail = bmp;
+        _materialBitmaps[materialId] = bmp;
+        MarkDirty();
+
+        // Sync legacy single-texture path if this is the primary slot
+        // Always pick a representative texture for the 3D view / single-texture fallback
+        var primaryId  = GetPrimaryMaterialId();
+        var primaryBmp = _materialBitmaps.GetValueOrDefault(primaryId)
+                         ?? _materialBitmaps.Values.FirstOrDefault(b => b != null);
+        _committedTexturePath = MaterialTextureSlots.FirstOrDefault(s => s.HasTexture)?.TexturePath;
+        UpdateTextureUI(primaryBmp, _committedTexturePath, isPreview: false);
+    }
+
+    private int GetPrimaryMaterialId() =>
+        MaterialTextureSlots.FirstOrDefault()?.MaterialId ?? -1;
 
     // paper canvas
     [ObservableProperty] private PaperSizeModel _paperSizeModel = PaperSizeModel.A4;
@@ -144,12 +190,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     // ── constructor ───────────────────────────────────────────────────────────
     public MainViewModel(MeshService meshService, UnfoldService unfoldService,
-                         IExporter exporter, ProjectSerializer serializer,
-                         SettingsService settingsService)
+                         IExporter exporter, PdfExporter pdfExporter,
+                         ProjectSerializer serializer, SettingsService settingsService)
     {
         _meshService     = meshService;
         _unfoldService   = unfoldService;
         _exporter        = exporter;
+        _pdfExporter     = pdfExporter;
         _serializer      = serializer;
         _settingsService = settingsService;
 
@@ -323,6 +370,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         };
         if (dlg.ShowDialog() != true) return;
 
+        if (!ConfirmDiscardIfDirty("load a new mesh")) return;
+
         try
         {
             CleanupTempBundle();
@@ -337,6 +386,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
             CancelPreviewSilently();
             _committedTexturePath = _currentMesh.SuggestedTexturePath;
+            RebuildMaterialSlots(_currentMesh);
 
             var tex    = LoadBitmapImage(_committedTexturePath);
             _lastView3DHash = View3DHash(S.View3D);   // sync hash so OnSettingsChanged skips rebuild
@@ -352,6 +402,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             var texNote = _committedTexturePath != null ? " · texture from MTL" : string.Empty;
             StatusText = $"Loaded — {_currentMesh.Faces.Count:N0} faces, " +
                          $"{_currentMesh.Vertices.Count:N0} vertices{texNote}.";
+            MarkClean(); // fresh mesh = clean state
         }
         catch (Exception ex) { Error("Load failed", ex); }
     }
@@ -377,7 +428,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             StatusText = "Unfolding …";
 
             double scale        = UnfoldService.ComputeScale(_currentMesh, setup.Scale);
-            _currentScaleMmPerUnit = scale;
+            ScaleMmPerUnit = scale;
             var    unfoldResult = _unfoldService.Unfold(_currentMesh, _edgeOverrides, _settingsService.Current.Print);
             var    pieces       = _unfoldService.ComputePieces(_currentMesh);
 
@@ -416,7 +467,30 @@ public partial class MainViewModel : ObservableObject, IDisposable
             _exporter.Export(result, dlg.FileName, _committedTexturePath);
             StatusText = $"Exported to {Path.GetFileName(dlg.FileName)}";
         }
-        catch (Exception ex) { Error("Export failed", ex); }
+        catch (Exception ex) { Error("Export SVG failed", ex); }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanExport))]
+    private void ExportPdf()
+    {
+        if (_currentMesh == null) return;
+        var dlg = new SaveFileDialog
+        {
+            Title      = "Export PDF Pattern",
+            Filter     = "PDF files (*.pdf)|*.pdf",
+            DefaultExt = "pdf",
+            FileName   = "unfolded_pattern"
+        };
+        if (dlg.ShowDialog() != true) return;
+        try
+        {
+            var result = BuildExportLayout();
+            _pdfExporter.Export(result, dlg.FileName,
+                PaperSizeModel.WidthMm, PaperSizeModel.HeightMm,
+                PagesWide, PagesTall, PageSepMm);
+            StatusText = $"PDF exported to {Path.GetFileName(dlg.FileName)}";
+        }
+        catch (Exception ex) { Error("Export PDF failed", ex); }
     }
 
     // ── SAVE / LOAD PROJECT ───────────────────────────────────────────────────
@@ -440,6 +514,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             var state = BuildProjectState();
             _serializer.SaveBundle(state, _currentMeshPath!, _committedTexturePath, dlg.FileName);
             StatusText = $"Project saved: {Path.GetFileName(dlg.FileName)}";
+            MarkClean();
         }
         catch (Exception ex) { Error("Save failed", ex); }
     }
@@ -453,6 +528,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             Filter = "4H-Unfolder bundle (*.4hu)|*.4hu|Legacy project (*.pmc)|*.pmc|All files (*.*)|*.*"
         };
         if (dlg.ShowDialog() != true) return;
+        if (!ConfirmDiscardIfDirty("open a project")) return;
 
         try
         {
@@ -465,6 +541,18 @@ public partial class MainViewModel : ObservableObject, IDisposable
             RestoreProjectState(state);
         }
         catch (Exception ex) { Error("Load project failed", ex); }
+    }
+
+    /// Returns true if safe to proceed (no unsaved changes, or user confirmed discard).
+    public bool ConfirmDiscardIfDirty(string action = "proceed")
+    {
+        if (!_isDirty) return true;
+        var result = MessageBox.Show(
+            $"You have unsaved changes. Discard them and {action}?",
+            "Unsaved Changes",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        return result == MessageBoxResult.Yes;
     }
 
     private void CleanupTempBundle()
@@ -492,7 +580,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand] private void RemoveTexture()  { if (_currentMesh != null) EnterPreview(null); }
-    [RelayCommand] private void ApplyPreview()   { if (!_previewActive) return; _committedTexturePath = _pendingTexturePath; CommitPreview(); }
+    [RelayCommand] private void ApplyPreview()   { if (!_previewActive) return; _committedTexturePath = _pendingTexturePath; CommitPreview(); MarkDirty(); }
     [RelayCommand] private void CancelPreview()  { if (!_previewActive) return; CommitPreview(revert: true); }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -511,6 +599,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         PushUndoState();
         var current = IsEdgeFold(meshEdgeId) ? EdgeType.Fold : EdgeType.Cut;
         _edgeOverrides[meshEdgeId] = current == EdgeType.Fold ? EdgeType.Cut : EdgeType.Fold;
+        MarkDirty();
         try
         {
             RerunUnfold();
@@ -716,7 +805,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
                                          p => (p.PositionX, p.PositionY, p.Rotation));
         var result = _unfoldService.Unfold(_currentMesh, _edgeOverrides, _settingsService.Current.Print);
         var groups = _unfoldService.ComputePieces(_currentMesh);
-        RebuildPieces(result, groups, _currentScaleMmPerUnit);
+        RebuildPieces(result, groups, ScaleMmPerUnit);
 
         if (preservePositions)
         {
@@ -827,9 +916,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void AutoArrange() => RunAutoArrange();
 
-    /// Strip-packs all pieces without overlap into a horizontal grid of pages.
-    /// Pages grow to the right (PagesWide) when a page overflows vertically.
-    /// Updates PagesWide / PagesTall as needed.
+    /// Strip-packs pieces into a horizontal page grid.
+    /// Improvements over the naive approach:
+    ///   1. Sort pieces by bounding-box area descending (First Fit Decreasing)
+    ///   2. For each piece try both 0° and 90° rotation; keep the one that wastes less width
+    ///   3. Pages grow to the right (PagesWide) when vertical space runs out
     private void RunAutoArrange()
     {
         if (Pieces.Count == 0) return;
@@ -837,24 +928,44 @@ public partial class MainViewModel : ObservableObject, IDisposable
         double gap    = _settingsService.Current.View2D.PieceGapMm;
         double paperW = PaperSizeModel.WidthMm;
         double paperH = PaperSizeModel.HeightMm;
+        double usableW = paperW - 2 * gap;
+        double usableH = paperH - 2 * gap;
 
-        // Page-local cursor (within the current page column)
+        // Build (piece, bbox) list sorted by area descending
+        var items = Pieces
+            .Where(p => p.Faces.Length > 0)
+            .Select(p =>
+            {
+                var allX = p.Faces.SelectMany(f => new[] { f.V0.X, f.V1.X, f.V2.X });
+                var allY = p.Faces.SelectMany(f => new[] { f.V0.Y, f.V1.Y, f.V2.Y });
+                double minX = allX.Min(), maxX = allX.Max();
+                double minY = allY.Min(), maxY = allY.Max();
+                double w = maxX - minX, h = maxY - minY;
+                return (piece: p, minX, minY, w, h);
+            })
+            .OrderByDescending(x => x.w * x.h) // area descending
+            .ToList();
+
         double localX = gap, localY = gap, rowH = 0;
         int pageCol = 0, newPagesWide = 1;
 
-        foreach (var piece in Pieces)
+        foreach (var (piece, minX, minY, wNat, hNat) in items)
         {
-            if (piece.Faces.Length == 0) continue;
+            // Try 90° rotation if it produces a narrower footprint that fits the current row
+            double pw = wNat, ph = hNat;
+            double rot = 0;
+            if (hNat < wNat && hNat <= usableW) // rotating would make it narrower
+            {
+                pw  = hNat;
+                ph  = wNat;
+                rot = 90;
+            }
 
-            // Bounding box in piece-local mm coords
-            var lx = piece.Faces.SelectMany(f => new[] { f.V0.X, f.V1.X, f.V2.X });
-            var ly = piece.Faces.SelectMany(f => new[] { f.V0.Y, f.V1.Y, f.V2.Y });
-            double lMinX = lx.Min(), lMaxX = lx.Max();
-            double lMinY = ly.Min(), lMaxY = ly.Max();
-            double pw = lMaxX - lMinX;
-            double ph = lMaxY - lMinY;
+            // Ensure single piece fits on a page
+            pw = Math.Min(pw, usableW);
+            ph = Math.Min(ph, usableH);
 
-            // Wrap row within the current page when piece doesn't fit (and not at row start)
+            // Wrap row within current page
             if (localX > gap && localX + pw > paperW - gap)
             {
                 localX  = gap;
@@ -862,7 +973,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 rowH    = 0;
             }
 
-            // If piece overflows current page height → advance to next page (horizontally)
+            // Advance to next page column when vertical space exhausted
             if (localY + ph > paperH - gap)
             {
                 pageCol++;
@@ -872,16 +983,26 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 rowH   = 0;
             }
 
-            // Absolute canvas position = page origin + page-local position - bbox min
-            piece.PositionX = pageCol * (paperW + PageSepMm) + localX - lMinX;
-            piece.PositionY = localY - lMinY;
+            // Set piece position and rotation
+            piece.Rotation  = rot;
+            if (rot == 0)
+            {
+                piece.PositionX = pageCol * (paperW + PageSepMm) + localX - minX;
+                piece.PositionY = localY - minY;
+            }
+            else
+            {
+                // After 90° rotation: new bbox origin shifts
+                piece.PositionX = pageCol * (paperW + PageSepMm) + localX - (-minY);
+                piece.PositionY = localY - minX;
+            }
 
             localX += pw + gap;
             rowH    = Math.Max(rowH, ph);
         }
 
         PagesWide = newPagesWide;
-        PagesTall = 1;   // auto-arrange fills horizontally; drag pieces down for extra rows
+        PagesTall = 1;
     }
 
     /// Expands the page grid if a piece's bounding box extends beyond the current pages.
@@ -896,6 +1017,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             preDrag));
         _redoStack.Clear();
         NotifyUndoRedo();
+        MarkDirty();
     }
 
     public void EnsurePageForPosition(double rightMm, double bottomMm)
@@ -915,7 +1037,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             MeshPath       = _currentMeshPath,
             TexturePath    = _committedTexturePath,
-            ScaleMmPerUnit = _currentScaleMmPerUnit,
+            ScaleMmPerUnit = ScaleMmPerUnit,
             PagesWide      = PagesWide,
             PagesTall      = PagesTall,
             Paper          = new ProjectState.PaperDto
@@ -968,8 +1090,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         var pieces       = _unfoldService.ComputePieces(_currentMesh);
         var layoutMap    = state.Layouts.ToDictionary(l => l.GroupId);
 
-        _currentScaleMmPerUnit = state.ScaleMmPerUnit > 0 ? state.ScaleMmPerUnit : 1.0;
-        RebuildPieces(unfoldResult, pieces, _currentScaleMmPerUnit);
+        ScaleMmPerUnit = state.ScaleMmPerUnit > 0 ? state.ScaleMmPerUnit : 1.0;
+        RebuildPieces(unfoldResult, pieces, ScaleMmPerUnit);
 
         // Restore piece positions
         foreach (var piece in Pieces)
@@ -1002,6 +1124,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             StatusText = $"Project loaded with warnings: {string.Join("; ", state.Warnings)}";
         else
             StatusText = $"Project loaded — {Pieces.Count} pieces.";
+        MarkClean(); // just loaded = clean
     }
 
     // ── texture helpers ───────────────────────────────────────────────────────
@@ -1034,6 +1157,34 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     private void CancelPreviewSilently() { _previewActive = false; _pendingTexturePath = null; }
+
+    private void RebuildMaterialSlots(Mesh mesh)
+    {
+        MaterialTextureSlots.Clear();
+        _materialBitmaps.Clear();
+
+        if (mesh.MaterialNames.Count == 0)
+        {
+            // No materials — single default slot
+            var bmp  = LoadBitmapImage(mesh.SuggestedTexturePath);
+            var slot = new MaterialTextureViewModel(-1, "Default", mesh.SuggestedTexturePath, bmp);
+            MaterialTextureSlots.Add(slot);
+            _materialBitmaps[-1] = bmp;
+        }
+        else
+        {
+            for (int i = 0; i < mesh.MaterialNames.Count; i++)
+            {
+                var path = (i < mesh.MaterialTexturePaths.Count)
+                    ? mesh.MaterialTexturePaths[i]
+                    : null;
+                var bmp  = LoadBitmapImage(path);
+                var slot = new MaterialTextureViewModel(i, mesh.MaterialNames[i], path, bmp);
+                MaterialTextureSlots.Add(slot);
+                _materialBitmaps[i] = bmp;
+            }
+        }
+    }
 
     private void UpdateTextureUI(BitmapImage? tex, string? path, bool isPreview)
     {

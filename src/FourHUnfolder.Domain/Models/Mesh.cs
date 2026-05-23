@@ -23,6 +23,11 @@ public sealed class Mesh
     /// Texture path suggested by the associated material file (e.g. from MTL).
     public string? SuggestedTexturePath { get; set; }
 
+    /// Material names in order; index matches Face.MaterialId.
+    public List<string> MaterialNames        { get; } = new();
+    /// Suggested texture path per material (parallel to MaterialNames). Null = no texture.
+    public List<string?> MaterialTexturePaths { get; } = new();
+
     // Maps canonical (min,max) vertex pair → edge index
     private readonly Dictionary<(int, int), int> _edgeMap = new();
 
