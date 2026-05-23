@@ -286,8 +286,7 @@ public partial class PatternCanvasControl : UserControl
     private void RenderPieceShapes(Canvas container, PieceViewModel piece)
     {
         container.Children.Clear();
-        var s2d     = _vm?.View2DSettings;
-        var texture = _vm?.Canvas2DTexture;
+        var s2d = _vm?.View2DSettings;
 
         var solidFill = HexBrush(s2d?.FaceFillColor, "#c8fffde2");
         var selFill   = new SolidColorBrush(Color.FromArgb(180, 160, 210, 255));
@@ -305,6 +304,9 @@ public partial class PatternCanvasControl : UserControl
 
         foreach (var fd in piece.Faces)
         {
+            // Per-face texture: use material-specific texture if available
+            var texture = _vm?.GetCanvas2DTexture(fd.MaterialId);
+
             // Per-face fill: texture when UV data available, else solid; selection overrides all
             Brush fill;
             if (piece.IsSelected)

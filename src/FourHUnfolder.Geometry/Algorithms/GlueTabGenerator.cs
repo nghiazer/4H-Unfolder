@@ -14,11 +14,11 @@ public class GlueTabGenerator
 {
     public IReadOnlyList<GlueTab> Generate(
         IReadOnlyList<UnfoldedFace> faces,
-        float tabDepthMm    = 4f,
-        float tabInsetRatio = 0.15f,
-        string tabShape     = "Trapezoid",
-        bool alternateFlaps = false,
-        Mesh? mesh          = null)
+        float tabDepthMm      = 5f,
+        float sideAngleDeg    = 45f,
+        string tabShape       = "Trapezoid",
+        bool alternateFlaps   = false,
+        Mesh? mesh            = null)
     {
         var tabs = new List<GlueTab>();
 
@@ -56,7 +56,7 @@ public class GlueTabGenerator
 
                 var p0 = verts[i];
                 var p1 = verts[(i + 1) % 3];
-                tabs.Add(BuildTab(face.FaceId, i, p0, p1, centroid, tabDepthMm, tabInsetRatio, tabShape));
+                tabs.Add(BuildTab(face.FaceId, i, p0, p1, centroid, tabDepthMm, sideAngleDeg, tabShape));
             }
         }
 
@@ -65,7 +65,7 @@ public class GlueTabGenerator
 
     private static GlueTab BuildTab(int faceId, int edgeIdx,
                                     Vector2 p0, Vector2 p1, Vector2 centroid,
-                                    float depth, float insetRatio, string shape)
+                                    float depth, float sideAngleDeg, string shape)
     {
         var edge  = p1 - p0;
         float len = edge.Length();
@@ -82,17 +82,22 @@ public class GlueTabGenerator
         {
             "Rectangle" => BuildRect    (faceId, edgeIdx, p0, p1, perp, depth),
             "Triangle"  => BuildTriangle(faceId, edgeIdx, p0, p1, perp, depth),
-            _           => BuildTrapezoid(faceId, edgeIdx, p0, p1, dir, perp, depth, insetRatio)
+            _           => BuildTrapezoid(faceId, edgeIdx, p0, p1, dir, perp, depth, sideAngleDeg)
         };
     }
 
     private static GlueTab BuildTrapezoid(int faceId, int edgeIdx,
-        Vector2 p0, Vector2 p1, Vector2 dir, Vector2 perp, float depth, float insetRatio)
+        Vector2 p0, Vector2 p1, Vector2 dir, Vector2 perp, float depth, float sideAngleDeg)
     {
-        float len   = (p1 - p0).Length();
-        float inset = len * insetRatio;
-        var   q0    = p0 + inset * dir + depth * perp;
-        var   q1    = p1 - inset * dir + depth * perp;
+        float len      = (p1 - p0).Length();
+        float clampedAngle = Math.Clamp(sideAngleDeg, 1f, 90f);
+        float angleRad = clampedAngle * MathF.PI / 180f;
+        // inset from each edge end: inset = depth / tan(angle).
+        // At 90° → inset = 0 (rectangle). At 45° → inset = depth.
+        float inset = depth / MathF.Tan(angleRad);
+        inset = Math.Min(inset, len * 0.45f); // prevent over-inset
+        var q0 = p0 + inset * dir + depth * perp;
+        var q1 = p1 - inset * dir + depth * perp;
         return new GlueTab(faceId, edgeIdx, p0, p1, q1, q0);
     }
 

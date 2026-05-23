@@ -680,7 +680,7 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Text="Tab depth (mm)" Style="{StaticResource FieldLabel}"/>
                             <Slider Grid.Column="1" Style="{StaticResource SettingSlider}"
-                                    Minimum="1" Maximum="15"
+                                    Minimum="1" Maximum="20"
                                     Value="{Binding GlueTabDepthMm}"/>
                             <TextBlock Grid.Column="2"
                                        Text="{Binding GlueTabDepthMm, StringFormat={}{0:F1}}"
@@ -690,15 +690,15 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="190"/>
                                 <ColumnDefinition Width="140"/>
-                                <ColumnDefinition Width="40"/>
+                                <ColumnDefinition Width="50"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="Tab inset ratio" Style="{StaticResource FieldLabel}"
-                                       ToolTip="Applies to Trapezoid shape only"/>
+                            <TextBlock Text="Side wall angle (°)" Style="{StaticResource FieldLabel}"
+                                       ToolTip="Angle of tab side walls vs. edge. 90°=rectangle, 45°=default trapezoid, lower=sharper taper. Applies to Trapezoid shape."/>
                             <Slider Grid.Column="1" Style="{StaticResource SettingSlider}"
-                                    Minimum="0.05" Maximum="0.4"
-                                    Value="{Binding GlueTabInsetRatio}"/>
+                                    Minimum="1" Maximum="90" TickFrequency="1"
+                                    Value="{Binding GlueTabSideAngleDeg}"/>
                             <TextBlock Grid.Column="2"
-                                       Text="{Binding GlueTabInsetRatio, StringFormat={}{0:F2}}"
+                                       Text="{Binding GlueTabSideAngleDeg, StringFormat={}{0:F0}°}"
                                        Foreground="#aaaacc" VerticalAlignment="Center" Margin="6,0"/>
                         </Grid>
                         <CheckBox Content="Alternate flap placement"

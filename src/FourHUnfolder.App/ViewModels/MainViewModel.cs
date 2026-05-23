@@ -37,6 +37,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private bool    _previewActive;
     private double  _currentScaleMmPerUnit = 1.0;   // persisted between re-runs
 
+    // dirty tracking — true when there are unsaved changes
+    private bool _isDirty;
+    public bool IsDirty => _isDirty;
+    private void MarkDirty()  { _isDirty = true; }
+    private void MarkClean()  { _isDirty = false; }
+
     // edge overrides: mesh edge ID → EdgeType (user's join/split operations)
     private readonly Dictionary<int, EdgeType> _edgeOverrides = new();
 
@@ -73,12 +79,50 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool          _isUnfolded;
     [ObservableProperty] private int           _selectedFaceId = -1;
 
-    // texture
+    // texture — single (legacy / default)
     [ObservableProperty] private ImageSource?  _activeTextureThumbnail;
     [ObservableProperty] private BitmapImage?  _canvas2DTexture;
     [ObservableProperty] private string        _textureStatusText = "No texture";
     [ObservableProperty] private string        _previewLabelText  = string.Empty;
     [ObservableProperty] private bool          _hasTexture;
+
+    // multi-material texture slots (for TextureDialog)
+    public ObservableCollection<MaterialTextureViewModel> MaterialTextureSlots { get; } = new();
+
+    // cached loaded bitmaps per materialId (rebuilt when slots change)
+    private readonly Dictionary<int, BitmapImage?> _materialBitmaps = new();
+
+    /// Returns the bitmap for the given materialId (from multi-material slots), or
+    /// falls back to Canvas2DTexture if no per-material texture is defined.
+    public BitmapImage? GetCanvas2DTexture(int materialId)
+    {
+        if (materialId >= 0 && _materialBitmaps.TryGetValue(materialId, out var bmp))
+            return bmp;
+        return Canvas2DTexture;
+    }
+
+    /// Called by TextureDialog when user loads/removes a texture for a specific material slot.
+    public void SetMaterialTexture(int materialId, string? path)
+    {
+        var slot = MaterialTextureSlots.FirstOrDefault(s => s.MaterialId == materialId);
+        if (slot == null) return;
+        slot.TexturePath = path;
+        var bmp = LoadBitmapImage(path);
+        slot.Thumbnail = bmp;
+        _materialBitmaps[materialId] = bmp;
+        MarkDirty();
+
+        // Sync legacy single-texture path if this is the primary slot
+        // Always pick a representative texture for the 3D view / single-texture fallback
+        var primaryId  = GetPrimaryMaterialId();
+        var primaryBmp = _materialBitmaps.GetValueOrDefault(primaryId)
+                         ?? _materialBitmaps.Values.FirstOrDefault(b => b != null);
+        _committedTexturePath = MaterialTextureSlots.FirstOrDefault(s => s.HasTexture)?.TexturePath;
+        UpdateTextureUI(primaryBmp, _committedTexturePath, isPreview: false);
+    }
+
+    private int GetPrimaryMaterialId() =>
+        MaterialTextureSlots.FirstOrDefault()?.MaterialId ?? -1;
 
     // paper canvas
     [ObservableProperty] private PaperSizeModel _paperSizeModel = PaperSizeModel.A4;
@@ -323,6 +367,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         };
         if (dlg.ShowDialog() != true) return;
 
+        if (!ConfirmDiscardIfDirty("load a new mesh")) return;
+
         try
         {
             CleanupTempBundle();
@@ -337,6 +383,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
             CancelPreviewSilently();
             _committedTexturePath = _currentMesh.SuggestedTexturePath;
+            RebuildMaterialSlots(_currentMesh);
 
             var tex    = LoadBitmapImage(_committedTexturePath);
             _lastView3DHash = View3DHash(S.View3D);   // sync hash so OnSettingsChanged skips rebuild
@@ -352,6 +399,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             var texNote = _committedTexturePath != null ? " · texture from MTL" : string.Empty;
             StatusText = $"Loaded — {_currentMesh.Faces.Count:N0} faces, " +
                          $"{_currentMesh.Vertices.Count:N0} vertices{texNote}.";
+            MarkClean(); // fresh mesh = clean state
         }
         catch (Exception ex) { Error("Load failed", ex); }
     }
@@ -440,6 +488,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             var state = BuildProjectState();
             _serializer.SaveBundle(state, _currentMeshPath!, _committedTexturePath, dlg.FileName);
             StatusText = $"Project saved: {Path.GetFileName(dlg.FileName)}";
+            MarkClean();
         }
         catch (Exception ex) { Error("Save failed", ex); }
     }
@@ -453,6 +502,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             Filter = "4H-Unfolder bundle (*.4hu)|*.4hu|Legacy project (*.pmc)|*.pmc|All files (*.*)|*.*"
         };
         if (dlg.ShowDialog() != true) return;
+        if (!ConfirmDiscardIfDirty("open a project")) return;
 
         try
         {
@@ -465,6 +515,18 @@ public partial class MainViewModel : ObservableObject, IDisposable
             RestoreProjectState(state);
         }
         catch (Exception ex) { Error("Load project failed", ex); }
+    }
+
+    /// Returns true if safe to proceed (no unsaved changes, or user confirmed discard).
+    public bool ConfirmDiscardIfDirty(string action = "proceed")
+    {
+        if (!_isDirty) return true;
+        var result = MessageBox.Show(
+            $"You have unsaved changes. Discard them and {action}?",
+            "Unsaved Changes",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        return result == MessageBoxResult.Yes;
     }
 
     private void CleanupTempBundle()
@@ -492,7 +554,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand] private void RemoveTexture()  { if (_currentMesh != null) EnterPreview(null); }
-    [RelayCommand] private void ApplyPreview()   { if (!_previewActive) return; _committedTexturePath = _pendingTexturePath; CommitPreview(); }
+    [RelayCommand] private void ApplyPreview()   { if (!_previewActive) return; _committedTexturePath = _pendingTexturePath; CommitPreview(); MarkDirty(); }
     [RelayCommand] private void CancelPreview()  { if (!_previewActive) return; CommitPreview(revert: true); }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -511,6 +573,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         PushUndoState();
         var current = IsEdgeFold(meshEdgeId) ? EdgeType.Fold : EdgeType.Cut;
         _edgeOverrides[meshEdgeId] = current == EdgeType.Fold ? EdgeType.Cut : EdgeType.Fold;
+        MarkDirty();
         try
         {
             RerunUnfold();
@@ -896,6 +959,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             preDrag));
         _redoStack.Clear();
         NotifyUndoRedo();
+        MarkDirty();
     }
 
     public void EnsurePageForPosition(double rightMm, double bottomMm)
@@ -1002,6 +1066,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             StatusText = $"Project loaded with warnings: {string.Join("; ", state.Warnings)}";
         else
             StatusText = $"Project loaded — {Pieces.Count} pieces.";
+        MarkClean(); // just loaded = clean
     }
 
     // ── texture helpers ───────────────────────────────────────────────────────
@@ -1034,6 +1099,34 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     private void CancelPreviewSilently() { _previewActive = false; _pendingTexturePath = null; }
+
+    private void RebuildMaterialSlots(Mesh mesh)
+    {
+        MaterialTextureSlots.Clear();
+        _materialBitmaps.Clear();
+
+        if (mesh.MaterialNames.Count == 0)
+        {
+            // No materials — single default slot
+            var bmp  = LoadBitmapImage(mesh.SuggestedTexturePath);
+            var slot = new MaterialTextureViewModel(-1, "Default", mesh.SuggestedTexturePath, bmp);
+            MaterialTextureSlots.Add(slot);
+            _materialBitmaps[-1] = bmp;
+        }
+        else
+        {
+            for (int i = 0; i < mesh.MaterialNames.Count; i++)
+            {
+                var path = (i < mesh.MaterialTexturePaths.Count)
+                    ? mesh.MaterialTexturePaths[i]
+                    : null;
+                var bmp  = LoadBitmapImage(path);
+                var slot = new MaterialTextureViewModel(i, mesh.MaterialNames[i], path, bmp);
+                MaterialTextureSlots.Add(slot);
+                _materialBitmaps[i] = bmp;
+            }
+        }
+    }
 
     private void UpdateTextureUI(BitmapImage? tex, string? path, bool isPreview)
     {

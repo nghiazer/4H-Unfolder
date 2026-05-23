@@ -1,6 +1,6 @@
 ﻿# 4H-Unfolder — Session Progress Log
 
-> **Last updated:** 2026-05-23 (session 16 — Pepakura parity features)  
+> **Last updated:** 2026-05-23 (session 17 — unsaved warning, tab angle, multi-texture)  
 > **Branch:** `feat/paper-model-unfolder`  (PR #1 open against `main`)
 > **Target framework:** .NET 8 / WPF  
 > **SDK required:** `winget install Microsoft.DotNet.SDK.8`
@@ -58,6 +58,9 @@ No circular dependencies. Domain has zero external dependencies.
 - **App icon** (`Assets/app.ico`, 6 sizes 16–256px) embedded in exe and window title bar
 - Unfold setup dialog: real-world scale + paper size
 - **Save/Load `.4hu` project bundle** — self-contained ZIP: embeds mesh + texture + state; not readable in text editors; backward-compatible load of legacy `.pmc` files
+- **Unsaved changes warning** — `_isDirty` flag; shown on Load Mesh / Open Project / window close when changes exist
+- **Glue tab geometry overhaul** — side wall angle param (1–90°, default 45°); default depth 5 mm; Trapezoid/Rectangle/Triangle shapes; alternate-flap option
+- **Multi-texture system** — `Face.MaterialId`, `Mesh.MaterialNames/MaterialTexturePaths`; OBJ loader parses all `newmtl`/`usemtl`/`map_Kd` entries; `MaterialTextureViewModel` per slot; TextureDialog redesigned (Pepakura-style: material list left, detail right); per-face material texture lookup in 2D canvas (`GetCanvas2DTexture(materialId)`)
 - **Edge ID numbers + glue arrows** on cut edges — matching pair numbers (1, 2, 3…) with outward arrows, configurable color; `ShowEdgeIds` in Settings → 2D View
 - **Auto-align edge** — double-click any edge line on the 2D canvas → snaps piece rotation so that edge is exactly horizontal or vertical (nearest 90°); undoable
 - **Parts alignment toolbar** — 6 new buttons: Align Left / Right / Top / Bottom / Center-H / Center-V on selected pieces; uses rotated AABB for precise alignment; undoable
@@ -83,7 +86,7 @@ No circular dependencies. Domain has zero external dependencies.
 | `dotnet build 4H-Unfolder.sln` | ✅ 0 errors, 0 warnings |
 | `dotnet test` | ✅ 29 / 29 passed |
 | `dotnet run --project src/FourHUnfolder.App` | ✅ App mở, không crash |
-| Published `4H-Unfolder.exe` (win-x64, self-contained) | ✅ Session 16 |
+| Published `4H-Unfolder.exe` (win-x64, self-contained) | ✅ Session 17 |
 | `.4hu` bundle save/load | ✅ Session 15 |
 | Edge ID labels + glue arrows on cut edges | ✅ Session 16 |
 | Auto-align edge (double-click snap) | ✅ Session 16 |
@@ -91,6 +94,9 @@ No circular dependencies. Domain has zero external dependencies.
 | Tab shapes: Trapezoid/Rectangle/Triangle | ✅ Session 16 |
 | Alternate flap placement | ✅ Session 16 |
 | Multi-format import: 3DS/STL/DXF/LWO/FBX/DAE/PLY | ✅ Session 16 |
+| Unsaved changes warning on close/load | ✅ Session 17 |
+| Glue tab side-angle param + 5mm default | ✅ Session 17 |
+| Multi-texture per material (OBJ multi-mat + TextureDialog) | ✅ Session 17 |
 | 2D texture mapping (affine UV per triangle, DPI-agnostic) | ✅ Session 12 fix |
 | App icon embedded in exe | ✅ Session 11 |
 | Rotate/flip pieces are now undoable (Ctrl+Z) | ✅ Session 12 |

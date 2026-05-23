@@ -21,4 +21,7 @@ public sealed class Face
     }
 
     public int[] VertexIds => [A, B, C];
+
+    /// Index into Mesh.MaterialNames; -1 = no material assigned.
+    public int MaterialId { get; set; } = -1;
 }

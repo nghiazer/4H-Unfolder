@@ -49,11 +49,15 @@ public partial class PieceViewModel : ObservableObject
         /// 1-based pair ID for each cut edge; 0 for fold/boundary edges.
         public int[] EdgePairIds { get; }
 
+        /// Material index matching Mesh.MaterialNames; -1 = no material.
+        public int MaterialId { get; }
+
         public FaceData(int faceId, int[] meshEdgeIds,
                         Point v0, Point v1, Point v2,
                         bool[] edgeIsFold, bool[]? edgeIsBoundary = null,
                         Vector2[]? uvCoords = null,
-                        int[]? edgePairIds = null)
+                        int[]? edgePairIds = null,
+                        int materialId = -1)
         {
             FaceId         = faceId;
             MeshEdgeIds    = meshEdgeIds;
@@ -62,6 +66,7 @@ public partial class PieceViewModel : ObservableObject
             EdgeIsBoundary = edgeIsBoundary ?? [false, false, false];
             UVCoords       = uvCoords;
             EdgePairIds    = edgePairIds ?? [0, 0, 0];
+            MaterialId     = materialId;
         }
     }
 
@@ -112,7 +117,8 @@ public partial class PieceViewModel : ObservableObject
                 eIds,
                 ToLocal(uf.V0), ToLocal(uf.V1), ToLocal(uf.V2),
                 uf.EdgeIsFold, uf.EdgeIsBoundary,
-                uf.UVCoords, pairIds);
+                uf.UVCoords, pairIds,
+                mesh.Faces[uf.FaceId].MaterialId);
         }).ToArray();
 
         // Glue tabs belonging to faces in this piece
