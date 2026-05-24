@@ -51,8 +51,8 @@ public sealed class AppSettings
     // ── 2D Pattern Canvas ─────────────────────────────────────────────────────
     public sealed class View2DSettings
     {
-        // Canvas backdrop
-        public string CanvasBackground  { get; set; } = "#3a3a5a";
+        // Canvas backdrop (default matches Light theme; auto-updated when theme changes)
+        public string CanvasBackground  { get; set; } = "#e8eaf0";
         public string PaperColor        { get; set; } = "#ffffff";
 
         // Grid
@@ -140,5 +140,8 @@ public sealed class AppSettings
     {
         /// Display unit used throughout the UI: "mm" or "inch"
         public string DisplayUnit { get; set; } = "mm";
+
+        /// UI colour scheme: "Light" or "Dark"
+        public string ThemeMode   { get; set; } = "Light";
     }
 }

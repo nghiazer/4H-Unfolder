@@ -9,6 +9,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 using FourHUnfolder.App.Dialogs;
+using FourHUnfolder.App.Services;
 using FourHUnfolder.Application.Interfaces;
 using FourHUnfolder.Application.Services;
 using FourHUnfolder.Domain.Models;
@@ -29,6 +30,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private readonly PdfExporter       _pdfExporter;
     private readonly ProjectSerializer _serializer;
     private readonly SettingsService   _settingsService;
+    private readonly ThemeService      _themeService;
 
     // ── core state ────────────────────────────────────────────────────────────
     private Mesh?   _currentMesh;
@@ -208,7 +210,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
     // ── constructor ───────────────────────────────────────────────────────────
     public MainViewModel(MeshService meshService, UnfoldService unfoldService,
                          IExporter exporter, PdfExporter pdfExporter,
-                         ProjectSerializer serializer, SettingsService settingsService)
+                         ProjectSerializer serializer, SettingsService settingsService,
+                         ThemeService themeService)
     {
         _meshService     = meshService;
         _unfoldService   = unfoldService;
@@ -216,11 +219,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _pdfExporter     = pdfExporter;
         _serializer      = serializer;
         _settingsService = settingsService;
+        _themeService    = themeService;
 
         // Apply initial values from settings
-        _pixelsPerMm = settingsService.Current.View2D.DefaultPixelsPerMm;
-        _gridVisible  = settingsService.Current.View2D.ShowGrid;
-        _snapToGrid   = settingsService.Current.View2D.SnapToGrid;
+        _pixelsPerMm   = settingsService.Current.View2D.DefaultPixelsPerMm;
+        _gridVisible   = settingsService.Current.View2D.ShowGrid;
+        _snapToGrid    = settingsService.Current.View2D.SnapToGrid;
+        _lastThemeMode = settingsService.Current.General.ThemeMode;
 
         _settingsService.SettingsChanged += OnSettingsChanged;
     }
@@ -231,12 +236,37 @@ public partial class MainViewModel : ObservableObject, IDisposable
     // Hash of View3D fields that require a 3D model rebuild when changed
     private string _lastView3DHash = string.Empty;
 
+    // Track theme to detect switches and auto-update theme-linked background colors
+    private string _lastThemeMode = "Light";
+
+    // Canonical default canvas backgrounds per theme (auto-swapped on theme change)
+    private const string LightCanvasBg = "#e8eaf0";
+    private const string DarkCanvasBg  = "#3a3a5a";
+
     private static string View3DHash(AppSettings.View3DSettings v) =>
         $"{v.FaceColor}|{v.BackFaceColor}|{v.FaceOpacity:F4}|{v.DisplayMode}|{v.EdgeOverlayColor}|{v.EdgeOverlayThickness:F4}";
 
     // ── settings changed handler ──────────────────────────────────────────────
     private void OnSettingsChanged(object? sender, EventArgs e)
     {
+        // Apply theme immediately when changed in settings
+        _themeService.Apply(S.General.ThemeMode);
+
+        // When theme changes, auto-update canvas/3D-viewport backgrounds
+        // if they're still at the previous theme's default (respects user customisation).
+        var newTheme = S.General.ThemeMode;
+        if (!string.Equals(newTheme, _lastThemeMode, StringComparison.OrdinalIgnoreCase))
+        {
+            bool goingLight = newTheme.Equals("Light", StringComparison.OrdinalIgnoreCase);
+            var oldCanvasBg = goingLight ? DarkCanvasBg : LightCanvasBg;
+            var newCanvasBg = goingLight ? LightCanvasBg : DarkCanvasBg;
+
+            if (string.Equals(S.View2D.CanvasBackground, oldCanvasBg, StringComparison.OrdinalIgnoreCase))
+                PatchSettings(s => s.View2D.CanvasBackground = newCanvasBg);
+
+            _lastThemeMode = newTheme;
+        }
+
         // Sync fast-path toggles from new settings
         GridVisible = S.View2D.ShowGrid;
         SnapToGrid  = S.View2D.SnapToGrid;

@@ -1,0 +1,62 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         LIGHT THEME — 4H-Unfolder
+         All color resources keyed by semantic role.
+         Swap this file for DarkTheme.xaml at runtime via ThemeService.
+    ═══════════════════════════════════════════════════════════════ -->
+
+    <!-- ── Window / App chrome ──────────────────────────────────── -->
+    <SolidColorBrush x:Key="AppBg"          Color="#f0f2f5"/>
+    <SolidColorBrush x:Key="ToolbarBg"      Color="#e4e7ed"/>
+    <SolidColorBrush x:Key="Toolbar2DBg"    Color="#e0e4f0"/>
+    <SolidColorBrush x:Key="StatusBarBg"    Color="#d8dce6"/>
+    <SolidColorBrush x:Key="SplitterBg"     Color="#c4c8d8"/>
+
+    <!-- ── Dialog chrome ─────────────────────────────────────────── -->
+    <SolidColorBrush x:Key="DialogBg"       Color="#f5f6fa"/>
+    <SolidColorBrush x:Key="DialogNavBg"    Color="#e8eaf0"/>
+    <SolidColorBrush x:Key="FooterBg"       Color="#e0e4f0"/>
+    <SolidColorBrush x:Key="FooterBorder"   Color="#c4c8d8"/>
+
+    <!-- ── Nav sidebar ──────────────────────────────────────────── -->
+    <SolidColorBrush x:Key="NavFg"          Color="#4a5070"/>
+    <SolidColorBrush x:Key="NavLabelFg"     Color="#8898b0"/>
+    <SolidColorBrush x:Key="NavSelectedBg"  Color="#d0d4e8"/>
+    <SolidColorBrush x:Key="NavHoverBg"     Color="#dce0ee"/>
+    <SolidColorBrush x:Key="NavSelectedFg"  Color="#1a2040"/>
+
+    <!-- ── Text roles ────────────────────────────────────────────── -->
+    <SolidColorBrush x:Key="TextPrimary"    Color="#1a1e2e"/>
+    <SolidColorBrush x:Key="TextSecondary"  Color="#4a5070"/>
+    <SolidColorBrush x:Key="TextMuted"      Color="#8890a8"/>
+    <SolidColorBrush x:Key="TextAccent"     Color="#1a4488"/>
+    <SolidColorBrush x:Key="TextHint"       Color="#6870a0"/>
+    <SolidColorBrush x:Key="PanelHeadFg"    Color="#1a1e2e"/>
+
+    <!-- ── Borders ───────────────────────────────────────────────── -->
+    <SolidColorBrush x:Key="BorderNormal"   Color="#c4c8d8"/>
+    <SolidColorBrush x:Key="BorderLight"    Color="#d4d8e8"/>
+
+    <!-- ── 2D canvas ─────────────────────────────────────────────── -->
+    <SolidColorBrush x:Key="Canvas2DBg"           Color="#dce0ea"/>
+    <SolidColorBrush x:Key="Canvas2DScrollerBg"   Color="#cdd2de"/>
+    <SolidColorBrush x:Key="Canvas2DZoomBadgeBg"  Color="#99d0d8e8"/>
+
+    <!-- ── Form controls ─────────────────────────────────────────── -->
+    <SolidColorBrush x:Key="GroupBoxFg"     Color="#2255aa"/>
+    <SolidColorBrush x:Key="GroupBoxBorder" Color="#c0c8e0"/>
+    <SolidColorBrush x:Key="FieldLabelFg"   Color="#2a3050"/>
+    <SolidColorBrush x:Key="InputBg"        Color="#ffffff"/>
+    <SolidColorBrush x:Key="InputFg"        Color="#1a1e2e"/>
+    <SolidColorBrush x:Key="InputBorder"    Color="#aab0c8"/>
+    <SolidColorBrush x:Key="SliderValueFg"  Color="#505878"/>
+    <SolidColorBrush x:Key="CheckBoxFg"     Color="#2a3050"/>
+    <SolidColorBrush x:Key="SectionLabelFg" Color="#6878a8"/>
+
+    <!-- ── Icon-button interactive states ─────────────────────────── -->
+    <SolidColorBrush x:Key="IconBtnHoverBg"   Color="#d0d4e0"/>
+    <SolidColorBrush x:Key="IconBtnPressedBg" Color="#b8bece"/>
+
+</ResourceDictionary>

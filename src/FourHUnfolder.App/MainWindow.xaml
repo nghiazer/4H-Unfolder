@@ -1,4 +1,4 @@
-﻿<Window x:Class="FourHUnfolder.App.MainWindow"
+<Window x:Class="FourHUnfolder.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:helix="http://helix-toolkit.org/wpf"
@@ -7,17 +7,45 @@
         Icon="Assets/app.ico"
         Width="1400" Height="900"
         WindowStartupLocation="CenterScreen"
-        Background="#1a1a2e">
+        Background="{DynamicResource AppBg}">
 
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
-        <!-- Compact icon-only style for main toolbar -->
+        <!-- Compact icon-only style for main toolbar — icons enlarged ×1.5 with rounded corners -->
         <Style x:Key="IconBtn" TargetType="Button">
             <Setter Property="Margin"    Value="2,1"/>
-            <Setter Property="Padding"   Value="7,5"/>
-            <Setter Property="FontSize"  Value="15"/>
+            <Setter Property="Padding"   Value="8,6"/>
+            <Setter Property="FontSize"  Value="20"/>
             <Setter Property="Cursor"    Value="Hand"/>
-            <Setter Property="MinWidth"  Value="32"/>
+            <Setter Property="MinWidth"  Value="36"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="5"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                             HorizontalAlignment="Center"
+                                             VerticalAlignment="Center"
+                                             RecognizesAccessKey="True"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource IconBtnHoverBg}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource IconBtnPressedBg}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.35"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Window.Resources>
 
@@ -74,7 +102,8 @@
                         <ModelVisual3D Content="{Binding EdgeHighlightModel}"/>
                     </helix:HelixViewport3D>
 
-                    <TextBlock Text="3D Model" Foreground="#7788aa" FontSize="11"
+                    <TextBlock Text="3D Model"
+                               Foreground="{DynamicResource TextMuted}" FontSize="11"
                                Margin="8,6" VerticalAlignment="Top" HorizontalAlignment="Left"
                                IsHitTestVisible="False"/>
 
@@ -93,12 +122,12 @@
             <GridSplitter Grid.Column="1"
                           Width="{Binding SplitterColumnWidth}"
                           HorizontalAlignment="Stretch"
-                          Background="#3d3d5c"
+                          Background="{DynamicResource SplitterBg}"
                           Visibility="{Binding RightPanelVisible}"/>
 
             <!-- 2-D Pattern Canvas -->
             <Border Grid.Column="2"
-                    BorderBrush="#3d3d5c" BorderThickness="1"
+                    BorderBrush="{DynamicResource BorderNormal}" BorderThickness="1"
                     CornerRadius="4" Margin="2,4,4,4"
                     Visibility="{Binding RightPanelVisible}">
                 <Grid>
@@ -107,7 +136,7 @@
                         DataContext="{Binding}"/>
 
                     <TextBlock Text="2D Pattern Layout"
-                               Foreground="#9999aa" FontSize="11" Margin="8,6"
+                               Foreground="{DynamicResource TextSecondary}" FontSize="11" Margin="8,6"
                                VerticalAlignment="Top" HorizontalAlignment="Left"
                                IsHitTestVisible="False"/>
                 </Grid>
@@ -115,19 +144,19 @@
         </Grid>
 
         <!-- ═══ Row 1 — status bar ═══════════════════════════════════════ -->
-        <StatusBar Grid.Row="1" Background="#12122b" Padding="4,0">
+        <StatusBar Grid.Row="1" Background="{DynamicResource StatusBarBg}" Padding="4,0">
             <StatusBarItem>
                 <TextBlock Text="{Binding StatusText}"
-                           Foreground="#a0c8ff" FontFamily="Consolas" FontSize="12"/>
+                           Foreground="{DynamicResource TextAccent}" FontFamily="Consolas" FontSize="12"/>
             </StatusBarItem>
             <StatusBarItem HorizontalAlignment="Right">
                 <TextBlock Text="Right-click edge → Join/Split  ·  LMB=rotate 3D  ·  Scroll=zoom 2D  ·  Shift/Ctrl+click=multi-select"
-                           Foreground="#666688" FontSize="11"/>
+                           Foreground="{DynamicResource TextHint}" FontSize="11"/>
             </StatusBarItem>
         </StatusBar>
 
         <!-- ═══ Row 2 — main toolbar (icon-only) ════════════════════════════ -->
-        <Border Grid.Row="2" Background="#ecf0f1" Padding="4,2">
+        <Border Grid.Row="2" Background="{DynamicResource ToolbarBg}" Padding="4,3">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <Button Style="{StaticResource IconBtn}" Content="📂"
                         Command="{Binding LoadMeshCommand}"

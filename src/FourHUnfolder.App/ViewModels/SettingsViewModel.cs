@@ -24,7 +24,7 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private double _cameraFarPlane        = 5000.0;
 
     // ── 2D View ───────────────────────────────────────────────────────────────
-    [ObservableProperty] private string _canvasBackground      = "#3a3a5a";
+    [ObservableProperty] private string _canvasBackground      = "#e8eaf0";
     [ObservableProperty] private string _paperColor            = "#ffffff";
     [ObservableProperty] private bool   _showGrid              = true;
     [ObservableProperty] private double _gridSizeMm            = 10.0;
@@ -53,7 +53,9 @@ public partial class SettingsViewModel : ObservableObject
 
     // ── General ───────────────────────────────────────────────────────────────
     [ObservableProperty] private string _displayUnit = "mm";
+    [ObservableProperty] private string _themeMode   = "Light";
     public IReadOnlyList<string> DisplayUnits { get; } = ["mm", "inch"];
+    public IReadOnlyList<string> ThemeModes   { get; } = ["Light", "Dark"];
 
     // ── Print ─────────────────────────────────────────────────────────────────
     [ObservableProperty] private double _glueTabDepthMm      = 5.0;
@@ -127,6 +129,7 @@ public partial class SettingsViewModel : ObservableObject
 
         // General
         DisplayUnit = s.General.DisplayUnit;
+        ThemeMode   = s.General.ThemeMode;
 
         // Print
         GlueTabDepthMm      = s.Print.GlueTabDepthMm;
@@ -216,7 +219,8 @@ public partial class SettingsViewModel : ObservableObject
         },
         General = new()
         {
-            DisplayUnit = DisplayUnit
+            DisplayUnit = DisplayUnit,
+            ThemeMode   = ThemeMode
         }
     };
 }
