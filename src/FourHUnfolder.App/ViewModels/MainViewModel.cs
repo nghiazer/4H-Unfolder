@@ -403,8 +403,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
             CancelPreviewSilently();
 
-            // Feature A: Model orientation dialog
-            var orientDlg = new Dialogs.ModelOrientationDialog
+            // Feature A: Model orientation dialog — pass mesh for live preview
+            var orientDlg = new Dialogs.ModelOrientationDialog(_currentMesh)
             {
                 Owner = WpfApp.Current.MainWindow
             };
@@ -1499,8 +1499,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private void Error(string title, Exception ex)
     {
-        StatusText = $"{title}: {ex.Message}";
-        MessageBox.Show(ex.Message, title, MessageBoxButton.OK, MessageBoxImage.Error);
+        // Walk to the innermost exception for the most useful message
+        var inner = ex;
+        while (inner.InnerException != null) inner = inner.InnerException;
+        var shortMsg = inner == ex ? ex.Message : $"{inner.Message}\n\n(outer: {ex.Message})";
+        StatusText = $"{title}: {inner.Message}";
+        MessageBox.Show(shortMsg, title, MessageBoxButton.OK, MessageBoxImage.Error);
     }
 
     private static Brush ParseBrush(string? hex, string fallback)

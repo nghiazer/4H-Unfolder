@@ -17,10 +17,14 @@ public partial class ModelOrientationViewModel : ObservableObject
     // ── selections ────────────────────────────────────────────────────────────
 
     /// Which axis of the mesh model should face upward in the world (+Y).
-    [ObservableProperty] private string _upAxis = "+Y";
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AxesAreParallel))]
+    private string _upAxis = "+Y";
 
     /// Which axis of the mesh model should face forward / toward the camera (+Z).
-    [ObservableProperty] private string _frontAxis = "+Z";
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AxesAreParallel))]
+    private string _frontAxis = "+Z";
 
     /// When true, flip the V component of all UV coords (mirrors texture vertically).
     [ObservableProperty] private bool _flipUV = false;
@@ -39,24 +43,20 @@ public partial class ModelOrientationViewModel : ObservableObject
         var front = ParseAxis(FrontAxis);
 
         // Reject degenerate input (parallel axes)
-        var cross = Vector3.Cross(front, up);
+        // Right-handed basis: right = up × front  (Y × Z = X for default +Y/+Z)
+        var cross = Vector3.Cross(up, front);
         if (cross.LengthSquared() < 1e-6f)
             return Matrix4x4.Identity;
 
-        // Orthonormal basis: right = front × up, then re-derive up so it's truly perpendicular
-        var right  = Vector3.Normalize(cross);
-        var upOrtho = Vector3.Normalize(Vector3.Cross(right, front));
+        var right   = Vector3.Normalize(cross);
+        var upOrtho = Vector3.Normalize(Vector3.Cross(front, right)); // front × right = upOrtho (Z × X = Y)
 
-        // We want the rotation R such that:
-        //   R * right  = (1, 0, 0)  [→ world +X]
-        //   R * upOrtho = (0, 1, 0) [→ world +Y]
-        //   R * front  = (0, 0, 1)  [→ world +Z]
+        // Rotation R maps model-space to world-space so that:
+        //   user's "up"    → world +Y   (via dot(v, upOrtho) = result.Y)
+        //   user's "front" → world +Z   (via dot(v, front)   = result.Z)
+        //   user's "right" → world +X   (via dot(v, right)   = result.X)
         //
-        // That is:  new_X = dot(v, right),  new_Y = dot(v, up),  new_Z = dot(v, front)
-        //
-        // In row-major System.Numerics layout:
-        //   V3.Transform(v, M) = (v.X*M11 + v.Y*M21 + v.Z*M31, ...)
-        // So M[col] = [right | up | front] written into rows 1-3:
+        // Row-major System.Numerics layout (V3.Transform(v, M) = dot products with rows):
         return new Matrix4x4(
             right.X,   upOrtho.X, front.X,  0f,
             right.Y,   upOrtho.Y, front.Y,  0f,
@@ -67,6 +67,17 @@ public partial class ModelOrientationViewModel : ObservableObject
     /// <summary>True if no orientation change is needed (up=+Y and front=+Z).</summary>
     public bool IsIdentity =>
         UpAxis == "+Y" && FrontAxis == "+Z" && !FlipUV;
+
+    /// <summary>True when Up and Front axes are parallel — invalid configuration.</summary>
+    public bool AxesAreParallel
+    {
+        get
+        {
+            var u = ParseAxis(UpAxis);
+            var f = ParseAxis(FrontAxis);
+            return Vector3.Cross(u, f).LengthSquared() < 1e-6f;
+        }
+    }
 
     // ── helpers ───────────────────────────────────────────────────────────────
 

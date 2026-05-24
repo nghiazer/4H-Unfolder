@@ -5,6 +5,21 @@
 
 ---
 
+## Session 27 Changes (archived from SESSION_PROGRESS)
+
+| Item | Detail |
+|------|--------|
+| **Bug — `ResizeMode="CanMinResize"`** | Invalid WPF enum value → `TypeConverterMarkupExtension` crash khi instantiate `ModelOrientationDialog`; fix: `CanMinimize` |
+| **Bug — `ComputeRotation` reflection** | `Cross(front, up)` thay vì `Cross(up, front)` → right = (-1,0,0) với default → mesh bị mirror + texture biến mất; fix cross product order |
+| **Bug — `Error()` outer-only message** | `ex.Message` chỉ show outer exception; fix: walk `InnerException` chain |
+| **Cleanup — `BillboardTextVisual3D`** | Removed 6 axis label elements (HelixToolkit compat risk on .NET 8); replaced by TD-27-2 Canvas overlay |
+| **TD-25-2 — Edge hover grid** | `BuildEdgeGrid()` + `_edgeScreenGrid`; `FindNearestEdge` O(n) → O(1); dirty on camera/mesh change |
+| **TD-27-1 — Camera auto-fit** | `ZoomExtents(0)` via `Dispatcher.BeginInvoke(DispatcherPriority.Loaded)` in `ModelOrientationDialog` |
+| **TD-27-2 — Axis labels overlay** | Canvas + 3 TextBlock; `Viewport3DHelper.Point3DtoPoint2D` on `CameraChanged` |
+| **TD-27-3 — Parallel-axes warning** | `AxesAreParallel` + `[NotifyPropertyChangedFor]`; red TextBlock DataTrigger; OK Style trigger disabled |
+
+---
+
 ## Session 26 Changes (archived from SESSION_PROGRESS)
 
 | Item | Detail |

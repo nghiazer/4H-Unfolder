@@ -3,10 +3,10 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:helix="http://helix-toolkit.org/wpf"
         Title="Model Orientation"
-        Width="540" Height="460"
+        Width="560" Height="480"
         MinWidth="480" MinHeight="380"
         WindowStartupLocation="CenterOwner"
-        ResizeMode="CanMinResize"
+        ResizeMode="CanMinimize"
         Background="#1e1e3c" Foreground="White">
 
     <Window.Resources>
@@ -32,7 +32,7 @@
     <Grid Margin="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>  <!-- title -->
-            <RowDefinition Height="*"/>     <!-- cube + controls -->
+            <RowDefinition Height="*"/>     <!-- viewer + controls -->
             <RowDefinition Height="Auto"/>  <!-- flip uv -->
             <RowDefinition Height="Auto"/>  <!-- buttons -->
         </Grid.RowDefinitions>
@@ -41,20 +41,20 @@
         <StackPanel Grid.Row="0" Margin="0,0,0,12">
             <TextBlock Text="Set Model Orientation"
                        FontSize="16" FontWeight="Bold" Foreground="White"/>
-            <TextBlock Text="Choose which axis of your model points Up (+Y) and which points Forward (+Z)."
+            <TextBlock Text="The viewport shows your model with the selected orientation applied (live preview). Axis lines: Red=+X, Green=+Y, Blue=+Z."
                        Foreground="#8899bb" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"/>
         </StackPanel>
 
-        <!-- ── Cube viewer + axis selectors ─────────── -->
+        <!-- ── Mesh viewer + axis selectors ─────────── -->
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>       <!-- cube viewer -->
+                <ColumnDefinition Width="*"/>       <!-- mesh preview -->
                 <ColumnDefinition Width="180"/>     <!-- controls -->
             </Grid.ColumnDefinitions>
 
-            <!-- Colored cube: each face labeled with its axis direction.
-                 Camera at (2.5, 2, 2.5) looking at origin shows +X, +Y, +Z faces.
-                 User can orbit by dragging. -->
+            <!-- Mesh preview viewport.
+                 Axis lines (X=Red, Y=Green, Z=Blue) and the actual mesh
+                 are added in code-behind. The mesh rotates live as you change axes. -->
             <Border Grid.Column="0" BorderBrush="#3a3a60" BorderThickness="1" CornerRadius="4"
                     Margin="0,0,12,0">
                 <Grid>
@@ -63,179 +63,52 @@
                                            ShowCoordinateSystem="False"
                                            ShowViewCube="False">
                         <helix:HelixViewport3D.Camera>
-                            <PerspectiveCamera Position="2.5,2,2.5"
+                            <PerspectiveCamera Position="3,2.5,3"
                                                LookDirection="-1,-0.8,-1"
                                                UpDirection="0,1,0"
                                                FieldOfView="50"/>
                         </helix:HelixViewport3D.Camera>
-
                         <helix:DefaultLights/>
-
-                        <!-- +X face (Red) -->
-                        <ModelVisual3D>
-                            <ModelVisual3D.Content>
-                                <GeometryModel3D>
-                                    <GeometryModel3D.Geometry>
-                                        <MeshGeometry3D
-                                            Positions="1,-1,-1  1,1,-1  1,1,1  1,-1,1"
-                                            TriangleIndices="0 1 2  0 2 3"/>
-                                    </GeometryModel3D.Geometry>
-                                    <GeometryModel3D.Material>
-                                        <DiffuseMaterial Brush="#cc3333"/>
-                                    </GeometryModel3D.Material>
-                                    <GeometryModel3D.BackMaterial>
-                                        <DiffuseMaterial Brush="#883333"/>
-                                    </GeometryModel3D.BackMaterial>
-                                </GeometryModel3D>
-                            </ModelVisual3D.Content>
-                        </ModelVisual3D>
-
-                        <!-- -X face (Dark Red) -->
-                        <ModelVisual3D>
-                            <ModelVisual3D.Content>
-                                <GeometryModel3D>
-                                    <GeometryModel3D.Geometry>
-                                        <MeshGeometry3D
-                                            Positions="-1,-1,1  -1,1,1  -1,1,-1  -1,-1,-1"
-                                            TriangleIndices="0 1 2  0 2 3"/>
-                                    </GeometryModel3D.Geometry>
-                                    <GeometryModel3D.Material>
-                                        <DiffuseMaterial Brush="#661111"/>
-                                    </GeometryModel3D.Material>
-                                    <GeometryModel3D.BackMaterial>
-                                        <DiffuseMaterial Brush="#441111"/>
-                                    </GeometryModel3D.BackMaterial>
-                                </GeometryModel3D>
-                            </ModelVisual3D.Content>
-                        </ModelVisual3D>
-
-                        <!-- +Y face (Blue) -->
-                        <ModelVisual3D>
-                            <ModelVisual3D.Content>
-                                <GeometryModel3D>
-                                    <GeometryModel3D.Geometry>
-                                        <MeshGeometry3D
-                                            Positions="-1,1,-1  -1,1,1  1,1,1  1,1,-1"
-                                            TriangleIndices="0 1 2  0 2 3"/>
-                                    </GeometryModel3D.Geometry>
-                                    <GeometryModel3D.Material>
-                                        <DiffuseMaterial Brush="#3366cc"/>
-                                    </GeometryModel3D.Material>
-                                    <GeometryModel3D.BackMaterial>
-                                        <DiffuseMaterial Brush="#224488"/>
-                                    </GeometryModel3D.BackMaterial>
-                                </GeometryModel3D>
-                            </ModelVisual3D.Content>
-                        </ModelVisual3D>
-
-                        <!-- -Y face (Dark Blue) -->
-                        <ModelVisual3D>
-                            <ModelVisual3D.Content>
-                                <GeometryModel3D>
-                                    <GeometryModel3D.Geometry>
-                                        <MeshGeometry3D
-                                            Positions="-1,-1,1  -1,-1,-1  1,-1,-1  1,-1,1"
-                                            TriangleIndices="0 1 2  0 2 3"/>
-                                    </GeometryModel3D.Geometry>
-                                    <GeometryModel3D.Material>
-                                        <DiffuseMaterial Brush="#112244"/>
-                                    </GeometryModel3D.Material>
-                                    <GeometryModel3D.BackMaterial>
-                                        <DiffuseMaterial Brush="#0a1833"/>
-                                    </GeometryModel3D.BackMaterial>
-                                </GeometryModel3D>
-                            </ModelVisual3D.Content>
-                        </ModelVisual3D>
-
-                        <!-- +Z face (Green) -->
-                        <ModelVisual3D>
-                            <ModelVisual3D.Content>
-                                <GeometryModel3D>
-                                    <GeometryModel3D.Geometry>
-                                        <MeshGeometry3D
-                                            Positions="-1,-1,1  1,-1,1  1,1,1  -1,1,1"
-                                            TriangleIndices="0 1 2  0 2 3"/>
-                                    </GeometryModel3D.Geometry>
-                                    <GeometryModel3D.Material>
-                                        <DiffuseMaterial Brush="#33aa44"/>
-                                    </GeometryModel3D.Material>
-                                    <GeometryModel3D.BackMaterial>
-                                        <DiffuseMaterial Brush="#226633"/>
-                                    </GeometryModel3D.BackMaterial>
-                                </GeometryModel3D>
-                            </ModelVisual3D.Content>
-                        </ModelVisual3D>
-
-                        <!-- -Z face (Dark Green) -->
-                        <ModelVisual3D>
-                            <ModelVisual3D.Content>
-                                <GeometryModel3D>
-                                    <GeometryModel3D.Geometry>
-                                        <MeshGeometry3D
-                                            Positions="1,-1,-1  -1,-1,-1  -1,1,-1  1,1,-1"
-                                            TriangleIndices="0 1 2  0 2 3"/>
-                                    </GeometryModel3D.Geometry>
-                                    <GeometryModel3D.Material>
-                                        <DiffuseMaterial Brush="#115522"/>
-                                    </GeometryModel3D.Material>
-                                    <GeometryModel3D.BackMaterial>
-                                        <DiffuseMaterial Brush="#0a3315"/>
-                                    </GeometryModel3D.BackMaterial>
-                                </GeometryModel3D>
-                            </ModelVisual3D.Content>
-                        </ModelVisual3D>
-
-                        <!-- Axis labels (BillboardTextVisual3D) -->
-                        <helix:BillboardTextVisual3D Text="+X" Position="1.25,0,0"
-                            FontSize="14" Foreground="White" Background="Transparent"/>
-                        <helix:BillboardTextVisual3D Text="-X" Position="-1.25,0,0"
-                            FontSize="14" Foreground="#ffaaaa" Background="Transparent"/>
-                        <helix:BillboardTextVisual3D Text="+Y" Position="0,1.25,0"
-                            FontSize="14" Foreground="#aaccff" Background="Transparent"/>
-                        <helix:BillboardTextVisual3D Text="-Y" Position="0,-1.25,0"
-                            FontSize="14" Foreground="#7799cc" Background="Transparent"/>
-                        <helix:BillboardTextVisual3D Text="+Z" Position="0,0,1.25"
-                            FontSize="14" Foreground="#aaffaa" Background="Transparent"/>
-                        <helix:BillboardTextVisual3D Text="-Z" Position="0,0,-1.25"
-                            FontSize="14" Foreground="#77aa77" Background="Transparent"/>
+                        <!-- mesh + axis lines added programmatically in code-behind -->
                     </helix:HelixViewport3D>
 
-                    <TextBlock Text="Drag to rotate" Foreground="#555577" FontSize="10"
+                    <!-- TD-27-2: 2D axis label overlay — positions updated in code-behind -->
+                    <Canvas x:Name="AxisLabelCanvas" IsHitTestVisible="False">
+                        <TextBlock x:Name="LabelX" Text="+X"
+                                   Foreground="#ff5555" FontSize="11" FontWeight="Bold"
+                                   Canvas.Left="0" Canvas.Top="0"/>
+                        <TextBlock x:Name="LabelY" Text="+Y"
+                                   Foreground="#44cc44" FontSize="11" FontWeight="Bold"
+                                   Canvas.Left="0" Canvas.Top="0"/>
+                        <TextBlock x:Name="LabelZ" Text="+Z"
+                                   Foreground="#5599ff" FontSize="11" FontWeight="Bold"
+                                   Canvas.Left="0" Canvas.Top="0"/>
+                    </Canvas>
+
+                    <TextBlock Text="Drag to rotate view" Foreground="#555577" FontSize="10"
                                HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,4"
                                IsHitTestVisible="False"/>
                 </Grid>
             </Border>
 
             <!-- ── Axis selector controls ────────────────── -->
-            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,0,0">
-                <TextBlock Text="Axis Legend" FontWeight="Bold" Foreground="White"
+            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                <TextBlock Text="Axis Reference" FontWeight="Bold" Foreground="White"
                            FontSize="12" Margin="0,0,0,8"/>
 
-                <!-- Color legend -->
+                <!-- Axis color legend matching the 3D lines -->
                 <StackPanel Margin="0,0,0,16">
-                    <StackPanel Orientation="Horizontal" Margin="0,2">
-                        <Rectangle Width="14" Height="14" Fill="#cc3333" Margin="0,0,6,0"/>
-                        <TextBlock Text="+X (Red)" Style="{StaticResource Label}" Margin="0"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,3">
+                        <Rectangle Width="14" Height="4" Fill="#ff4444" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="+X axis (Red)" Style="{StaticResource Label}" Margin="0"/>
                     </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,2">
-                        <Rectangle Width="14" Height="14" Fill="#661111" Margin="0,0,6,0"/>
-                        <TextBlock Text="-X (Dark Red)" Style="{StaticResource Label}" Margin="0"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,3">
+                        <Rectangle Width="14" Height="4" Fill="#44cc44" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="+Y axis (Green)" Style="{StaticResource Label}" Margin="0"/>
                     </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,2">
-                        <Rectangle Width="14" Height="14" Fill="#3366cc" Margin="0,0,6,0"/>
-                        <TextBlock Text="+Y (Blue)" Style="{StaticResource Label}" Margin="0"/>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,2">
-                        <Rectangle Width="14" Height="14" Fill="#112244" Margin="0,0,6,0"/>
-                        <TextBlock Text="-Y (Dark Blue)" Style="{StaticResource Label}" Margin="0"/>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,2">
-                        <Rectangle Width="14" Height="14" Fill="#33aa44" Margin="0,0,6,0"/>
-                        <TextBlock Text="+Z (Green)" Style="{StaticResource Label}" Margin="0"/>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,2">
-                        <Rectangle Width="14" Height="14" Fill="#115522" Margin="0,0,6,0"/>
-                        <TextBlock Text="-Z (Dark Green)" Style="{StaticResource Label}" Margin="0"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,3">
+                        <Rectangle Width="14" Height="4" Fill="#4488ff" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="+Z axis (Blue)" Style="{StaticResource Label}" Margin="0"/>
                     </StackPanel>
                 </StackPanel>
 
@@ -254,8 +127,23 @@
                            Style="{StaticResource Label}" Margin="0,0,0,4"/>
                 <ComboBox ItemsSource="{Binding AxisOptions}"
                           SelectedItem="{Binding FrontAxis}"
-                          ToolTip="Which axis of your model should face forward (toward the camera)?"
-                          Margin="0,0,0,0"/>
+                          ToolTip="Which axis of your model should face forward?"
+                          Margin="0,0,0,8"/>
+
+                <!-- TD-27-3: parallel-axes warning -->
+                <TextBlock Text="⚠ Up and Front must be different axes!"
+                           Foreground="#ff6666" FontSize="10" TextWrapping="Wrap">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding AxesAreParallel}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
             </StackPanel>
         </Grid>
 
@@ -264,7 +152,7 @@
             <StackPanel>
                 <CheckBox Content="Flip UV (mirror texture vertically)"
                           IsChecked="{Binding FlipUV}"
-                          ToolTip="Flips V coordinate: fixes textures that appear upside-down. Try this if your texture looks mirrored or inverted."/>
+                          ToolTip="Flips V coordinate: fixes textures that appear upside-down."/>
                 <TextBlock Text="Tip: if the texture looks wrong after loading, try enabling Flip UV."
                            Foreground="#667799" FontSize="10" Margin="20,3,0,0"/>
             </StackPanel>
@@ -273,9 +161,21 @@
         <!-- ── Buttons ──────────────────────────────── -->
         <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right"
                     Margin="0,12,0,0">
+            <!-- TD-27-3: disable OK when axes are parallel -->
             <Button Content="  OK  " Width="80" Height="30"
                     Background="#1a4060" Foreground="White" BorderBrush="#2a6090"
-                    Cursor="Hand" Margin="0,0,8,0" Click="OK_Click" IsDefault="True"/>
+                    Cursor="Hand" Margin="0,0,8,0" Click="OK_Click" IsDefault="True">
+                <Button.Style>
+                    <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding AxesAreParallel}" Value="True">
+                                <Setter Property="IsEnabled" Value="False"/>
+                                <Setter Property="Opacity"   Value="0.35"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
             <Button Content="Skip" Width="80" Height="30"
                     Background="#2a2a4a" Foreground="#8899bb" BorderBrush="#3a3a6a"
                     Cursor="Hand" Click="Skip_Click" IsCancel="True"

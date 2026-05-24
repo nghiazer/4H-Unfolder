@@ -21,6 +21,11 @@ public partial class MainWindow : Window
     private Point _rmbDownPos;
     private const double HoverThresholdPx = 8.0;
 
+    // TD-25-2: screen-space edge grid for O(1) hover lookup
+    private const int GridCellPx = 24;
+    private readonly Dictionary<(int, int), List<int>> _edgeScreenGrid = new();
+    private bool _edgeGridDirty = true;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -38,19 +43,25 @@ public partial class MainWindow : Window
 
     // ── startup ───────────────────────────────────────────────────────────────
 
-    private void OnLoaded(object s, RoutedEventArgs e) => ApplyCameraSettings();
+    private void OnLoaded(object s, RoutedEventArgs e)
+    {
+        ApplyCameraSettings();
+        // TD-25-2: invalidate edge grid whenever the camera moves
+        Viewport3D.CameraChanged += (_, _) => _edgeGridDirty = true;
+    }
 
     private void OnVmPropertyChanged(object? s, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(MainViewModel.CameraSettingsVersion))
             ApplyCameraSettings();
 
-        // When mesh changes (new unfold or load), reset hover state
+        // When mesh changes (new unfold or load), reset hover state + invalidate edge grid
         if (e.PropertyName is nameof(MainViewModel.PiecesVersion)
                            or nameof(MainViewModel.IsUnfolded)
                            or nameof(MainViewModel.CurrentMesh))
         {
-            _hoveredEdgeId = -1;
+            _hoveredEdgeId  = -1;
+            _edgeGridDirty  = true;   // TD-25-2
         }
     }
 
@@ -137,38 +148,87 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Projects all inner mesh edges to screen space and returns the one
-    /// closest to <paramref name="mousePos"/> within <paramref name="threshold"/> pixels.
-    /// Returns -1 if no edge is close enough.
+    /// TD-25-2: Builds a screen-space grid that buckets each edge into the
+    /// grid cells it passes through.  Called once per camera move or mesh change;
+    /// subsequent <see cref="FindNearestEdge"/> calls are O(1) on average.
     /// </summary>
-    private int FindNearestEdge(Point mousePos, double threshold)
+    private void BuildEdgeGrid()
     {
+        _edgeScreenGrid.Clear();
         var mesh = Vm.CurrentMesh;
-        if (mesh == null) return -1;
-
-        int    bestEdge = -1;
-        double bestDist = threshold;
+        if (mesh == null) { _edgeGridDirty = false; return; }
 
         foreach (var edge in mesh.Edges)
         {
-            if (!edge.ConnectsFaces) continue;   // boundary edge — skip
+            if (!edge.ConnectsFaces) continue;
 
-            var pa = mesh.Vertices[edge.V1].Position;
-            var pb = mesh.Vertices[edge.V2].Position;
-
+            var pa      = mesh.Vertices[edge.V1].Position;
+            var pb      = mesh.Vertices[edge.V2].Position;
             var screenA = ProjectToScreen(new Point3D(pa.X, pa.Y, pa.Z));
             var screenB = ProjectToScreen(new Point3D(pb.X, pb.Y, pb.Z));
+            if (double.IsNaN(screenA.X) || double.IsNaN(screenB.X)) continue;
 
+            // Rasterise the screen segment at half-cell-width steps
+            double dx    = screenB.X - screenA.X;
+            double dy    = screenB.Y - screenA.Y;
+            double len   = Math.Sqrt(dx * dx + dy * dy);
+            int    steps = Math.Max(1, (int)(len / (GridCellPx / 2.0)));
+
+            var seen = new HashSet<(int, int)>();
+            for (int s = 0; s <= steps; s++)
+            {
+                double t  = (double)s / steps;
+                int    cx = (int)Math.Floor((screenA.X + t * dx) / GridCellPx);
+                int    cy = (int)Math.Floor((screenA.Y + t * dy) / GridCellPx);
+                if (!seen.Add((cx, cy))) continue;
+
+                if (!_edgeScreenGrid.TryGetValue((cx, cy), out var list))
+                    _edgeScreenGrid[(cx, cy)] = list = [];
+                list.Add(edge.Id);
+            }
+        }
+        _edgeGridDirty = false;
+    }
+
+    /// <summary>
+    /// Returns the mesh edge closest to <paramref name="mousePos"/> within
+    /// <paramref name="threshold"/> pixels, or -1 if none qualifies.
+    /// Uses a screen-space grid (TD-25-2) so only ~9 cells (~90 edges) are
+    /// tested per call instead of the full edge list.
+    /// </summary>
+    private int FindNearestEdge(Point mousePos, double threshold)
+    {
+        if (_edgeGridDirty) BuildEdgeGrid();
+
+        var mesh = Vm.CurrentMesh;
+        if (mesh == null) return -1;
+
+        int    mouseCx = (int)Math.Floor(mousePos.X / GridCellPx);
+        int    mouseCy = (int)Math.Floor(mousePos.Y / GridCellPx);
+        int    bestEdge = -1;
+        double bestDist = threshold;
+
+        // Collect candidate edge IDs from 3×3 neighbourhood (avoids edge at cell boundary)
+        var candidates = new HashSet<int>();
+        for (int dcx = -1; dcx <= 1; dcx++)
+        for (int dcy = -1; dcy <= 1; dcy++)
+            if (_edgeScreenGrid.TryGetValue((mouseCx + dcx, mouseCy + dcy), out var list))
+                foreach (int id in list) candidates.Add(id);
+
+        foreach (int id in candidates)
+        {
+            if ((uint)id >= (uint)mesh.Edges.Count) continue;
+            var edge = mesh.Edges[id];
+
+            var pa      = mesh.Vertices[edge.V1].Position;
+            var pb      = mesh.Vertices[edge.V2].Position;
+            var screenA = ProjectToScreen(new Point3D(pa.X, pa.Y, pa.Z));
+            var screenB = ProjectToScreen(new Point3D(pb.X, pb.Y, pb.Z));
             if (double.IsNaN(screenA.X) || double.IsNaN(screenB.X)) continue;
 
             double d = DistPointToSegment(mousePos, screenA, screenB);
-            if (d < bestDist)
-            {
-                bestDist = d;
-                bestEdge = edge.Id;
-            }
+            if (d < bestDist) { bestDist = d; bestEdge = id; }
         }
-
         return bestEdge;
     }
 

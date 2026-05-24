@@ -1,6 +1,6 @@
 # 4H-Unfolder — Session Progress Log
 
-> **Last updated:** 2026-05-24 (session 26 — Fix TD-22-1…TD-22-5: Assimp material support, project multi-texture persistence, multi-material SVG, float edge-dedup, UV double-flip; publish v0.0.2.E)
+> **Last updated:** 2026-05-24 (session 27 — Fix ModelOrientationDialog crash + ComputeRotation math; TD-25-2/27-1/27-2/27-3; publish v0.0.2.F)
 > **Branch:** `feat/paper-model-unfolder`  (PR #1 open against `main`)
 > **Target framework:** .NET 8 / WPF
 > **SDK required:** `winget install Microsoft.DotNet.SDK.8`
@@ -86,10 +86,25 @@ No circular dependencies. Domain has zero external dependencies.
 |------|--------|
 | `dotnet build 4H-Unfolder.sln` | ✅ 0 errors, 7 warnings (NuGet NU1603 only) |
 | `dotnet test` | ✅ 34 / 34 passed |
-| `dotnet run --project src/FourHUnfolder.App` | ✅ App mở, không crash |
-| Published `4H-Unfolder.exe` v0.0.2.E (win-x64, self-contained) | ✅ Session 26 |
+| `dotnet run --project src/FourHUnfolder.App` | ✅ App mở, load mesh không crash |
+| Published `4H-Unfolder.exe` v0.0.2.F (win-x64, self-contained) | ✅ Session 27 |
 
 ---
+
+## Session 27 — Changes
+
+| Item | Detail |
+|------|--------|
+| **Bug — ModelOrientationDialog crash on load** | `ResizeMode="CanMinResize"` không tồn tại trong WPF `ResizeMode` enum → `TypeConverterMarkupExtension` exception khi BAML load dialog; đã fix → `CanMinimize` |
+| **Bug — `ComputeRotation` reflection matrix** | Cross product sai thứ tự: `Cross(front, up)` → right = (-1,0,0) với default +Y/+Z → reflection matrix flip X → mesh bị mirror + texture biến mất; fix: `Cross(up, front)` + `Cross(front, right)` → identity cho default |
+| **Bug — `BillboardTextVisual3D` removed** | 6 axis label elements dùng HelixToolkit `BillboardTextVisual3D` bị xóa để tránh compat risk trên .NET 8; thay bằng 2D Canvas overlay (TD-27-2) |
+| **Diagnostics — `Error()` inner exception** | `MainViewModel.Error()` trước chỉ show `ex.Message` (outer); nay walk `InnerException` chain → message hữu ích hơn |
+| **TD-25-2 — Edge hover O(n) → O(1)** | `MainWindow.xaml.cs`: `BuildEdgeGrid()` rasterize tất cả edges vào `Dictionary<(int,int), List<int>>` (cell 24px); `FindNearestEdge` chỉ test 3×3 cells (~90 candidates); grid invalidated on camera move + mesh change |
+| **TD-27-1 — Camera auto-fit** | `ModelOrientationDialog`: `ZoomExtents(0)` qua `Dispatcher.BeginInvoke(DispatcherPriority.Loaded)` sau khi mesh được add vào viewport |
+| **TD-27-2 — Axis labels 2D overlay** | `ModelOrientationDialog`: Canvas overlay với 3 `TextBlock` (+X/#ff5555, +Y/#44cc44, +Z/#5599ff); `Viewport3DHelper.Point3DtoPoint2D(CubeViewport.Viewport, pt)` cập nhật vị trí trên mỗi `CameraChanged` |
+| **TD-27-3 — Parallel-axes validation** | `ModelOrientationViewModel`: `AxesAreParallel` computed property + `[NotifyPropertyChangedFor]`; XAML: warning TextBlock (DataTrigger) + OK button Style trigger `IsEnabled=False, Opacity=0.35` khi parallel |
+| **Build/Test** | ✅ 0 errors / 34 tests passed / app loads mesh clean |
+| **Release v0.0.2.F** | Published win-x64 self-contained EXE |
 
 ## Session 26 — Changes
 
@@ -105,18 +120,6 @@ No circular dependencies. Domain has zero external dependencies.
 | **Build/Test** | ✅ 0 errors / 34 tests passed / app starts clean |
 | **Release v0.0.2.E** | Published win-x64 self-contained EXE |
 
-## Session 25 — Changes
-
-| Item | Detail |
-|------|--------|
-| **Feature A — Model Orientation Dialog** | New `ModelOrientationDialog.xaml/.cs` + `ModelOrientationViewModel.cs` shown after every `LoadMesh`. 3D colored cube (HelixViewport3D, orbitable) with 6 axis-labeled faces. Two ComboBoxes: Up axis + Front axis (each → ±X/Y/Z). `Mesh.ApplyTransform(Matrix4x4)` + `Mesh.FlipUVsVertical()` added. |
-| **Feature B — 3D Edge Hover + RMB Pivot** | Context menu removed from 3D viewport. `MouseMove` → screen-space edge proximity (8px threshold); hover fold edge = red highlight, hover cut edge = green highlight; LMB = `ToggleEdge`. RMB click (non-drag) = `LookAt(hitPt, 300)` to set rotation pivot. All orbit/zoom/pan mouse actions preserved. |
-| **AppSettings** | +`EdgeHoverDetachColor` (#ff3333), `EdgeHoverAttachColor` (#33cc33) in `View3DSettings` |
-| **SettingsDialog (3D panel)** | New "3D Edge Edit Mode" GroupBox with 2 configurable color pickers |
-| **MainViewModel** | +`CurrentMesh` (read-only), +`EdgeHighlightModel`, +`HoverEdge(edgeId, isDetach)`, +`ClearEdgeHover()`, +`BuildThinCylinder()` |
-| **Build/Test** | ✅ 0 errors / 34 tests passed / app starts clean |
-| **Release v0.0.2.D** | Published win-x64 self-contained EXE |
-
 ---
 
 ## Remaining Tech Debt
@@ -125,7 +128,6 @@ No circular dependencies. Domain has zero external dependencies.
 |----|----------|-------------|
 | TD-24-1 | 🟡 Medium | `PieceFoldTree` fold animation: angles computed from 3D normals applied in flat space — fold direction may be wrong for non-trivial pieces |
 | TD-25-1 | 🟢 Low | `ModelOrientationDialog` shown on every mesh load; add "don't ask again" setting for users who always use Y-up Z-front models |
-| TD-25-2 | 🟢 Low | `FindNearestEdge` in `MainWindow.xaml.cs` projects all edges per `MouseMove` — O(n) per frame; add spatial pre-filter for meshes > 5 000 edges |
 | Performance | 🟢 Low | O(n²) overlap check → spatial grid for meshes > 2000 faces |
 
 ---
@@ -168,6 +170,6 @@ App/Assets/             app.ico (6 sizes) logo.png
 
 1. **Merge PR #1**: <https://github.com/nghiazer/4H-Unfolder/pull/1>
 2. Fix TD-24-1: PieceFoldTree fold animation direction accuracy
-3. Performance: spatial grid for overlap check (>2000 face meshes)
-4. PDO import (Pepakura native format — reverse-engineered, complex)
-5. TD-25-1: "don't ask again" for ModelOrientationDialog
+3. Fix TD-25-1: "don't ask again" for ModelOrientationDialog
+4. Performance: spatial grid for overlap check (>2000 face meshes)
+5. PDO import (Pepakura native format — reverse-engineered, complex)
