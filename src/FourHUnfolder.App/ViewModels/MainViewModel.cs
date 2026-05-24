@@ -464,7 +464,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         if (_currentMesh == null || _lastUnfoldResult == null) return;
 
-        var vm  = new AssemblyViewModel(_currentMesh, _lastUnfoldResult, Pieces, ScaleMmPerUnit);
+        var vm  = new AssemblyViewModel(_currentMesh, _lastUnfoldResult, Pieces, ScaleMmPerUnit, _materialBitmaps);
         var win = new Dialogs.AssemblyAnimationWindow(vm)
         {
             Owner = WpfApp.Current.MainWindow
