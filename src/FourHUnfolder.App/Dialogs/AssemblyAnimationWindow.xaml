@@ -1,0 +1,152 @@
+<Window x:Class="FourHUnfolder.App.Dialogs.AssemblyAnimationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:helix="http://helix-toolkit.org/wpf"
+        Title="Assembly Animation — Step-by-Step Fold Guide"
+        Width="900" Height="700"
+        MinWidth="640" MinHeight="480"
+        WindowStartupLocation="CenterOwner"
+        Background="#12122b">
+
+    <Window.Resources>
+        <!-- Button style matching the main toolbar -->
+        <Style x:Key="CtrlBtn" TargetType="Button">
+            <Setter Property="Padding"    Value="14,6"/>
+            <Setter Property="Margin"     Value="3,0"/>
+            <Setter Property="FontSize"   Value="14"/>
+            <Setter Property="Cursor"     Value="Hand"/>
+            <Setter Property="MinWidth"   Value="38"/>
+            <Setter Property="Background" Value="#2a2a4a"/>
+            <Setter Property="Foreground" Value="#d0d8f0"/>
+            <Setter Property="BorderBrush" Value="#4a4a6a"/>
+        </Style>
+
+        <Style x:Key="PlayBtn" TargetType="Button" BasedOn="{StaticResource CtrlBtn}">
+            <Setter Property="Background" Value="#2a4a2a"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="MinWidth"   Value="100"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsPlaying}" Value="True">
+                    <Setter Property="Background" Value="#4a2a2a"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Legend circle indicator -->
+        <Style x:Key="LegendDot" TargetType="Ellipse">
+            <Setter Property="Width"   Value="12"/>
+            <Setter Property="Height"  Value="12"/>
+            <Setter Property="Margin"  Value="0,0,5,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>      <!-- 0: 3-D viewport -->
+            <RowDefinition Height="Auto"/>   <!-- 1: step description bar -->
+            <RowDefinition Height="Auto"/>   <!-- 2: progress bar -->
+            <RowDefinition Height="Auto"/>   <!-- 3: control toolbar -->
+        </Grid.RowDefinitions>
+
+        <!-- ═══ Row 0 — 3-D Viewport ═══════════════════════════════════════ -->
+        <Border Grid.Row="0"
+                BorderBrush="#3d3d5c" BorderThickness="0,0,0,1">
+            <Grid>
+                <helix:HelixViewport3D x:Name="Viewport3D"
+                                       Background="#0d0d1a"
+                                       ShowCoordinateSystem="True"
+                                       ShowViewCube="True"
+                                       ZoomAroundMouseDownPoint="True">
+                    <helix:DefaultLights/>
+                    <ModelVisual3D Content="{Binding AssemblyModel}"/>
+                </helix:HelixViewport3D>
+
+                <!-- Corner legend -->
+                <Border HorizontalAlignment="Left" VerticalAlignment="Top"
+                        Margin="10,10" Padding="10,6"
+                        Background="#aa000018" CornerRadius="4"
+                        IsHitTestVisible="False">
+                    <StackPanel>
+                        <TextBlock Text="Assembly Guide" FontWeight="Bold"
+                                   Foreground="#c8d8f8" FontSize="12" Margin="0,0,0,6"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,2">
+                            <Ellipse Style="{StaticResource LegendDot}" Fill="#ffcc30"/>
+                            <TextBlock Text="Current piece" Foreground="#c8d8f8" FontSize="11" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,2">
+                            <Ellipse Style="{StaticResource LegendDot}" Fill="#8098c8"/>
+                            <TextBlock Text="Assembled" Foreground="#c8d8f8" FontSize="11" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,2">
+                            <Ellipse Style="{StaticResource LegendDot}" Fill="#3355ff" Opacity="0.4"/>
+                            <TextBlock Text="Upcoming (ghost)" Foreground="#c8d8f8" FontSize="11" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- ═══ Row 1 — Step description ════════════════════════════════════ -->
+        <Border Grid.Row="1" Background="#1a1a3a" Padding="16,8">
+            <TextBlock Text="{Binding StepDescription}"
+                       Foreground="#a8c8ff" FontSize="13"
+                       FontFamily="Segoe UI" TextWrapping="Wrap"/>
+        </Border>
+
+        <!-- ═══ Row 2 — Progress bar ═════════════════════════════════════════ -->
+        <ProgressBar Grid.Row="2"
+                     Value="{Binding StepProgress, Mode=OneWay}"
+                     Maximum="100"
+                     Height="5"
+                     Background="#1a1a3a"
+                     Foreground="#ffcc30"
+                     BorderThickness="0"/>
+
+        <!-- ═══ Row 3 — Controls ══════════════════════════════════════════════ -->
+        <Border Grid.Row="3" Background="#12122b" Padding="10,8">
+            <DockPanel>
+                <!-- Step counter on the right -->
+                <TextBlock DockPanel.Dock="Right"
+                           VerticalAlignment="Center" Margin="12,0,4,0"
+                           Foreground="#7788aa" FontSize="12" FontFamily="Consolas"
+                           Text="{Binding StepCountText}"/>
+
+                <!-- Playback controls -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Style="{StaticResource CtrlBtn}"
+                            Content="⏮"
+                            Command="{Binding GoToStartCommand}"
+                            ToolTip="Go to beginning (Step 1)"/>
+
+                    <Button Style="{StaticResource CtrlBtn}"
+                            Content="◀"
+                            Command="{Binding PrevStepCommand}"
+                            ToolTip="Previous step"/>
+
+                    <!-- Play / Pause — content toggles via DataTrigger -->
+                    <Button Style="{StaticResource PlayBtn}"
+                            Command="{Binding PlayPauseCommand}"
+                            Content="{Binding PlayPauseLabel}"
+                            ToolTip="Play / Pause auto-animation"/>
+
+                    <Button Style="{StaticResource CtrlBtn}"
+                            Content="▶"
+                            Command="{Binding NextStepCommand}"
+                            ToolTip="Next step"/>
+
+                    <Button Style="{StaticResource CtrlBtn}"
+                            Content="⏭"
+                            Command="{Binding GoToEndCommand}"
+                            ToolTip="Go to last step (fully assembled)"/>
+
+                    <Separator Margin="8,0" Background="#3d3d5c"/>
+
+                    <TextBlock VerticalAlignment="Center" Margin="6,0,0,0"
+                               Foreground="#556688" FontSize="11"
+                               Text="Scroll = zoom  ·  LMB = orbit  ·  RMB = pan"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+    </Grid>
+</Window>

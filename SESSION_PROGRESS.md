@@ -1,8 +1,8 @@
 # 4H-Unfolder — Session Progress Log
 
-> **Last updated:** 2026-05-24 (session 22 — comprehensive review, critical bug noted, publish v0.0.2.A release)  
+> **Last updated:** 2026-05-24 (session 24 — fold animation + texture in animation window, publish v0.0.2.C)
 > **Branch:** `feat/paper-model-unfolder`  (PR #1 open against `main`)
-> **Target framework:** .NET 8 / WPF  
+> **Target framework:** .NET 8 / WPF
 > **SDK required:** `winget install Microsoft.DotNet.SDK.8`
 > **History archive:** see [`BUGS_HISTORY.md`](BUGS_HISTORY.md) for all prior bug/tech-debt records
 
@@ -63,6 +63,12 @@ No circular dependencies. Domain has zero external dependencies.
 - **Strip-packing auto-arrange** — sort by area desc, try 90° rotation
 - Export SVG + Export PDF (📑 toolbar button)
 - Undo/Redo (Ctrl+Z/Y) for all edit operations
+- **Assembly animation** (🎬) — step-by-step fold guide with:
+  - Phase 1: true paper-fold — faces rotate around shared fold edges (BFS spanning tree + accumulated Matrix4x4)
+  - Phase 2: fly-in — folded shape translates to final 3-D position
+  - Per-material texture display (assembled + current piece)
+  - Amber emissive overlay on current piece; ghost translucent for upcoming pieces
+  - Play/Pause auto-animation; step controls ⏮ ◀ ▶ ⏭
 
 ### Settings (4-panel dialog)
 | Section | Key options |
@@ -81,55 +87,32 @@ No circular dependencies. Domain has zero external dependencies.
 | `dotnet build 4H-Unfolder.sln` | ✅ 0 errors, 7 warnings (NuGet NU1603 only) |
 | `dotnet test` | ✅ 34 / 34 passed |
 | `dotnet run --project src/FourHUnfolder.App` | ✅ App mở, không crash |
-| Published `4H-Unfolder.exe` v0.0.2.A (win-x64, self-contained) | ✅ Session 22 |
-| **3D multi-material texture** | ⚠ CRITICAL — bug still present (see below) |
-| Edge hit zone (8px transparent Line on top) | ✅ Session 20 |
-| `RebuildMaterialSlots` on project restore | ✅ Session 21 |
-| `BuildWpfModel` absolute UV viewport | ✅ Session 21 |
+| Published `4H-Unfolder.exe` v0.0.2.C (win-x64, self-contained, 148 MB) | ✅ Session 24 |
 
 ---
 
-## ⛔ CRITICAL BUG — 3D Multi-material Texture (unresolved)
-
-**Symptom:** Loading a multi-material OBJ → Unfold → 3D viewport shows wrong textures (e.g. solid blue body + wrong-texture extremities). 2D canvas is correct.
-
-**Root causes identified (session 22 review):**
-
-| # | Location | Description |
-|---|----------|-------------|
-| C-1 | `MainViewModel.CommitPreview` | Calls `BuildWpfModel(_currentMesh, tex)` **without** `_materialBitmaps` → after any preview Apply/Cancel, the 3D model reverts to single-texture for ALL material groups |
-| C-2 | `MainViewModel.EnterPreview` | Same: calls `BuildWpfModel(_currentMesh!, tex)` without `_materialBitmaps` |
-| C-3 | `MainViewModel.RebuildMaterialSlots` | For multi-material meshes, `_materialBitmaps[i]` may be `null` if `MaterialTexturePaths[i]` is null/missing → falls back to `singleTexture` which could be a different material's texture |
-
-**Not yet fixed — needs dedicated session.**
-
----
-
-## Session 22 — Changes
+## Session 24 — Changes
 
 | Item | Detail |
 |------|--------|
-| **Critical bug noted** | 3D multi-material texture still broken; root causes C-1/C-2/C-3 documented above |
-| **Comprehensive review** | Full source review — see "Remaining Tech Debt" table for all findings |
-| **Release v0.0.2.A** | Published win-x64 self-contained EXE; git tag `v0.0.2.A` created |
+| **`PieceFoldTree.cs`** (new) | BFS spanning tree of fold edges per piece; `ComputeFoldAngle` via signed angle between 3-D face normals; `Geometry/Algorithms` layer |
+| **`AssemblyViewModel.cs`** (rewrite) | Two-phase animation: Phase 1 paper-fold (accumulated `Matrix4x4` per face, 600ms) + Phase 2 fly-in lerp (600ms); total 1200ms per step |
+| **Texture in animation** | Assembled + current pieces use per-material `ImageBrush`; current piece adds `EmissiveMaterial(amber #ff,cc,00 α=90)` overlay; ghost stays translucent solid |
+| **`MainViewModel`** | `OpenAssemblyAnimation` now passes `_materialBitmaps` to `AssemblyViewModel` |
+| **publish/ cleanup** | Removed 272 root-level DLL/EXE artifacts; kept only `v0.0.2.A/` and `v0.0.2.B/` |
+| **Release v0.0.2.C** | Published win-x64 self-contained EXE |
 
-## Session 21 — Changes (kept)
-
-| Item | Detail |
-|------|--------|
-| **3D absolute UV** | `BuildWpfModel` uses `BrushMappingMode.Absolute` + `Viewport=(0,0,1,1)` + `TileMode.Tile` on ImageBrush |
-| **RestoreProjectState** | Added `RebuildMaterialSlots(_currentMesh)` call so project load populates `_materialBitmaps` |
-| **SetMaterialTexture** | Added `OnPropertyChanged(nameof(Canvas2DTexture))` to force 2D canvas rebuild on slot change |
-
-## Session 20 — Changes (kept)
+## Session 23 — Changes (kept)
 
 | Item | Detail |
 |------|--------|
-| **3D multi-material** | `BuildWpfModel` now groups faces by `MaterialId`; creates one `GeometryModel3D` per material with its own texture from `_materialBitmaps`; single-texture fallback for unmatched materials |
-| **3D hit-test fixed** | Added `_geoFaceIds` dict (geometry → faceId list); `ResolveHitFaceId` maps local vertex index to global face ID; `MainWindow.HitTestFace` uses it |
-| **SetMaterialTexture** | Now rebuilds `MeshModel` with per-material bitmaps after TextureDialog changes any slot |
-| **Edge hit zone** | Added `EdgeTag` class; each edge now has a thin visual `Line` (`IsHitTestVisible=false`) + a transparent `StrokeThickness=8` hit-zone Line on top; all event handlers updated |
-| **Startup note** | Startup latency is HelixToolkit 3D renderer + .NET JIT cold start — use published Release build for best startup time; no code regression |
+| **`AssemblyStep.cs`** (new) | Lightweight DTO for one assembly step (Domain/Results) |
+| **`AssemblyPlanner.cs`** (new) | BFS piece-adjacency planner from `EdgeType.Cut` edges (Geometry/Algorithms) |
+| **`AssemblyViewModel.cs`** (new) | Original Approach A flat→3D animation; replaced in session 24 |
+| **`AssemblyAnimationWindow.xaml/.cs`** (new) | Dark-theme window with HelixViewport3D, progress bar, step controls |
+| **`MainViewModel`** | Added `OpenAssemblyAnimationCommand`; fixed `_canExport` missing `[NotifyCanExecuteChangedFor]` for PDF + animation commands |
+| **`MainWindow.xaml`** | Added 🎬 button to toolbar |
+| **Bug fix** | `OpenAssemblyAnimationCommand` stayed disabled after Unfold — now fixed |
 
 ---
 
@@ -137,7 +120,6 @@ No circular dependencies. Domain has zero external dependencies.
 
 | ID | Priority | Description |
 |----|----------|-------------|
-| **CRITICAL-3D-TEX** | 🔴 Critical | 3D multi-material texture wrong — `CommitPreview`/`EnterPreview` don't pass `_materialBitmaps` to `BuildWpfModel`; see root causes C-1/C-2/C-3 above |
 | TD-22-1 | 🟠 High | `AssimpMeshLoader` has **no material support** — all faces loaded via Assimp (FBX, 3DS, DAE…) get `MaterialId = -1`; multi-material texture system non-functional for non-OBJ formats |
 | TD-22-2 | 🟠 High | `ProjectState` / `.4hu` does not persist per-material texture paths → on project reload, all slot assignments (except mesh default) are lost |
 | TD-22-3 | 🟡 Medium | `SvgExporter` only embeds a single `texturePath`; multi-material SVG export shows at most one texture for the whole model |
@@ -147,17 +129,18 @@ No circular dependencies. Domain has zero external dependencies.
 
 ---
 
-## File Inventory (~65 source files, ~5 400 lines)
+## File Inventory (~67 source files, ~5 800 lines)
 
 ```
 Domain/Models/          Vertex Edge EdgeType Face Mesh PaperSizeModel ModelScale
 Domain/DualGraph/       DualGraph GraphNode GraphEdge
-Domain/Results/         UnfoldedFace GlueTab UnfoldResult
+Domain/Results/         UnfoldedFace GlueTab UnfoldResult AssemblyStep
 Domain/Settings/        AppSettings (View3D View2D Print General)
 Domain/Persistence/     ProjectState
 
 Geometry/Algorithms/    DualGraphBuilder KruskalMstBuilder EdgeMarker
                         UnfoldEngine OverlapDetector GlueTabGenerator PieceComputer
+                        AssemblyPlanner PieceFoldTree
 
 Application/Interfaces/ IMeshLoader IExporter
 Application/Services/   MeshService UnfoldService ProjectSerializer SettingsService
@@ -166,9 +149,10 @@ Infrastructure/         ObjMeshLoader AssimpMeshLoader MultiFormatMeshLoader
                         SvgExporter PdfExporter AffineTransformHelper
 
 App/ViewModels/         MainViewModel PieceViewModel SettingsViewModel
-                        MaterialTextureViewModel
+                        MaterialTextureViewModel AssemblyViewModel
 App/Controls/           PatternCanvasControl
 App/Dialogs/            UnfoldSetupDialog SettingsDialog TextureDialog
+                        AssemblyAnimationWindow
 App/Converters/         HexColorBrushConverter
 App/                    MainWindow App
 
@@ -182,7 +166,7 @@ App/Assets/             app.ico (6 sizes) logo.png
 ## Recommended Next Steps
 
 1. **Merge PR #1**: <https://github.com/nghiazer/4H-Unfolder/pull/1>
-2. Performance: spatial grid for overlap check (>2000 face meshes)
-3. PDO import (Pepakura native format — reverse-engineered, complex)
-4. Reload 3D model (re-apply unfold when source OBJ changes)
-5. Assembly animation / step-by-step fold guide
+2. Fix TD-22-1: Assimp material support (multi-format multi-texture)
+3. Fix TD-22-2: persist per-material texture paths in `.4hu` project files
+4. Performance: spatial grid for overlap check (>2000 face meshes)
+5. PDO import (Pepakura native format — reverse-engineered, complex)
