@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
+using FourHUnfolder.App.Services;
 using FourHUnfolder.App.ViewModels;
 using FourHUnfolder.Application.Interfaces;
 using FourHUnfolder.Application.Services;
@@ -22,6 +23,9 @@ public partial class App : System.Windows.Application
         // Settings (must be registered and loaded before anything that needs it)
         sc.AddSingleton<SettingsService>();
 
+        // Theme
+        sc.AddSingleton<ThemeService>();
+
         // Infrastructure
         sc.AddSingleton<IMeshLoader,  MultiFormatMeshLoader>();
         sc.AddSingleton<IExporter,    SvgExporter>();
@@ -38,7 +42,12 @@ public partial class App : System.Windows.Application
         Services = sc.BuildServiceProvider();
 
         // Load persisted settings before the main window opens
-        Services.GetRequiredService<SettingsService>().Load();
+        var settings = Services.GetRequiredService<SettingsService>();
+        settings.Load();
+
+        // Apply the persisted theme (replaces the static LightTheme.xaml from App.xaml)
+        var theme = Services.GetRequiredService<ThemeService>();
+        theme.Apply(settings.Current.General.ThemeMode);
     }
 
     protected override void OnExit(ExitEventArgs e)

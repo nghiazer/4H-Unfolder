@@ -5,6 +5,18 @@
 
 ---
 
+## Session 28 Changes (archived from SESSION_PROGRESS)
+
+| Item | Detail |
+|------|--------|
+| **Light/Dark theme** | `Themes/LightTheme.xaml` + `DarkTheme.xaml`; `ThemeService.Apply()`; `AppSettings.General.ThemeMode`; `SettingsViewModel.ThemeMode`; DI + startup apply |
+| **MainWindow/PatternCanvas/SettingsDialog** | All hardcoded colors → DynamicResource; Appearance GroupBox in General panel |
+| **Icon resize ×1.4** | `IconBtn` FontSize 15→20; `Icon2D`/`Toggle2D` FontSize 14→19 |
+| **Rounded icon buttons** | `ControlTemplate` CornerRadius=5 + theme-aware hover/pressed states |
+| **CanvasBackground auto-switch** | `OnSettingsChanged` auto-updates canvas bg default when theme changes |
+
+---
+
 ## Session 27 Changes (archived from SESSION_PROGRESS)
 
 | Item | Detail |
@@ -20,7 +32,7 @@
 
 ---
 
-## Session 26 Changes (archived from SESSION_PROGRESS)
+## Session 26 Changes (archived from SESSION_PROGRESS — moved to BUGS_HISTORY in session 28)
 
 | Item | Detail |
 |------|--------|
