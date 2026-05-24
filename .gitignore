@@ -26,3 +26,6 @@ coverage/
 # Publish output
 publish/
 publish_small/
+
+# Installer output
+dist/
