@@ -5,6 +5,17 @@
 
 ---
 
+## Session 29 Changes (archived from SESSION_PROGRESS)
+
+| Item | Detail |
+|------|--------|
+| **TD-28-4** | 3D viewport background auto-switch on theme change; `AppSettings.BackgroundColor` default → `"#e8ecf4"` (Light) |
+| **TD-28-1** | SettingsDialog footer buttons: 9 new semantic keys in both themes; footer → DynamicResource |
+| **TD-28-3** | AssemblyAnimationWindow / TextureDialog / UnfoldSetupDialog / ModelOrientationDialog fully theme-aware; 5 new theme keys (AssemblyStepBg, AssemblyCtrlBg, CtrlBtnBg/Fg/Border) |
+| **TD-24-1** | PieceFoldTree: added `EdgeDir3D` to `FoldNode`; AssemblyViewModel `ComputeFoldTransforms` adds `signCorr` to fix antiparallel axis sign bug |
+
+---
+
 ## Session 28 Changes (archived from SESSION_PROGRESS)
 
 | Item | Detail |

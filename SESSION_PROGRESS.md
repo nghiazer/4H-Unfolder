@@ -1,7 +1,7 @@
 # 4H-Unfolder — Session Progress Log
 
-> **Last updated:** 2026-05-24 (session 28 — Light/Dark theme system + icon resize/rounding; publish v0.0.2.G)
-> **Branch:** `feat/animation-fold-texture`  (new branch for session 28+)
+> **Last updated:** 2026-05-24 (session 29 — TD-28-1/3/4 + TD-24-1 resolved; publish v0.0.2.H)
+> **Branch:** `feat/animation-fold-texture`
 > **Target framework:** .NET 8 / WPF
 > **SDK required:** `winget install Microsoft.DotNet.SDK.8`
 > **History archive:** see [`BUGS_HISTORY.md`](BUGS_HISTORY.md) for all prior bug/tech-debt records
@@ -84,10 +84,27 @@ No circular dependencies. Domain has zero external dependencies.
 
 | Item | Result |
 |------|--------|
-| `dotnet build 4H-Unfolder.sln` | ✅ 0 errors, 6 warnings (NuGet NU1603 only) |
+| `dotnet build 4H-Unfolder.sln` | ✅ 0 errors, 4 warnings (NuGet NU1603 only) |
 | `dotnet test` | ✅ 34 / 34 passed |
-| `dotnet run --project src/FourHUnfolder.App` | ✅ App mở, Light mode mặc định, icon lớn hơn |
-| Published `4H-Unfolder.exe` v0.0.2.G (win-x64, self-contained) | ✅ Session 28 |
+| `dotnet run --project src/FourHUnfolder.App` | ✅ App mở, Light mode, all dialogs theme-aware |
+| Published `4H-Unfolder.exe` v0.0.2.H (win-x64, self-contained) | ✅ Session 29 |
+
+---
+
+## Session 29 — Changes
+
+| Item | Detail |
+|------|--------|
+| **TD-28-4 — 3D viewport background auto-update** | `MainViewModel`: thêm `LightView3DBg="#e8ecf4"` / `DarkView3DBg="#0d0d1a"`; `OnSettingsChanged` auto-switch `View3D.BackgroundColor` khi đổi theme nếu còn ở default cũ; `AppSettings.View3DSettings.BackgroundColor` default → `"#e8ecf4"` (Light) |
+| **TD-28-1 — SettingsDialog footer buttons** | Thêm 9 semantic keys vào LightTheme + DarkTheme: `BtnOkBg/Fg/Border`, `BtnApplyBg/Fg/Border`, `BtnCancelBg/Fg/Border`, `BtnResetBg/Fg/Border`; SettingsDialog footer buttons → DynamicResource |
+| **TD-28-3 — 4 dialogs theme-aware** | Thêm 5 keys mới: `AssemblyStepBg`, `AssemblyCtrlBg`, `CtrlBtnBg/Fg/Border`; tất cả 4 dialogs dùng DynamicResource cho Window bg, text, inputs, borders, buttons |
+| **AssemblyAnimationWindow** | Window bg → `DialogBg`; step bar → `AssemblyStepBg`/`TextAccent`; control bar → `AssemblyCtrlBg`; CtrlBtn/PlayBtn style → DynamicResource; separators/text → DynamicResource. 3D viewport giữ `#0d0d1a` (intentional cinema mode) |
+| **TextureDialog** | Window bg → `DialogBg`; left nav → `DialogNavBg`/`BorderLight`; list hover/selected → `NavSelectedBg`/`NavHoverBg`; text → `TextPrimary`/`TextMuted`; borders → `BorderNormal`; buttons → `BtnApply/BtnCancel/BtnOk` |
+| **UnfoldSetupDialog** | Window bg → `DialogBg`; Label/TextBox/ComboBox/GroupBox styles → DynamicResource; RadioButton → `TextPrimary`; bbox label → `TextMuted`; OK/Cancel → `BtnOk/BtnCancel` |
+| **ModelOrientationDialog** | Window bg → `DialogBg`; Label/ComboBox/CheckBox styles → DynamicResource; preview border → `BorderNormal`; title/subtitle/separator → DynamicResource; Flip UV box → `DialogNavBg`; OK → `BtnOk`, Skip → `CtrlBtnBg`. Axis label colors (RGB) và parallel warning (red) giữ nguyên semantic colors |
+| **TD-24-1 — PieceFoldTree fold direction** | `FoldNode` thêm `EdgeDir3D` property; `Build()` populate `EdgeDir3D = Normalize(vB_3D - vA_3D)`; `ComputeFoldTransforms` thêm `signCorr = dot(axis, node.EdgeDir3D) >= 0 ? 1f : -1f` → fix fold direction khi flat-space axis antiparallel với 3D edge direction |
+| **Build/Test** | ✅ 0 errors / 34 tests passed / app opens clean |
+| **Release v0.0.2.H** | Published win-x64 self-contained EXE |
 
 ---
 
@@ -95,45 +112,18 @@ No circular dependencies. Domain has zero external dependencies.
 
 | Item | Detail |
 |------|--------|
-| **Light/Dark theme system** | `Themes/LightTheme.xaml` + `DarkTheme.xaml` — 2 ResourceDictionary với 30+ semantic color keys; `ThemeService.Apply(mode)` swap MergedDictionaries tại runtime → DynamicResource cập nhật ngay lập tức |
-| **ThemeService** | `App/Services/ThemeService.cs`; registered `AddSingleton<ThemeService>()` trong DI; applied on startup từ `settings.General.ThemeMode` |
-| **Settings persistence** | `AppSettings.GeneralSettings` + `ThemeMode = "Light"` (default); `SettingsViewModel` + `ThemeMode` field + `ThemeModes = ["Light","Dark"]`; Settings > General > Appearance > UI theme ComboBox |
-| **MainWindow.xaml** | Window + toolbar + status bar + splitter + 2D border đều dùng DynamicResource; toolbar bọc `ToolbarBg`; status bar bọc `StatusBarBg` |
-| **PatternCanvasControl.xaml** | Grid/ScrollViewer/Toolbar background dùng DynamicResource `Canvas2DBg`/`Canvas2DScrollerBg`/`Toolbar2DBg` |
-| **SettingsDialog.xaml** | Toàn bộ dialog chuyển sang DynamicResource; thêm Appearance GroupBox trong General panel |
-| **Icon resize ×1.4** | `IconBtn` FontSize 15→20; `Icon2D`/`Toggle2D` FontSize 14→19 |
-| **Rounded icon buttons** | Custom `ControlTemplate` với `CornerRadius="5"` + Hover/Pressed/Disabled/Checked triggers; hover color từ `IconBtnHoverBg`/`IconBtnPressedBg` (theme-aware) |
-| **Canvas 2D auto-switch** | `MainViewModel.OnSettingsChanged` detect theme change → auto-update `CanvasBackground` nếu còn ở default của theme cũ; default sáng `#e8eaf0` cho Light mode |
-| **App.xaml** | Cấu trúc `ResourceDictionary.MergedDictionaries` với LightTheme làm default; global Button Padding 14,6→16,7 |
-| **Build/Test** | ✅ 0 errors / 34 tests passed / Light mode mặc định |
+| **Light/Dark theme system** | `Themes/LightTheme.xaml` + `DarkTheme.xaml`; `ThemeService.Apply()`; `AppSettings.General.ThemeMode`; `SettingsViewModel.ThemeMode` |
+| **MainWindow/PatternCanvas/SettingsDialog** | All hardcoded colors → DynamicResource; Appearance GroupBox in General panel |
+| **Icon resize ×1.4 + rounded buttons** | `IconBtn`/`Icon2D`/`Toggle2D` FontSize up; ControlTemplate CornerRadius=5 |
+| **Canvas 2D auto-switch** | `OnSettingsChanged` auto-updates canvas bg default when theme changes |
+| **Installer** | `installer/4H-Unfolder.iss` + `installer/build-installer.ps1`; 48.3 MB EXE |
 | **Release v0.0.2.G** | Published win-x64 self-contained EXE |
-
----
-
-## Session 27 — Changes
-
-| Item | Detail |
-|------|--------|
-| **Bug — ModelOrientationDialog crash on load** | `ResizeMode="CanMinResize"` không tồn tại trong WPF `ResizeMode` enum → `TypeConverterMarkupExtension` exception khi BAML load dialog; đã fix → `CanMinimize` |
-| **Bug — `ComputeRotation` reflection matrix** | Cross product sai thứ tự: `Cross(front, up)` → right = (-1,0,0) với default +Y/+Z → reflection matrix flip X → mesh bị mirror + texture biến mất; fix: `Cross(up, front)` + `Cross(front, right)` → identity cho default |
-| **Bug — `BillboardTextVisual3D` removed** | 6 axis label elements dùng HelixToolkit `BillboardTextVisual3D` bị xóa để tránh compat risk trên .NET 8; thay bằng 2D Canvas overlay (TD-27-2) |
-| **Diagnostics — `Error()` inner exception** | `MainViewModel.Error()` trước chỉ show `ex.Message` (outer); nay walk `InnerException` chain → message hữu ích hơn |
-| **TD-25-2 — Edge hover O(n) → O(1)** | `MainWindow.xaml.cs`: `BuildEdgeGrid()` rasterize tất cả edges vào `Dictionary<(int,int), List<int>>` (cell 24px); `FindNearestEdge` chỉ test 3×3 cells (~90 candidates); grid invalidated on camera move + mesh change |
-| **TD-27-1 — Camera auto-fit** | `ModelOrientationDialog`: `ZoomExtents(0)` qua `Dispatcher.BeginInvoke(DispatcherPriority.Loaded)` sau khi mesh được add vào viewport |
-| **TD-27-2 — Axis labels 2D overlay** | `ModelOrientationDialog`: Canvas overlay với 3 `TextBlock` (+X/#ff5555, +Y/#44cc44, +Z/#5599ff); `Viewport3DHelper.Point3DtoPoint2D(CubeViewport.Viewport, pt)` cập nhật vị trí trên mỗi `CameraChanged` |
-| **TD-27-3 — Parallel-axes validation** | `ModelOrientationViewModel`: `AxesAreParallel` computed property + `[NotifyPropertyChangedFor]`; XAML: warning TextBlock (DataTrigger) + OK button Style trigger `IsEnabled=False, Opacity=0.35` khi parallel |
-| **Build/Test** | ✅ 0 errors / 34 tests passed / app loads mesh clean |
-| **Release v0.0.2.F** | Published win-x64 self-contained EXE |
 
 ## Remaining Tech Debt
 
 | ID | Priority | Description |
 |----|----------|-------------|
-| TD-24-1 | 🟡 Medium | `PieceFoldTree` fold animation: angles computed from 3D normals applied in flat space — fold direction may be wrong for non-trivial pieces |
-| TD-25-1 | 🟢 Low | `ModelOrientationDialog` shown on every mesh load; add "don't ask again" setting for users who always use Y-up Z-front models |
-| TD-28-1 | 🟡 Medium | `SettingsDialog` footer buttons (OK/Apply/Cancel/Reset) có hardcoded background colors — will look odd in Light mode |
-| TD-28-3 | 🟡 Medium | `AssemblyAnimationWindow`, `TextureDialog`, `UnfoldSetupDialog`, `ModelOrientationDialog` chưa theme-aware (hardcoded dark backgrounds) |
-| TD-28-4 | 🟢 Low | 3D viewport background (`View3D.BackgroundColor`) không tự cập nhật khi đổi theme — user cần tự chỉnh trong Settings > 3D View |
+| TD-25-1 | 🟢 Low | `ModelOrientationDialog` shown on every mesh load; add "don't ask again" setting |
 | Performance | 🟢 Low | O(n²) overlap check → spatial grid for meshes > 2000 faces |
 
 ---

@@ -240,8 +240,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private string _lastThemeMode = "Light";
 
     // Canonical default canvas backgrounds per theme (auto-swapped on theme change)
-    private const string LightCanvasBg = "#e8eaf0";
-    private const string DarkCanvasBg  = "#3a3a5a";
+    private const string LightCanvasBg  = "#e8eaf0";
+    private const string DarkCanvasBg   = "#3a3a5a";
+    private const string LightView3DBg  = "#e8ecf4";
+    private const string DarkView3DBg   = "#0d0d1a";
 
     private static string View3DHash(AppSettings.View3DSettings v) =>
         $"{v.FaceColor}|{v.BackFaceColor}|{v.FaceOpacity:F4}|{v.DisplayMode}|{v.EdgeOverlayColor}|{v.EdgeOverlayThickness:F4}";
@@ -263,6 +265,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
             if (string.Equals(S.View2D.CanvasBackground, oldCanvasBg, StringComparison.OrdinalIgnoreCase))
                 PatchSettings(s => s.View2D.CanvasBackground = newCanvasBg);
+
+            // Auto-switch 3D viewport background if still at previous theme's default
+            var oldView3DBg = goingLight ? DarkView3DBg : LightView3DBg;
+            var newView3DBg = goingLight ? LightView3DBg : DarkView3DBg;
+            if (string.Equals(S.View3D.BackgroundColor, oldView3DBg, StringComparison.OrdinalIgnoreCase))
+                PatchSettings(s => s.View3D.BackgroundColor = newView3DBg);
 
             _lastThemeMode = newTheme;
         }
