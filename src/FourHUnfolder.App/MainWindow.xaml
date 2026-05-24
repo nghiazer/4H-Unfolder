@@ -160,6 +160,11 @@
                         Click="TextureButton_Click"
                         Visibility="{Binding TexturePanelVisible}"
                         ToolTip="Texture manager"/>
+                <Separator/>
+                <Button Style="{StaticResource IconBtn}" Content="🎬"
+                        Command="{Binding OpenAssemblyAnimationCommand}"
+                        IsEnabled="{Binding CanExport}"
+                        ToolTip="Assembly animation — step-by-step fold guide"/>
             </StackPanel>
         </Border>
 

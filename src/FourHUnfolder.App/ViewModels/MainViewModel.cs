@@ -454,6 +454,20 @@ public partial class MainViewModel : ObservableObject, IDisposable
         catch (Exception ex) { Error("Unfold failed", ex); }
     }
 
+    // ── ASSEMBLY ANIMATION ────────────────────────────────────────────────────
+    [RelayCommand(CanExecute = nameof(CanExport))]
+    private void OpenAssemblyAnimation()
+    {
+        if (_currentMesh == null || _lastUnfoldResult == null) return;
+
+        var vm  = new AssemblyViewModel(_currentMesh, _lastUnfoldResult, Pieces, ScaleMmPerUnit);
+        var win = new Dialogs.AssemblyAnimationWindow(vm)
+        {
+            Owner = WpfApp.Current.MainWindow
+        };
+        win.Show();
+    }
+
     [RelayCommand(CanExecute = nameof(CanExport))]
     private void ExportSvg()
     {
