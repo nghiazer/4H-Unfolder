@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -15,6 +15,16 @@ public partial class MainWindow : Window
 {
     private MainViewModel Vm => (MainViewModel)DataContext;
     private TextureDialog? _textureDialog;
+
+    // ── Feature B: 3D edge hover state ────────────────────────────────────────
+    private int   _hoveredEdgeId = -1;
+    private Point _rmbDownPos;
+    private const double HoverThresholdPx = 8.0;
+
+    // TD-25-2: screen-space edge grid for O(1) hover lookup
+    private const int GridCellPx = 24;
+    private readonly Dictionary<(int, int), List<int>> _edgeScreenGrid = new();
+    private bool _edgeGridDirty = true;
 
     public MainWindow()
     {
@@ -33,12 +43,26 @@ public partial class MainWindow : Window
 
     // ── startup ───────────────────────────────────────────────────────────────
 
-    private void OnLoaded(object s, RoutedEventArgs e) => ApplyCameraSettings();
+    private void OnLoaded(object s, RoutedEventArgs e)
+    {
+        ApplyCameraSettings();
+        // TD-25-2: invalidate edge grid whenever the camera moves
+        Viewport3D.CameraChanged += (_, _) => _edgeGridDirty = true;
+    }
 
     private void OnVmPropertyChanged(object? s, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(MainViewModel.CameraSettingsVersion))
             ApplyCameraSettings();
+
+        // When mesh changes (new unfold or load), reset hover state + invalidate edge grid
+        if (e.PropertyName is nameof(MainViewModel.PiecesVersion)
+                           or nameof(MainViewModel.IsUnfolded)
+                           or nameof(MainViewModel.CurrentMesh))
+        {
+            _hoveredEdgeId  = -1;
+            _edgeGridDirty  = true;   // TD-25-2
+        }
     }
 
     private void ApplyCameraSettings()
@@ -57,65 +81,211 @@ public partial class MainWindow : Window
     {
         if (e.LeftButton != MouseButtonState.Pressed) return;
         if (!Vm.IsUnfolded) return;
+        if (_hoveredEdgeId >= 0) return;  // LMB on edge is handled by PreviewLMBDown
 
         int faceId = HitTestFace(e.GetPosition(Viewport3D.Viewport));
         if (faceId >= 0)
             Vm.SelectFace3D(faceId);
         else
-            Vm.ClearSelection();   // click on empty 3D space → deselect
+            Vm.ClearSelection();
         // Do NOT set e.Handled — let HelixToolkit keep orbit control
     }
 
-    private void Viewport3D_PreviewRightClick(object sender, MouseButtonEventArgs e)
+    // ── Feature B: Left-click on hovered edge = toggle fold/cut ──────────────
+
+    private void Viewport3D_PreviewLMBDown(object sender, MouseButtonEventArgs e)
+    {
+        if (_hoveredEdgeId < 0) return;
+        if (!Vm.IsUnfolded) return;
+
+        Vm.ToggleEdge(_hoveredEdgeId);
+        _hoveredEdgeId = -1;       // reset hover (edge type just changed)
+        Vm.ClearEdgeHover();
+        e.Handled = true;          // prevent orbit from starting
+    }
+
+    // ── Feature B: Right-click = set rotation pivot (click, not drag) ────────
+
+    private void Viewport3D_RMBDown(object sender, MouseButtonEventArgs e)
+    {
+        _rmbDownPos = e.GetPosition(Viewport3D);
+        // Do NOT handle — let HelixToolkit start its orbit/pan tracking
+    }
+
+    private void Viewport3D_RMBUp(object sender, MouseButtonEventArgs e)
     {
         if (!Vm.IsUnfolded) return;
 
-        int faceId = HitTestFace(e.GetPosition(Viewport3D.Viewport));
-        if (faceId < 0) return;
+        var upPos     = e.GetPosition(Viewport3D);
+        double drag   = (upPos - _rmbDownPos).Length;
+        if (drag >= 4.0) return;   // was a drag, not a click
 
-        Vm.SelectFace3D(faceId);
-        ShowFaceContextMenu(faceId);
-        e.Handled = true;   // prevent HelixToolkit from processing right-click
+        // Set camera pivot to the 3D point under the cursor
+        var hitPos = e.GetPosition(Viewport3D.Viewport);
+        if (Viewport3D.FindNearest(hitPos, out Point3D hitPt, out _, out _))
+        {
+            Viewport3D.LookAt(hitPt, 300);   // 300 ms animation
+            e.Handled = true;
+        }
     }
 
-    private void ShowFaceContextMenu(int faceId)
+    // ── Feature B: Mouse move = edge hover detection ──────────────────────────
+
+    private void Viewport3D_MouseMove(object sender, MouseEventArgs e)
     {
-        var menu = new ContextMenu();
+        if (!Vm.IsUnfolded) return;
 
-        // ── header (non-clickable info) ──────────────────────────────────────
-        menu.Items.Add(new MenuItem
+        var mousePos  = e.GetPosition(Viewport3D);
+        int newHover  = FindNearestEdge(mousePos, HoverThresholdPx);
+
+        if (newHover == _hoveredEdgeId) return;   // unchanged
+
+        _hoveredEdgeId = newHover;
+        if (newHover < 0)
+            Vm.ClearEdgeHover();
+        else
+            Vm.HoverEdge(newHover, Vm.IsEdgeFold(newHover));
+    }
+
+    /// <summary>
+    /// TD-25-2: Builds a screen-space grid that buckets each edge into the
+    /// grid cells it passes through.  Called once per camera move or mesh change;
+    /// subsequent <see cref="FindNearestEdge"/> calls are O(1) on average.
+    /// </summary>
+    private void BuildEdgeGrid()
+    {
+        _edgeScreenGrid.Clear();
+        var mesh = Vm.CurrentMesh;
+        if (mesh == null) { _edgeGridDirty = false; return; }
+
+        foreach (var edge in mesh.Edges)
         {
-            Header = $"Face #{faceId}",
-            IsEnabled = false,
-            FontWeight = FontWeights.Bold
-        });
-        menu.Items.Add(new Separator());
+            if (!edge.ConnectsFaces) continue;
 
-        // ── Detach this face ─────────────────────────────────────────────────
-        var detachFace = new MenuItem { Header = "✂  Detach this face" };
-        detachFace.Click += (_, _) => Vm.DetachFace(faceId);
-        menu.Items.Add(detachFace);
+            var pa      = mesh.Vertices[edge.V1].Position;
+            var pb      = mesh.Vertices[edge.V2].Position;
+            var screenA = ProjectToScreen(new Point3D(pa.X, pa.Y, pa.Z));
+            var screenB = ProjectToScreen(new Point3D(pb.X, pb.Y, pb.Z));
+            if (double.IsNaN(screenA.X) || double.IsNaN(screenB.X)) continue;
 
-        // ── Detach whole piece ────────────────────────────────────────────────
-        var detachPiece = new MenuItem { Header = "✂✂ Detach entire piece" };
-        detachPiece.Click += (_, _) => Vm.DetachPiece(faceId);
-        menu.Items.Add(detachPiece);
+            // Rasterise the screen segment at half-cell-width steps
+            double dx    = screenB.X - screenA.X;
+            double dy    = screenB.Y - screenA.Y;
+            double len   = Math.Sqrt(dx * dx + dy * dy);
+            int    steps = Math.Max(1, (int)(len / (GridCellPx / 2.0)));
 
-        // ── Attach to cut neighbors ───────────────────────────────────────────
-        var neighbors = Vm.GetCutNeighbors(faceId).ToList();
-        if (neighbors.Count > 0)
-        {
-            menu.Items.Add(new Separator());
-            foreach (int nb in neighbors)
+            var seen = new HashSet<(int, int)>();
+            for (int s = 0; s <= steps; s++)
             {
-                var nbCapture = nb;
-                var item = new MenuItem { Header = $"🔗  Attach to face {nb}" };
-                item.Click += (_, _) => Vm.AttachFaces(faceId, nbCapture);
-                menu.Items.Add(item);
+                double t  = (double)s / steps;
+                int    cx = (int)Math.Floor((screenA.X + t * dx) / GridCellPx);
+                int    cy = (int)Math.Floor((screenA.Y + t * dy) / GridCellPx);
+                if (!seen.Add((cx, cy))) continue;
+
+                if (!_edgeScreenGrid.TryGetValue((cx, cy), out var list))
+                    _edgeScreenGrid[(cx, cy)] = list = [];
+                list.Add(edge.Id);
             }
         }
+        _edgeGridDirty = false;
+    }
 
-        menu.IsOpen = true;
+    /// <summary>
+    /// Returns the mesh edge closest to <paramref name="mousePos"/> within
+    /// <paramref name="threshold"/> pixels, or -1 if none qualifies.
+    /// Uses a screen-space grid (TD-25-2) so only ~9 cells (~90 edges) are
+    /// tested per call instead of the full edge list.
+    /// </summary>
+    private int FindNearestEdge(Point mousePos, double threshold)
+    {
+        if (_edgeGridDirty) BuildEdgeGrid();
+
+        var mesh = Vm.CurrentMesh;
+        if (mesh == null) return -1;
+
+        int    mouseCx = (int)Math.Floor(mousePos.X / GridCellPx);
+        int    mouseCy = (int)Math.Floor(mousePos.Y / GridCellPx);
+        int    bestEdge = -1;
+        double bestDist = threshold;
+
+        // Collect candidate edge IDs from 3×3 neighbourhood (avoids edge at cell boundary)
+        var candidates = new HashSet<int>();
+        for (int dcx = -1; dcx <= 1; dcx++)
+        for (int dcy = -1; dcy <= 1; dcy++)
+            if (_edgeScreenGrid.TryGetValue((mouseCx + dcx, mouseCy + dcy), out var list))
+                foreach (int id in list) candidates.Add(id);
+
+        foreach (int id in candidates)
+        {
+            if ((uint)id >= (uint)mesh.Edges.Count) continue;
+            var edge = mesh.Edges[id];
+
+            var pa      = mesh.Vertices[edge.V1].Position;
+            var pb      = mesh.Vertices[edge.V2].Position;
+            var screenA = ProjectToScreen(new Point3D(pa.X, pa.Y, pa.Z));
+            var screenB = ProjectToScreen(new Point3D(pb.X, pb.Y, pb.Z));
+            if (double.IsNaN(screenA.X) || double.IsNaN(screenB.X)) continue;
+
+            double d = DistPointToSegment(mousePos, screenA, screenB);
+            if (d < bestDist) { bestDist = d; bestEdge = id; }
+        }
+        return bestEdge;
+    }
+
+    /// <summary>
+    /// Projects a world-space 3D point to 2D screen coordinates using the
+    /// PerspectiveCamera's current view and projection.
+    /// Returns NaN,NaN if the point is behind the camera.
+    /// </summary>
+    private Point ProjectToScreen(Point3D worldPt)
+    {
+        var cam = MainCamera3D;
+        if (cam == null) return new Point(double.NaN, double.NaN);
+
+        double w = Viewport3D.ActualWidth;
+        double h = Viewport3D.ActualHeight;
+        if (w <= 0 || h <= 0) return new Point(double.NaN, double.NaN);
+
+        var lookDir = cam.LookDirection;  lookDir.Normalize();
+        var upDir   = cam.UpDirection;    upDir.Normalize();
+
+        var rightDir = Vector3D.CrossProduct(lookDir, upDir);
+        rightDir.Normalize();
+        var trueUp = Vector3D.CrossProduct(rightDir, lookDir);
+
+        var diff   = worldPt - cam.Position;
+        double xCam = Vector3D.DotProduct(diff, rightDir);
+        double yCam = Vector3D.DotProduct(diff, trueUp);
+        double zCam = Vector3D.DotProduct(diff, lookDir);
+
+        if (zCam <= 0) return new Point(double.NaN, double.NaN);   // behind camera
+
+        double fovRad     = cam.FieldOfView * Math.PI / 180.0;
+        double tanHalfFov = Math.Tan(fovRad / 2.0);
+        double aspect     = w / h;
+
+        double ndcX = xCam / (zCam * tanHalfFov * aspect);
+        double ndcY = yCam / (zCam * tanHalfFov);
+
+        return new Point(
+            (ndcX + 1.0) / 2.0 * w,
+            (1.0 - ndcY) / 2.0 * h);
+    }
+
+    /// Minimum distance from point <paramref name="p"/> to line segment AB.
+    private static double DistPointToSegment(Point p, Point a, Point b)
+    {
+        double dx = b.X - a.X, dy = b.Y - a.Y;
+        double lenSq = dx * dx + dy * dy;
+        if (lenSq < 1e-10)
+        {
+            double ex = p.X - a.X, ey = p.Y - a.Y;
+            return Math.Sqrt(ex * ex + ey * ey);
+        }
+        double t = Math.Max(0, Math.Min(1, ((p.X - a.X) * dx + (p.Y - a.Y) * dy) / lenSq));
+        double projX = a.X + t * dx, projY = a.Y + t * dy;
+        double fx = p.X - projX, fy = p.Y - projY;
+        return Math.Sqrt(fx * fx + fy * fy);
     }
 
     // ── texture dialog ────────────────────────────────────────────────────────
@@ -151,8 +321,6 @@ public partial class MainWindow : Window
 
         if (hit == null) return -1;
 
-        // Delegate to ViewModel which tracks the geometry→faceId mapping
-        // (supports both single-geometry and per-material multi-geometry models)
         return Vm.ResolveHitFaceId(hit.MeshHit, hit.VertexIndex1, hit.VertexIndex2, hit.VertexIndex3);
     }
 }

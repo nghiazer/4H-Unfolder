@@ -1,6 +1,6 @@
 # 4H-Unfolder — Session Progress Log
 
-> **Last updated:** 2026-05-24 (session 24 — fold animation + texture in animation window, publish v0.0.2.C)
+> **Last updated:** 2026-05-24 (session 27 — Fix ModelOrientationDialog crash + ComputeRotation math; TD-25-2/27-1/27-2/27-3; publish v0.0.2.F)
 > **Branch:** `feat/paper-model-unfolder`  (PR #1 open against `main`)
 > **Target framework:** .NET 8 / WPF
 > **SDK required:** `winget install Microsoft.DotNet.SDK.8`
@@ -86,33 +86,39 @@ No circular dependencies. Domain has zero external dependencies.
 |------|--------|
 | `dotnet build 4H-Unfolder.sln` | ✅ 0 errors, 7 warnings (NuGet NU1603 only) |
 | `dotnet test` | ✅ 34 / 34 passed |
-| `dotnet run --project src/FourHUnfolder.App` | ✅ App mở, không crash |
-| Published `4H-Unfolder.exe` v0.0.2.C (win-x64, self-contained, 148 MB) | ✅ Session 24 |
+| `dotnet run --project src/FourHUnfolder.App` | ✅ App mở, load mesh không crash |
+| Published `4H-Unfolder.exe` v0.0.2.F (win-x64, self-contained) | ✅ Session 27 |
 
 ---
 
-## Session 24 — Changes
+## Session 27 — Changes
 
 | Item | Detail |
 |------|--------|
-| **`PieceFoldTree.cs`** (new) | BFS spanning tree of fold edges per piece; `ComputeFoldAngle` via signed angle between 3-D face normals; `Geometry/Algorithms` layer |
-| **`AssemblyViewModel.cs`** (rewrite) | Two-phase animation: Phase 1 paper-fold (accumulated `Matrix4x4` per face, 600ms) + Phase 2 fly-in lerp (600ms); total 1200ms per step |
-| **Texture in animation** | Assembled + current pieces use per-material `ImageBrush`; current piece adds `EmissiveMaterial(amber #ff,cc,00 α=90)` overlay; ghost stays translucent solid |
-| **`MainViewModel`** | `OpenAssemblyAnimation` now passes `_materialBitmaps` to `AssemblyViewModel` |
-| **publish/ cleanup** | Removed 272 root-level DLL/EXE artifacts; kept only `v0.0.2.A/` and `v0.0.2.B/` |
-| **Release v0.0.2.C** | Published win-x64 self-contained EXE |
+| **Bug — ModelOrientationDialog crash on load** | `ResizeMode="CanMinResize"` không tồn tại trong WPF `ResizeMode` enum → `TypeConverterMarkupExtension` exception khi BAML load dialog; đã fix → `CanMinimize` |
+| **Bug — `ComputeRotation` reflection matrix** | Cross product sai thứ tự: `Cross(front, up)` → right = (-1,0,0) với default +Y/+Z → reflection matrix flip X → mesh bị mirror + texture biến mất; fix: `Cross(up, front)` + `Cross(front, right)` → identity cho default |
+| **Bug — `BillboardTextVisual3D` removed** | 6 axis label elements dùng HelixToolkit `BillboardTextVisual3D` bị xóa để tránh compat risk trên .NET 8; thay bằng 2D Canvas overlay (TD-27-2) |
+| **Diagnostics — `Error()` inner exception** | `MainViewModel.Error()` trước chỉ show `ex.Message` (outer); nay walk `InnerException` chain → message hữu ích hơn |
+| **TD-25-2 — Edge hover O(n) → O(1)** | `MainWindow.xaml.cs`: `BuildEdgeGrid()` rasterize tất cả edges vào `Dictionary<(int,int), List<int>>` (cell 24px); `FindNearestEdge` chỉ test 3×3 cells (~90 candidates); grid invalidated on camera move + mesh change |
+| **TD-27-1 — Camera auto-fit** | `ModelOrientationDialog`: `ZoomExtents(0)` qua `Dispatcher.BeginInvoke(DispatcherPriority.Loaded)` sau khi mesh được add vào viewport |
+| **TD-27-2 — Axis labels 2D overlay** | `ModelOrientationDialog`: Canvas overlay với 3 `TextBlock` (+X/#ff5555, +Y/#44cc44, +Z/#5599ff); `Viewport3DHelper.Point3DtoPoint2D(CubeViewport.Viewport, pt)` cập nhật vị trí trên mỗi `CameraChanged` |
+| **TD-27-3 — Parallel-axes validation** | `ModelOrientationViewModel`: `AxesAreParallel` computed property + `[NotifyPropertyChangedFor]`; XAML: warning TextBlock (DataTrigger) + OK button Style trigger `IsEnabled=False, Opacity=0.35` khi parallel |
+| **Build/Test** | ✅ 0 errors / 34 tests passed / app loads mesh clean |
+| **Release v0.0.2.F** | Published win-x64 self-contained EXE |
 
-## Session 23 — Changes (kept)
+## Session 26 — Changes
 
 | Item | Detail |
 |------|--------|
-| **`AssemblyStep.cs`** (new) | Lightweight DTO for one assembly step (Domain/Results) |
-| **`AssemblyPlanner.cs`** (new) | BFS piece-adjacency planner from `EdgeType.Cut` edges (Geometry/Algorithms) |
-| **`AssemblyViewModel.cs`** (new) | Original Approach A flat→3D animation; replaced in session 24 |
-| **`AssemblyAnimationWindow.xaml/.cs`** (new) | Dark-theme window with HelixViewport3D, progress bar, step controls |
-| **`MainViewModel`** | Added `OpenAssemblyAnimationCommand`; fixed `_canExport` missing `[NotifyCanExecuteChangedFor]` for PDF + animation commands |
-| **`MainWindow.xaml`** | Added 🎬 button to toolbar |
-| **Bug fix** | `OpenAssemblyAnimationCommand` stayed disabled after Unfold — now fixed |
+| **TD-22-1 — Assimp material support** | `AssimpMeshLoader` now reads `scene.Materials` → populates `mesh.MaterialNames`, `mesh.MaterialTexturePaths`, `mesh.SuggestedTexturePath`; each sub-mesh uses `aMesh.MaterialIndex` → every face gets correct `MaterialId`; texture paths resolved relative to model file |
+| **TD-22-2 — Multi-texture project persistence** | `ProjectState` +`MaterialTexturePaths` + `BundledMaterialTextureExts`; `ProjectSerializer.SaveBundle` embeds per-material textures as `texture_<matId>.<ext>` entries; `LoadBundle` reconstructs paths from temp dir; `Save`/`Load` relativizes/resolves paths; `MainViewModel.BuildProjectState` + `RestoreProjectState` updated |
+| **TD-22-3 — Multi-material SVG export** | `UnfoldedFace` +`MaterialId` param; `UnfoldEngine` passes `mesh.Faces[faceId].MaterialId`; `IExporter.Export` adds `perMaterialTextures` param; `SvgExporter` builds per-material data URIs, resolves per-face URI by `face.MaterialId` → fallback `-1`; `MainViewModel.BuildExportLayout` passes `fd.MaterialId`; `ExportSvg` passes `GetMaterialTexturePaths()` |
+| **TD-22-4 — Float edge-dedup fix** | `SvgExporter` + `PdfExporter`: replaced raw `(float,float,float,float)` tuple with `EdgeKey(a,b)` helper that rounds to 3 decimal places and canonicalises order → reliable dedup |
+| **TD-22-5 — UV double-flip removed** | Removed `PostProcessSteps.FlipUVs` from `AssimpMeshLoader`; `ToWpfUV` in `MainViewModel` already flips V (`1.0 - uv.Y`); single flip is correct for WPF top-left UV convention |
+| **`Mesh.AddFace`** | Added optional `materialId = -1` parameter; sets `face.MaterialId` |
+| **`MainViewModel`** | +`GetMaterialTexturePaths()` helper; `RestoreProjectState` restores per-material slots before building 3D model |
+| **Build/Test** | ✅ 0 errors / 34 tests passed / app starts clean |
+| **Release v0.0.2.E** | Published win-x64 self-contained EXE |
 
 ---
 
@@ -120,16 +126,13 @@ No circular dependencies. Domain has zero external dependencies.
 
 | ID | Priority | Description |
 |----|----------|-------------|
-| TD-22-1 | 🟠 High | `AssimpMeshLoader` has **no material support** — all faces loaded via Assimp (FBX, 3DS, DAE…) get `MaterialId = -1`; multi-material texture system non-functional for non-OBJ formats |
-| TD-22-2 | 🟠 High | `ProjectState` / `.4hu` does not persist per-material texture paths → on project reload, all slot assignments (except mesh default) are lost |
-| TD-22-3 | 🟡 Medium | `SvgExporter` only embeds a single `texturePath`; multi-material SVG export shows at most one texture for the whole model |
-| TD-22-4 | 🟡 Medium | `SvgExporter` + `PdfExporter` edge-dedup uses `HashSet<(float,float,float,float)>` — float equality is unreliable; should use canonical mesh edge ID |
-| TD-22-5 | 🟡 Medium | `AssimpMeshLoader` loads with `PostProcessSteps.FlipUVs` AND `ToWpfUV` applies `1.0 - uv.Y` — double-flip cancels out but intent is undocumented; remove one layer |
+| TD-24-1 | 🟡 Medium | `PieceFoldTree` fold animation: angles computed from 3D normals applied in flat space — fold direction may be wrong for non-trivial pieces |
+| TD-25-1 | 🟢 Low | `ModelOrientationDialog` shown on every mesh load; add "don't ask again" setting for users who always use Y-up Z-front models |
 | Performance | 🟢 Low | O(n²) overlap check → spatial grid for meshes > 2000 faces |
 
 ---
 
-## File Inventory (~67 source files, ~5 800 lines)
+## File Inventory (~67 source files, ~5 900 lines)
 
 ```
 Domain/Models/          Vertex Edge EdgeType Face Mesh PaperSizeModel ModelScale
@@ -149,10 +152,10 @@ Infrastructure/         ObjMeshLoader AssimpMeshLoader MultiFormatMeshLoader
                         SvgExporter PdfExporter AffineTransformHelper
 
 App/ViewModels/         MainViewModel PieceViewModel SettingsViewModel
-                        MaterialTextureViewModel AssemblyViewModel
+                        MaterialTextureViewModel AssemblyViewModel ModelOrientationViewModel
 App/Controls/           PatternCanvasControl
 App/Dialogs/            UnfoldSetupDialog SettingsDialog TextureDialog
-                        AssemblyAnimationWindow
+                        AssemblyAnimationWindow ModelOrientationDialog
 App/Converters/         HexColorBrushConverter
 App/                    MainWindow App
 
@@ -166,7 +169,7 @@ App/Assets/             app.ico (6 sizes) logo.png
 ## Recommended Next Steps
 
 1. **Merge PR #1**: <https://github.com/nghiazer/4H-Unfolder/pull/1>
-2. Fix TD-22-1: Assimp material support (multi-format multi-texture)
-3. Fix TD-22-2: persist per-material texture paths in `.4hu` project files
+2. Fix TD-24-1: PieceFoldTree fold animation direction accuracy
+3. Fix TD-25-1: "don't ask again" for ModelOrientationDialog
 4. Performance: spatial grid for overlap check (>2000 face meshes)
 5. PDO import (Pepakura native format — reverse-engineered, complex)

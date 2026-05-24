@@ -78,6 +78,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     // ── observable properties ─────────────────────────────────────────────────
     [ObservableProperty] private Model3DGroup? _meshModel;
     [ObservableProperty] private Model3DGroup? _selectionOverlayModel;  // 3D highlight
+    [ObservableProperty] private Model3DGroup? _edgeHighlightModel;     // Feature B: 3D edge hover
     [ObservableProperty] private string        _statusText   = "Ready — load a mesh to begin.";
     [ObservableProperty] [NotifyCanExecuteChangedFor(nameof(UnfoldCommand))]  private bool _canUnfold;
     [ObservableProperty]
@@ -100,6 +101,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     // cached loaded bitmaps per materialId (rebuilt when slots change)
     private readonly Dictionary<int, BitmapImage?> _materialBitmaps = new();
+
+    // ── Feature B: expose mesh for edge hover in code-behind ─────────────────
+    /// Read-only access to the current loaded mesh (used by MainWindow for screen-space edge hover).
+    public Mesh? CurrentMesh => _currentMesh;
 
     /// Returns the bitmap for the given materialId (from multi-material slots), or
     /// falls back to Canvas2DTexture if no per-material texture is defined.
@@ -397,6 +402,22 @@ public partial class MainViewModel : ObservableObject, IDisposable
             InvalidateOverlayCache();
 
             CancelPreviewSilently();
+
+            // Feature A: Model orientation dialog — pass mesh for live preview
+            var orientDlg = new Dialogs.ModelOrientationDialog(_currentMesh)
+            {
+                Owner = WpfApp.Current.MainWindow
+            };
+            orientDlg.ShowDialog();
+            if (orientDlg.Applied)
+            {
+                var rot = orientDlg.Result.ComputeRotation();
+                if (rot != System.Numerics.Matrix4x4.Identity)
+                    _currentMesh.ApplyTransform(rot);
+                if (orientDlg.Result.FlipUV)
+                    _currentMesh.FlipUVsVertical();
+            }
+
             _committedTexturePath = _currentMesh.SuggestedTexturePath;
             RebuildMaterialSlots(_currentMesh);
 
@@ -489,8 +510,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
         try
         {
             // Use current canvas layout (positions/rotations applied) instead of re-running unfold
-            var result = BuildExportLayout();
-            _exporter.Export(result, dlg.FileName, _committedTexturePath);
+            var result   = BuildExportLayout();
+            // TD-22-3: pass per-material texture paths for multi-texture SVG export
+            var matPaths = GetMaterialTexturePaths();
+            _exporter.Export(result, dlg.FileName, _committedTexturePath, matPaths);
             StatusText = $"Exported to {Path.GetFileName(dlg.FileName)}";
         }
         catch (Exception ex) { Error("Export SVG failed", ex); }
@@ -537,8 +560,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         try
         {
-            var state = BuildProjectState();
-            _serializer.SaveBundle(state, _currentMeshPath!, _committedTexturePath, dlg.FileName);
+            var state    = BuildProjectState();
+            // TD-22-2: persist per-material textures in the bundle
+            var matPaths = GetMaterialTexturePaths();
+            _serializer.SaveBundle(state, _currentMeshPath!, _committedTexturePath, dlg.FileName, matPaths);
             StatusText = $"Project saved: {Path.GetFileName(dlg.FileName)}";
             MarkClean();
         }
@@ -757,6 +782,78 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    // ── Feature B: 3D edge hover highlight ────────────────────────────────────
+
+    /// <summary>
+    /// Highlights the specified edge as a thin cylinder in the 3D viewport.
+    /// </summary>
+    /// <param name="edgeId">Mesh edge index.</param>
+    /// <param name="isDetach">True = fold edge (show detach colour); False = cut edge (attach colour).</param>
+    public void HoverEdge(int edgeId, bool isDetach)
+    {
+        if (_currentMesh == null || edgeId < 0 || edgeId >= _currentMesh.Edges.Count)
+        {
+            ClearEdgeHover();
+            return;
+        }
+
+        var edge  = _currentMesh.Edges[edgeId];
+        var p1    = _currentMesh.Vertices[edge.V1].Position;
+        var p2    = _currentMesh.Vertices[edge.V2].Position;
+
+        var geo   = BuildThinCylinder(
+            new Point3D(p1.X, p1.Y, p1.Z),
+            new Point3D(p2.X, p2.Y, p2.Z),
+            radius: ScaleMmPerUnit * 0.008);
+
+        var colorHex = isDetach ? S.View3D.EdgeHoverDetachColor : S.View3D.EdgeHoverAttachColor;
+        var fallback = isDetach ? "#ff3333" : "#33cc33";
+        var mat   = new DiffuseMaterial(ParseBrush(colorHex, fallback));
+        var model = new GeometryModel3D(geo, mat) { BackMaterial = mat };
+        var group = new Model3DGroup();
+        group.Children.Add(model);
+        EdgeHighlightModel = group;
+    }
+
+    /// <summary>Removes the 3D edge highlight.</summary>
+    public void ClearEdgeHover() => EdgeHighlightModel = null;
+
+    /// Builds a hexagonal prism between two 3D points (thin cylinder approximation).
+    private static MeshGeometry3D BuildThinCylinder(Point3D start, Point3D end, double radius)
+    {
+        var dir = end - start;
+        double len = dir.Length;
+        if (len < 1e-10) return new MeshGeometry3D();
+        dir.Normalize();
+
+        // Perpendicular vectors (Gram-Schmidt)
+        var up    = Math.Abs(dir.Y) < 0.9 ? new Vector3D(0, 1, 0) : new Vector3D(1, 0, 0);
+        var perp1 = Vector3D.CrossProduct(dir, up); perp1.Normalize();
+        var perp2 = Vector3D.CrossProduct(dir, perp1);
+
+        const int sides = 6;
+        var positions = new Point3DCollection(sides * 2);
+        var indices   = new Int32Collection(sides * 6);
+
+        for (int i = 0; i < sides; i++)
+        {
+            double ang    = i * 2 * Math.PI / sides;
+            var    offset = (perp1 * Math.Cos(ang) + perp2 * Math.Sin(ang)) * radius;
+            positions.Add(start + offset);
+            positions.Add(end   + offset);
+        }
+
+        for (int i = 0; i < sides; i++)
+        {
+            int next = (i + 1) % sides;
+            int b0 = i * 2, b1 = next * 2, t0 = i * 2 + 1, t1 = next * 2 + 1;
+            indices.Add(b0); indices.Add(t0); indices.Add(b1);
+            indices.Add(b1); indices.Add(t0); indices.Add(t1);
+        }
+
+        return new MeshGeometry3D { Positions = positions, TriangleIndices = indices };
+    }
+
     // ── selection overlay (TD-5: cached per piece group) ────────────────────────
 
     private void BuildSelectionOverlay(PieceViewModel? piece)
@@ -818,6 +915,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _cachedOverlayModel   = null;
         SelectionOverlayModel = null;
         SelectedFaceId        = -1;
+        ClearEdgeHover();   // also clear 3D edge hover (mesh changed)
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -920,7 +1018,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
                     ToCanvas(fd.V0.X, fd.V0.Y),
                     ToCanvas(fd.V1.X, fd.V1.Y),
                     ToCanvas(fd.V2.X, fd.V2.Y),
-                    fd.EdgeIsFold, fd.EdgeIsBoundary, uvCoords));
+                    fd.EdgeIsFold, fd.EdgeIsBoundary, uvCoords,
+                    fd.MaterialId));   // TD-22-3: propagate material ID to export
             }
 
             foreach (var tab in piece.GlueTabs)
@@ -1086,6 +1185,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 Rotation  = piece.Rotation
             });
 
+        // TD-22-2: persist per-material texture paths (for .pmc non-bundle format)
+        foreach (var (matId, path) in GetMaterialTexturePaths())
+            state.MaterialTexturePaths[matId] = path;
+
         return state;
     }
 
@@ -1135,8 +1238,24 @@ public partial class MainViewModel : ObservableObject, IDisposable
         PagesWide = Math.Max(1, state.PagesWide);
         PagesTall = Math.Max(1, state.PagesTall);
 
+        // TD-22-2: restore per-material texture slots before building 3D model
+        if (state.MaterialTexturePaths.Count > 0)
+        {
+            foreach (var (matId, path) in state.MaterialTexturePaths)
+            {
+                var slot = MaterialTextureSlots.FirstOrDefault(s => s.MaterialId == matId);
+                if (slot != null)
+                {
+                    slot.TexturePath = path;
+                    slot.Thumbnail   = LoadBitmapImage(path);
+                    _materialBitmaps[matId] = slot.Thumbnail;
+                }
+            }
+        }
+
         // Restore texture
-        _committedTexturePath = state.TexturePath;
+        _committedTexturePath = state.TexturePath
+            ?? MaterialTextureSlots.FirstOrDefault(s => s.HasTexture)?.TexturePath;
         var tex = LoadBitmapImage(_committedTexturePath);
         MeshModel  = BuildWpfModel(_currentMesh, tex, _materialBitmaps);
         CanUnfold  = true;
@@ -1212,6 +1331,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
             }
         }
     }
+
+    /// TD-22-2/22-3: returns a dict of materialId → file path for all slots that have a texture.
+    private IReadOnlyDictionary<int, string?> GetMaterialTexturePaths() =>
+        MaterialTextureSlots.ToDictionary(s => s.MaterialId, s => (string?)s.TexturePath);
 
     private void UpdateTextureUI(BitmapImage? tex, string? path, bool isPreview)
     {
@@ -1376,8 +1499,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private void Error(string title, Exception ex)
     {
-        StatusText = $"{title}: {ex.Message}";
-        MessageBox.Show(ex.Message, title, MessageBoxButton.OK, MessageBoxImage.Error);
+        // Walk to the innermost exception for the most useful message
+        var inner = ex;
+        while (inner.InnerException != null) inner = inner.InnerException;
+        var shortMsg = inner == ex ? ex.Message : $"{inner.Message}\n\n(outer: {ex.Message})";
+        StatusText = $"{title}: {inner.Message}";
+        MessageBox.Show(shortMsg, title, MessageBoxButton.OK, MessageBoxImage.Error);
     }
 
     private static Brush ParseBrush(string? hex, string fallback)

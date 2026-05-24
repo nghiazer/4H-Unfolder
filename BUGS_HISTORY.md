@@ -5,6 +5,59 @@
 
 ---
 
+## Session 27 Changes (archived from SESSION_PROGRESS)
+
+| Item | Detail |
+|------|--------|
+| **Bug — `ResizeMode="CanMinResize"`** | Invalid WPF enum value → `TypeConverterMarkupExtension` crash khi instantiate `ModelOrientationDialog`; fix: `CanMinimize` |
+| **Bug — `ComputeRotation` reflection** | `Cross(front, up)` thay vì `Cross(up, front)` → right = (-1,0,0) với default → mesh bị mirror + texture biến mất; fix cross product order |
+| **Bug — `Error()` outer-only message** | `ex.Message` chỉ show outer exception; fix: walk `InnerException` chain |
+| **Cleanup — `BillboardTextVisual3D`** | Removed 6 axis label elements (HelixToolkit compat risk on .NET 8); replaced by TD-27-2 Canvas overlay |
+| **TD-25-2 — Edge hover grid** | `BuildEdgeGrid()` + `_edgeScreenGrid`; `FindNearestEdge` O(n) → O(1); dirty on camera/mesh change |
+| **TD-27-1 — Camera auto-fit** | `ZoomExtents(0)` via `Dispatcher.BeginInvoke(DispatcherPriority.Loaded)` in `ModelOrientationDialog` |
+| **TD-27-2 — Axis labels overlay** | Canvas + 3 TextBlock; `Viewport3DHelper.Point3DtoPoint2D` on `CameraChanged` |
+| **TD-27-3 — Parallel-axes warning** | `AxesAreParallel` + `[NotifyPropertyChangedFor]`; red TextBlock DataTrigger; OK Style trigger disabled |
+
+---
+
+## Session 26 Changes (archived from SESSION_PROGRESS)
+
+| Item | Detail |
+|------|--------|
+| **TD-22-1 — Assimp material support** | `AssimpMeshLoader` reads `scene.Materials`, populates `mesh.MaterialNames`/`MaterialTexturePaths`/`SuggestedTexturePath`; uses `aMesh.MaterialIndex` → all Assimp-loaded faces now get correct `MaterialId` |
+| **TD-22-2 — Multi-texture project persistence** | `ProjectState` +`MaterialTexturePaths` + `BundledMaterialTextureExts`; `ProjectSerializer` embeds/restores per-material textures as `texture_<matId>.<ext>` in `.4hu` bundles; `.pmc` relativizes paths |
+| **TD-22-3 — Multi-material SVG export** | `UnfoldedFace` +`MaterialId`; `UnfoldEngine` propagates it; `IExporter` +`perMaterialTextures` param; `SvgExporter` emits per-face data URIs by material; `BuildExportLayout` passes `fd.MaterialId` |
+| **TD-22-4 — Float edge-dedup fix** | `SvgExporter` + `PdfExporter`: `EdgeKey()` rounds to 3 dp and canonicalises order — replaces raw float tuple hash |
+| **TD-22-5 — UV double-flip removed** | Removed `PostProcessSteps.FlipUVs` from `AssimpMeshLoader`; single `ToWpfUV` flip is correct |
+
+---
+
+## Session 25 Changes (archived from SESSION_PROGRESS)
+
+| Item | Detail |
+|------|--------|
+| **Feature A — Model Orientation Dialog** | New `ModelOrientationDialog.xaml/.cs` + `ModelOrientationViewModel.cs` shown after every `LoadMesh`. 3D colored cube with 6 axis-labeled faces. Two ComboBoxes: Up + Front axis (each → ±X/Y/Z). `Mesh.ApplyTransform(Matrix4x4)` + `Mesh.FlipUVsVertical()` added. |
+| **Feature B — 3D Edge Hover + RMB Pivot** | Context menu removed. `MouseMove` → screen-space edge proximity (8px); hover fold = red, hover cut = green; LMB = `ToggleEdge`. RMB click (non-drag) = `LookAt(hitPt, 300)` to set pivot. |
+| **AppSettings** | +`EdgeHoverDetachColor`, `EdgeHoverAttachColor` in `View3DSettings` |
+| **SettingsDialog** | New "3D Edge Edit Mode" GroupBox with 2 color pickers |
+| **MainViewModel** | +`CurrentMesh`, +`EdgeHighlightModel`, +`HoverEdge/ClearEdgeHover`, +`BuildThinCylinder()` |
+
+---
+
+## Session 23 Changes (archived from SESSION_PROGRESS)
+
+| Item | Detail |
+|------|--------|
+| **`AssemblyStep.cs`** (new) | Lightweight DTO for one assembly step (Domain/Results) |
+| **`AssemblyPlanner.cs`** (new) | BFS piece-adjacency planner from `EdgeType.Cut` edges (Geometry/Algorithms) |
+| **`AssemblyViewModel.cs`** (new) | Original Approach A flat→3D animation; replaced in session 24 |
+| **`AssemblyAnimationWindow.xaml/.cs`** (new) | Dark-theme window with HelixViewport3D, progress bar, step controls |
+| **`MainViewModel`** | Added `OpenAssemblyAnimationCommand`; fixed `_canExport` missing `[NotifyCanExecuteChangedFor]` for PDF + animation commands |
+| **`MainWindow.xaml`** | Added 🎬 button to toolbar |
+| **Bug fix** | `OpenAssemblyAnimationCommand` stayed disabled after Unfold — now fixed |
+
+---
+
 ## All Bugs Fixed (sessions 1–17)
 
 | Session | Severity | Bug | Fix |
