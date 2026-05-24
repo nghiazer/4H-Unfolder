@@ -80,7 +80,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private Model3DGroup? _selectionOverlayModel;  // 3D highlight
     [ObservableProperty] private string        _statusText   = "Ready — load a mesh to begin.";
     [ObservableProperty] [NotifyCanExecuteChangedFor(nameof(UnfoldCommand))]  private bool _canUnfold;
-    [ObservableProperty] [NotifyCanExecuteChangedFor(nameof(ExportSvgCommand))]  private bool _canExport;
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ExportSvgCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ExportPdfCommand))]
+    [NotifyCanExecuteChangedFor(nameof(OpenAssemblyAnimationCommand))]
+    private bool _canExport;
     [ObservableProperty] private bool          _isUnfolded;
     [ObservableProperty] private int           _selectedFaceId = -1;
 
