@@ -842,7 +842,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         var geo   = BuildThinCylinder(
             new Point3D(p1.X, p1.Y, p1.Z),
             new Point3D(p2.X, p2.Y, p2.Z),
-            radius: ScaleMmPerUnit * 0.008);
+            radius: 2.0 / ScaleMmPerUnit);   // 2 mm physical radius; formula is mm/scale not scale*const
 
         var colorHex = isDetach ? S.View3D.EdgeHoverDetachColor : S.View3D.EdgeHoverAttachColor;
         var fallback = isDetach ? "#ff3333" : "#33cc33";
