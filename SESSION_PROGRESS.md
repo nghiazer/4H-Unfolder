@@ -1,7 +1,7 @@
 # 4H-Unfolder — Session Progress Log
 
 > **Last updated:** 2026-05-25 (session 34 — tech debt TD-PDO-3/4, TD-25-1; branch `feat/pdo-import`)
-> **Branch:** `feat/pdo-import`  (base: `main` @ v0.0.2.H → releasing as v0.0.3.A)
+> **Branch:** `feat/pdo-import`  (base: `main` @ v0.0.2.H → current: v0.0.3.B)
 > **Target framework:** .NET 8 / WPF
 > **SDK required:** `winget install Microsoft.DotNet.SDK.8`
 > **History archive:** see [`BUGS_HISTORY.md`](BUGS_HISTORY.md) for all prior bug/tech-debt records
@@ -85,10 +85,10 @@ No circular dependencies. Domain has zero external dependencies.
 
 | Item | Result |
 |------|--------|
-| `dotnet build 4H-Unfolder.sln` | ✅ 0 errors, 4 warnings (NuGet NU1603 only) |
+| `dotnet build 4H-Unfolder.sln` | ✅ 0 errors, 7 warnings (NuGet NU1603 only) |
 | `dotnet test` | ✅ 56 / 56 passed |
 | `dotnet run --project src/FourHUnfolder.App` | ✅ App opens, PDO files auto-unfold on load |
-| Published `4H-Unfolder.exe` **v0.0.3.A** (win-x64, self-contained) | ✅ Session 33 |
+| Published `4H-Unfolder.exe` **v0.0.3.B** (win-x64, self-contained) | ✅ Session 34 |
 
 ---
 
@@ -99,7 +99,7 @@ No circular dependencies. Domain has zero external dependencies.
 | **Verified s30–33 fixes** | Confirmed TD-PDO-1, TD-PDO-2, CRITICAL-3D-TEX, BUG-PDO-1, BUG-PDO-2 all correctly implemented via code-graph exploration |
 | **TD-PDO-4** | Added `_embeddedBitmapCache` (Dictionary<int, BitmapImage?>) to `MainViewModel`; `BitmapFromEmbedded` split into cached wrapper + `BitmapFromEmbeddedCore`; cache cleared on new mesh load — eliminates repeated PNG encode for 2048² textures |
 | **TD-25-1** | "Don't ask again" checkbox in `ModelOrientationDialog`; new `SkipModelOrientationDialog` bool in `AppSettings.GeneralSettings`; `MainViewModel.LoadMesh` honours the setting + persists on check |
-| **TD-PDO-3** | Pre-geo seek replaced: `Seek(120, Current)` → `Seek(194 + commentLen, Begin)` — absolute formula derived from header field trace; eliminates reliance on current-position being exact |
+| **TD-PDO-3** | Pre-geo seek replaced: `Seek(120, Current)` → `Seek(154 + localeLen + commentLen, Begin)` — absolute formula derived from header byte-trace; correct for any localeLen (not just standard PD6 = 40) |
 | **Tests** | All 56 pass |
 
 ### Tech debt summary (v0.0.3.A → v0.0.3.B)
@@ -167,15 +167,15 @@ No circular dependencies. Domain has zero external dependencies.
 
 ## Remaining Tech Debt
 
-| ID | Priority | Description |
-|----|----------|-------------|
-| TD-PDO-1 | 🟡 Med | `coord` doubles per point (2D paper layout, mm) not extracted — needed for 2D canvas texture display from PDO |
-| TD-PDO-2 | 🟡 Med | Multi-texture PDO (e.g. Pillar.pdo with 2 textures): only first texture used; faces all get `MaterialId=-1`; no material-to-face assignment yet |
-| TD-PDO-3 | 🟢 Low | Pre-geo 120-byte skip hardcoded; if future PDO variant changes settings size, geo_count read goes wrong silently |
-| TD-PDO-4 | 🟢 Low | Embedded texture BMP/PNG not cached to disk → `BitmapFromEmbedded` re-runs zlib decompress + PNG encode on every texture dialog open or 3D rebuild |
-| CRITICAL-3D-TEX | 🔴 Critical | `EnterPreview`/`CommitPreview` call `BuildWpfModel` with `singleTexture` only (no `perMaterial`) → embedded PDO texture + OBJ multi-material texture both lost after texture preview cycle |
-| TD-25-1 | 🟢 Low | `ModelOrientationDialog` shown on every mesh load; add "don't ask again" setting |
-| Performance | 🟢 Low | O(n²) overlap check → spatial grid for meshes > 2000 faces |
+| ID | Priority | Status | Fixed in | Description |
+|----|----------|--------|----------|-------------|
+| ~~TD-PDO-1~~ | 🟡 Med | ✅ fixed | s32 | `coord` doubles per point extracted → `PdoLayout`; auto-unfold on load |
+| ~~TD-PDO-2~~ | 🟡 Med | ✅ fixed | s31 | Multi-texture PDO: per-face `MaterialId` from `unk11`; `MaterialNames` from `EmbeddedTextures` |
+| ~~TD-PDO-3~~ | 🟢 Low | ✅ fixed | s34 | Pre-geo seek: `Seek(120, Current)` → `Seek(154+localeLen+commentLen, Begin)` |
+| ~~TD-PDO-4~~ | 🟢 Low | ✅ fixed | s34 | `BitmapFromEmbedded` cached via `_embeddedBitmapCache`; core only called once per texture per mesh |
+| ~~CRITICAL-3D-TEX~~ | 🔴 Critical | ✅ fixed | s32 | `EnterPreview`/`CommitPreview` now pass `_materialBitmaps` to `BuildWpfModel` |
+| ~~TD-25-1~~ | 🟢 Low | ✅ fixed | s34 | "Don't ask again" checkbox in `ModelOrientationDialog`; persisted to `AppSettings.General` |
+| **Performance** | 🟢 Low | 🔲 open | — | O(n²) overlap check (AABB + SAT); spatial grid needed for meshes > 2000 faces |
 
 ---
 
@@ -273,8 +273,5 @@ App/Assets/             app.ico (6 sizes) logo.png
 
 ## Recommended Next Steps
 
-1. **TD-PDO-2** — Multi-texture PDO: assign MaterialId to faces based on geo/texture name matching; populate `mesh.MaterialNames` from texture names
-2. **CRITICAL-3D-TEX** — Fix `EnterPreview`/`CommitPreview` to pass `_materialBitmaps` so PDO + OBJ multi-material textures survive preview cycles
-3. **TD-PDO-1** — Extract `coord` (paper 2D layout) from PDO to build the 2D unfolded pattern from the embedded layout data (advanced)
-4. **TD-25-1** — "don't ask again" for ModelOrientationDialog
-5. Performance: spatial grid for overlap check (>2000 face meshes)
+1. **Performance** — Spatial grid / bucket partition for `OverlapDetector`; current O(n²) AABB loop becomes a bottleneck on meshes > 2000 faces
+2. **Merge `feat/pdo-import` → `main`** — branch is stable at v0.0.3.B; all tech debt cleared
