@@ -79,8 +79,9 @@ public sealed class PdoMeshLoader : IMeshLoader
         reader.BaseStream.Seek(120, SeekOrigin.Current);
 
         // ── 4. Geometry ───────────────────────────────────────────────────
-        var  mesh     = new Mesh();
-        uint geoCount = reader.ReadUInt32();
+        var  mesh      = new Mesh();
+        var  pdoLayout = new PdoLayout();
+        uint geoCount  = reader.ReadUInt32();
 
         for (uint gi = 0; gi < geoCount; gi++)
         {
@@ -104,20 +105,23 @@ public sealed class PdoMeshLoader : IMeshLoader
             for (uint si = 0; si < shapeCount; si++)
             {
                 int  materialId = reader.ReadInt32();  // unk11 = material/texture index
-                reader.ReadUInt32();                   // part (2-D part index) — Phase C
+                int  partIndex  = (int)reader.ReadUInt32(); // 2-D piece group (Phase C)
                 reader.BaseStream.Seek(32, SeekOrigin.Current); // 4×double unk12
 
                 uint ptCount   = reader.ReadUInt32();
                 var  indices   = new int[ptCount];
                 var  uvIndices = new int[ptCount];
+                var  coords2D  = new Vector2[ptCount]; // Phase C: paper-space coords (mm)
 
                 for (uint pi = 0; pi < ptCount; pi++)
                 {
                     // vertex index (0-based within this geo → add vtxBase for global)
                     indices[pi] = (int)reader.ReadUInt32() + vtxBase; // 4 bytes
 
-                    // coord: 2D paper layout (mm) — skip for now (Phase C)
-                    reader.BaseStream.Seek(16, SeekOrigin.Current);   // 16 bytes
+                    // coord: 2D paper layout (mm) — extract for Phase C/D
+                    float cx = (float)reader.ReadDouble();             // 8 bytes
+                    float cy = (float)reader.ReadDouble();             // 8 bytes
+                    coords2D[pi] = new Vector2(cx, cy);
 
                     // unk13: texture UV
                     // PDO stores UV with Y=0 at top; WPF/OpenGL expect Y=0 at bottom → flip V
@@ -135,16 +139,28 @@ public sealed class PdoMeshLoader : IMeshLoader
                 if (ptCount >= 3)
                 {
                     for (int ti = 1; ti < (int)ptCount - 1; ti++)
+                    {
+                        int faceIdx = mesh.Faces.Count;
                         mesh.AddFace(indices[0], indices[ti], indices[ti + 1],
                                      uvIndices[0], uvIndices[ti], uvIndices[ti + 1],
-                                     materialId);  // B2: pass material ID per shape
+                                     materialId);
+                        // Record 2D layout for this triangle
+                        pdoLayout.Faces.Add(new PdoFace(
+                            faceIdx, partIndex,
+                            coords2D[0], coords2D[ti], coords2D[ti + 1]));
+                    }
                 }
             }
 
             // ── Skip unk17 edge data (22 bytes per entry) ─────────────────
+            // Phase D will parse these for fold/cut topology
             uint edgeCount = reader.ReadUInt32();
             reader.BaseStream.Seek((long)edgeCount * PerEdgeBytes, SeekOrigin.Current);
         }
+
+        // Attach layout if any 2-D data was gathered
+        if (pdoLayout.Faces.Count > 0)
+            mesh.PdoLayout = pdoLayout;
 
         // ── 5. Texture section ────────────────────────────────────────────
         // texCount → per texture: wstr name + 80 bytes (5×4floats) + bool hasImage

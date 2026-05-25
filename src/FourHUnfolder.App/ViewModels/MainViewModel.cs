@@ -472,6 +472,41 @@ public partial class MainViewModel : ObservableObject, IDisposable
             RefreshDerivedVisibility();
 
             var texNote = _committedTexturePath != null ? " · texture from MTL" : string.Empty;
+
+            // ── Auto-unfold PDO files that carry a pre-computed 2-D layout ────
+            if (_currentMesh.PdoLayout != null)
+            {
+                try
+                {
+                    StatusText = "Restoring PDO layout …";
+                    var pdoResult = _unfoldService.TryBuildFromPdoLayout(
+                        _currentMesh, _settingsService.Current.Print);
+
+                    if (pdoResult != null)
+                    {
+                        ScaleMmPerUnit = 1.0;  // PDO coords are already in mm
+                        var pieces = _unfoldService.ComputePieces(_currentMesh);
+                        RebuildPieces(pdoResult, pieces, 1.0);
+                        RunAutoArrange();
+
+                        CanExport  = true;
+                        IsUnfolded = true;
+                        RefreshColumnBindings();
+
+                        var parts   = _currentMesh.PdoLayout.PartIndices.Count;
+                        StatusText = $"Loaded (PDO) — {_currentMesh.Faces.Count:N0} faces, " +
+                                     $"{parts} piece(s){texNote}.";
+                        MarkClean();
+                        return;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Non-fatal: fall through to normal status text
+                    StatusText = $"PDO layout restore failed: {ex.Message}";
+                }
+            }
+
             StatusText = $"Loaded — {_currentMesh.Faces.Count:N0} faces, " +
                          $"{_currentMesh.Vertices.Count:N0} vertices{texNote}.";
             MarkClean(); // fresh mesh = clean state
@@ -1319,7 +1354,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _pendingTexturePath = previewPath;
         _previewActive      = true;
         var tex = LoadBitmapImage(previewPath);
-        MeshModel = BuildWpfModel(_currentMesh!, tex);
+        MeshModel = BuildWpfModel(_currentMesh!, tex, _materialBitmaps);
         UpdateTextureUI(tex, previewPath, isPreview: true);
         RefreshDerivedVisibility();
     }
@@ -1333,7 +1368,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         var tex  = LoadBitmapImage(path);
         _previewActive      = false;
         _pendingTexturePath = null;
-        if (_currentMesh != null) MeshModel = BuildWpfModel(_currentMesh, tex);
+        if (_currentMesh != null) MeshModel = BuildWpfModel(_currentMesh, tex, _materialBitmaps);
         UpdateTextureUI(tex, path, isPreview: false);
         RefreshDerivedVisibility();
         StatusText = revert
