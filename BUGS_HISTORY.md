@@ -5,6 +5,18 @@
 
 ---
 
+## Session 30 Changes (archived from SESSION_PROGRESS)
+
+| Item | Detail |
+|------|--------|
+| **PDO Phase 1** | `PdoMeshLoader.cs` (new): PD6 header + cipher + pre-geo skip (120 bytes) + geometry (vertices, fan-triangulated shapes, edge skip) |
+| **PDO Phase 2** | UV extraction from `unk13` per point (offsets 20-35); texture section: zlib decompress RGB24 → `mesh.EmbeddedTextures`; `EmbeddedTextureData` record in Domain |
+| **3D texture display** | `MainViewModel.BitmapFromEmbedded`: `BitmapSource.Create(Rgb24) → PngBitmapEncoder → BitmapImage`; stored at `_materialBitmaps[-1]`; picked up by `BuildWpfModel` |
+| **Routing + dialog** | `MultiFormatMeshLoader` routes `.pdo`; open-mesh filter + tooltip updated |
+| **Tests** | `PdoMeshLoaderTests` (7): geometry, vertex count, UVs finite, embedded texture size; 41/41 suite green |
+
+---
+
 ## Session 29 Changes (archived from SESSION_PROGRESS)
 
 | Item | Detail |

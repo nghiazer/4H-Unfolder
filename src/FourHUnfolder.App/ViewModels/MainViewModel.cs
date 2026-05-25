@@ -1350,8 +1350,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         if (mesh.MaterialNames.Count == 0)
         {
-            // No materials — single default slot
-            var bmp  = LoadBitmapImage(mesh.SuggestedTexturePath);
+            // No named materials — single default slot.
+            // Prefer a file-based texture; fall back to PDO embedded texture.
+            var bmp  = LoadBitmapImage(mesh.SuggestedTexturePath)
+                       ?? (mesh.EmbeddedTextures.Count > 0
+                           ? BitmapFromEmbedded(mesh.EmbeddedTextures[0])
+                           : null);
             var slot = new MaterialTextureViewModel(-1, "Default", mesh.SuggestedTexturePath, bmp);
             MaterialTextureSlots.Add(slot);
             _materialBitmaps[-1] = bmp;
@@ -1363,11 +1367,52 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 var path = (i < mesh.MaterialTexturePaths.Count)
                     ? mesh.MaterialTexturePaths[i]
                     : null;
-                var bmp  = LoadBitmapImage(path);
+                // For PDO multi-texture: if no file path, check embedded by index
+                var bmp  = LoadBitmapImage(path)
+                           ?? (path == null && i < mesh.EmbeddedTextures.Count
+                               ? BitmapFromEmbedded(mesh.EmbeddedTextures[i])
+                               : null);
                 var slot = new MaterialTextureViewModel(i, mesh.MaterialNames[i], path, bmp);
                 MaterialTextureSlots.Add(slot);
                 _materialBitmaps[i] = bmp;
             }
+        }
+    }
+
+    /// <summary>
+    /// Converts raw RGB24 embedded texture data to a frozen WPF BitmapImage.
+    /// </summary>
+    private static BitmapImage? BitmapFromEmbedded(EmbeddedTextureData emb)
+    {
+        try
+        {
+            // Create a BitmapSource from raw RGB24 bytes (R,G,B order, top-to-bottom).
+            var src = System.Windows.Media.Imaging.BitmapSource.Create(
+                emb.Width, emb.Height, 96, 96,
+                System.Windows.Media.PixelFormats.Rgb24,
+                null,
+                emb.Rgb24Bytes,
+                emb.Width * 3);  // stride = width × 3 bytes
+
+            // Encode to PNG in memory so BitmapImage can be frozen (required for cross-thread).
+            var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+            encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(src));
+
+            using var ms = new System.IO.MemoryStream();
+            encoder.Save(ms);
+            ms.Position = 0;
+
+            var bmp = new System.Windows.Media.Imaging.BitmapImage();
+            bmp.BeginInit();
+            bmp.StreamSource  = ms;
+            bmp.CacheOption   = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+            bmp.EndInit();
+            bmp.Freeze();
+            return bmp;
+        }
+        catch
+        {
+            return null;
         }
     }
 

@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Numerics;
 using System.Text;
 using FourHUnfolder.Application.Interfaces;
@@ -16,7 +17,7 @@ namespace FourHUnfolder.Infrastructure.Loaders;
 /// │  abs 18-21  : uint32 version                                             │
 /// │  abs 22-25  : uint32 localeLen  (bytes)                                  │
 /// │  abs 26-..  : localeLen bytes UTF-16LE locale  (RAW, no cipher)          │
-/// │  abs 66-69  : uint32 cipherKey  (subtraction: decoded = (raw-key+256)%256)│
+/// │  abs 66-69  : uint32 cipherKey  (subtraction: decoded=(raw-key+256)%256) │
 /// │  abs 70-73  : uint32 commentLen (bytes, always 306 for PD6)              │
 /// │  abs 74-..  : commentLen bytes cipher-encoded comment  (skipped)         │
 /// │  abs 380-499: 120 bytes pre-geometry settings           (skipped)        │
@@ -28,11 +29,19 @@ namespace FourHUnfolder.Infrastructure.Loaders;
 /// wstr: uint32 byteLen (raw) + byteLen bytes cipher-encoded UTF-16LE.
 /// Per shape: int32 unk11 + uint32 part + 4×double + uint32 ptCount +
 ///            ptCount × 85-byte point records.
-/// Per point (85 bytes): uint32 vtxIdx + 2×double UV + 2×double unk13 +
-///                       bool unk14 + 3×double unk15 + 3×uint32 + 3×float.
+/// Per point (85 bytes): uint32 vtxIdx + 2×double coord (2D paper pos, skipped) +
+///                       2×double UV (texture coords) + bool unk14 +
+///                       3×double unk15 + 3×uint32 + 3×float.
 /// Per edge entry (22 bytes): 4×uint32 + 2×bool + 1×uint32.
 ///
+/// Texture section (after all geometry):
+///   uint32 texCount → per texture: wstr name + 5×(4floats) + bool hasImage
+///   if hasImage: uint32 w, uint32 h, uint32 csize + zlib-compressed RGB24 bytes
+///
 /// Polygons are fan-triangulated into the output Mesh.
+/// UV coordinates (texture coords, not paper-layout coords) are extracted and
+/// stored in mesh.UVs / mesh.FaceUVs.
+/// Embedded textures are decompressed and stored in mesh.EmbeddedTextures.
 /// </summary>
 public sealed class PdoMeshLoader : IMeshLoader
 {
@@ -98,31 +107,71 @@ public sealed class PdoMeshLoader : IMeshLoader
                 reader.ReadUInt32();             // part (2-D part index)
                 reader.BaseStream.Seek(32, SeekOrigin.Current); // 4×double unk12
 
-                uint ptCount = reader.ReadUInt32();
-                var  indices = new int[ptCount];
+                uint ptCount   = reader.ReadUInt32();
+                var  indices   = new int[ptCount];
+                var  uvIndices = new int[ptCount];
 
                 for (uint pi = 0; pi < ptCount; pi++)
                 {
                     // vertex index (0-based within this geo → add vtxBase for global)
-                    indices[pi] = (int)reader.ReadUInt32() + vtxBase;
+                    indices[pi] = (int)reader.ReadUInt32() + vtxBase; // 4 bytes
 
-                    // Skip remaining 81 bytes of per-point extras
-                    // (2×double UV  + 2×double unk13 + bool unk14 +
-                    //  3×double unk15 + 3×uint32 unk16a + 3×float unk16b)
-                    reader.BaseStream.Seek(PerPointBytes - 4, SeekOrigin.Current);
+                    // coord: 2D paper layout (mm) — skip, not texture UV
+                    reader.BaseStream.Seek(16, SeekOrigin.Current);   // 16 bytes
+
+                    // unk13: texture UV in [0,1]
+                    float u = (float)reader.ReadDouble();              // 8 bytes
+                    float v = (float)reader.ReadDouble();              // 8 bytes
+                    mesh.UVs.Add(new Vector2(u, v));
+                    uvIndices[pi] = mesh.UVs.Count - 1;
+
+                    // skip: unk14(1) + unk15(24) + unk16(24) = 49 bytes
+                    reader.BaseStream.Seek(49, SeekOrigin.Current);
+                    // per-point total: 4+16+16+49 = 85 ✓
                 }
 
                 // Fan-triangulate polygon: (v0,v1,v2), (v0,v2,v3), …
                 if (ptCount >= 3)
                 {
                     for (int ti = 1; ti < (int)ptCount - 1; ti++)
-                        mesh.AddFace(indices[0], indices[ti], indices[ti + 1]);
+                        mesh.AddFace(indices[0], indices[ti], indices[ti + 1],
+                                     uvIndices[0], uvIndices[ti], uvIndices[ti + 1]);
                 }
             }
 
             // ── Skip unk17 edge data (22 bytes per entry) ─────────────────
             uint edgeCount = reader.ReadUInt32();
             reader.BaseStream.Seek((long)edgeCount * PerEdgeBytes, SeekOrigin.Current);
+        }
+
+        // ── 5. Texture section ────────────────────────────────────────────
+        // texCount → per texture: wstr name + 80 bytes (5×4floats) + bool hasImage
+        // If hasImage: uint32 w + uint32 h + uint32 csize + csize bytes zlib(RGB24)
+        try
+        {
+            uint texCount = reader.ReadUInt32();
+            for (uint ti = 0; ti < texCount; ti++)
+            {
+                var texName = ReadWStr(reader, key);
+                reader.BaseStream.Seek(80, SeekOrigin.Current); // skip 5×(4 floats)
+
+                bool hasImage = reader.ReadByte() != 0;
+                if (!hasImage) continue;
+
+                uint w     = reader.ReadUInt32();
+                uint h     = reader.ReadUInt32();
+                uint csize = reader.ReadUInt32();
+
+                var compressed = reader.ReadBytes((int)csize);
+                var rgb = DecompressZlib(compressed);
+
+                if (rgb.Length == (int)(w * h * 3))
+                    mesh.EmbeddedTextures.Add(new EmbeddedTextureData(texName, (int)w, (int)h, rgb));
+            }
+        }
+        catch
+        {
+            // Texture section is optional; silently ignore parse errors.
         }
 
         return mesh;
@@ -146,5 +195,16 @@ public sealed class PdoMeshLoader : IMeshLoader
             raw[i] = (byte)((raw[i] - k + 256) & 0xFF);
 
         return Encoding.Unicode.GetString(raw).TrimEnd('\0');
+    }
+
+    /// <summary>Decompresses a zlib-framed (RFC 1950) byte array.</summary>
+    private static byte[] DecompressZlib(byte[] data)
+    {
+        // ZLibStream is the RFC 1950 (zlib) wrapper; available in .NET 6+.
+        using var ms  = new MemoryStream(data);
+        using var zs  = new ZLibStream(ms, CompressionMode.Decompress);
+        using var out_= new MemoryStream();
+        zs.CopyTo(out_);
+        return out_.ToArray();
     }
 }
