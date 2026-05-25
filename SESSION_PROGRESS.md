@@ -1,6 +1,6 @@
 # 4H-Unfolder — Session Progress Log
 
-> **Last updated:** 2026-05-25 (session 31 — MCP code-graph server Phase 1-3; branch `feat/pdo-import`)
+> **Last updated:** 2026-05-25 (session 32 — PDO Phase C+D: 2D layout restore, CRITICAL-3D-TEX fix; branch `feat/pdo-import`)
 > **Branch:** `feat/pdo-import`  (base: `main` @ v0.0.2.H)
 > **Target framework:** .NET 8 / WPF
 > **SDK required:** `winget install Microsoft.DotNet.SDK.8`
@@ -86,9 +86,23 @@ No circular dependencies. Domain has zero external dependencies.
 | Item | Result |
 |------|--------|
 | `dotnet build 4H-Unfolder.sln` | ✅ 0 errors, 4 warnings (NuGet NU1603 only) |
-| `dotnet test` | ✅ 41 / 41 passed |
-| `dotnet run --project src/FourHUnfolder.App` | ✅ App opens, PDO files visible in file dialog |
+| `dotnet test` | ✅ 56 / 56 passed |
+| `dotnet run --project src/FourHUnfolder.App` | ✅ App opens, PDO files auto-unfold on load |
 | Published `4H-Unfolder.exe` v0.0.2.H (win-x64, self-contained) | ✅ Session 29 (PDO not yet in release) |
+
+---
+
+## Session 32 — Changes
+
+| Item | Detail |
+|------|--------|
+| **PDO Phase C — PdoLayout extraction** | New `PdoLayout.cs` / `PdoFace` record in Domain.Models. `PdoMeshLoader` now reads each point's `coord` doubles (paper-mm) and shape's `part` uint32; fan-triangulates into `PdoFace` records → `mesh.PdoLayout` |
+| **PDO Phase D — Unfold restore** | New `PdoUnfoldBuilder.cs` (Geometry): edge classification by part-index (same→Fold, diff→Cut, boundary→Boundary), builds `UnfoldedFace` list with 2D coords from PdoLayout — no BFS/MST needed |
+| **`UnfoldService.TryBuildFromPdoLayout`** | Calls `PdoUnfoldBuilder` + `GlueTabGenerator` + `OverlapDetector` + cuts `cutEdgePairIds`; returns `UnfoldResult`. Null when `mesh.PdoLayout == null` |
+| **`MainViewModel` auto-unfold** | After PDO load, if `PdoLayout != null`: calls `TryBuildFromPdoLayout(scale=1.0)` → `RebuildPieces` → `RunAutoArrange` → `IsUnfolded=true` / `CanExport=true`; status shows piece count |
+| **Fix CRITICAL-3D-TEX** | `EnterPreview()` and `CommitPreview()` both now pass `_materialBitmaps` to `BuildWpfModel`; PDO embedded textures and OBJ multi-material textures no longer lost after preview cycle |
+| **Tests** | 11 new `PdoUnfoldBuilderTests`: face count, 2D coord preservation, Fold/Cut/Boundary classification (unit + real-file integration); 56/56 suite green |
+| **Commits pushed** | `3fcc1bd` — feat+fix: PDO import Phase 3+4 — 2D layout restore + CRITICAL-3D-TEX fix |
 
 ---
 
