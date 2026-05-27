@@ -1,7 +1,7 @@
 # 4H-Unfolder — Session Progress Log
 
-> **Last updated:** 2026-05-25 (session 35 — BUG-PDO-3: PDO piece disappears on first click; branch `feat/pdo-import`)
-> **Branch:** `feat/pdo-import`  (base: `main` @ v0.0.2.H → current: v0.0.3.B)
+> **Last updated:** 2026-05-27 (session 36 — UI/UX polish; branch `fix/ui-ux-polish`)
+> **Branch:** `fix/ui-ux-polish`  (base: `main` @ v0.0.3.C → current: v0.0.3.D)
 > **Target framework:** .NET 8 / WPF
 > **SDK required:** `winget install Microsoft.DotNet.SDK.8`
 > **History archive:** see [`BUGS_HISTORY.md`](BUGS_HISTORY.md) for all prior bug/tech-debt records
@@ -56,7 +56,7 @@ No circular dependencies. Domain has zero external dependencies.
 - **Edge-Edit mode** (✏): hover highlight, LMB attach/detach; color in Settings
 - **Rotate-by-Point mode** (⊙): pivot → handle → live rotation; undoable
 - **Auto-align edge** — double-click edge → snap to nearest 90°; undoable
-- **Parts alignment** — 6 toolbar buttons: Align L/R/T/B/Center-H/V; undoable
+- **Parts alignment** — 6 toolbar buttons: Align L `◧` / R `◨` / T `⊤` / B `⊥` / Center-H `↕` / Center-V `◫`; undoable
 - **Edge ID labels + glue arrows** on cut edges (pair numbers 1,2,3…); color in Settings
 - **Multi-texture** — per-material texture slots; TextureDialog with material list; per-face texture in 2D
 - **Save/Load `.4hu`** — self-contained ZIP bundle (mesh + texture + state)
@@ -87,10 +87,26 @@ No circular dependencies. Domain has zero external dependencies.
 |------|--------|
 | `dotnet build 4H-Unfolder.sln` | ✅ 0 errors, 7 warnings (NuGet NU1603 only) |
 | `dotnet test` | ✅ 56 / 56 passed |
-| `dotnet run --project src/FourHUnfolder.App` | ✅ App opens, PDO files auto-unfold on load |
-| Published `4H-Unfolder.exe` **v0.0.3.B** (win-x64, self-contained) | ✅ Session 34 |
-| BUG-PDO-3 fix | ✅ Session 35 — PDO piece no longer disappears on first click |
+| `dotnet run --project src/FourHUnfolder.App` | ✅ App opens maximized; PDO files auto-unfold on load |
 | Published `4H-Unfolder.exe` **v0.0.3.C** (win-x64, self-contained) | ✅ Session 35 |
+| Published `4H-Unfolder.exe` **v0.0.3.D** (win-x64, self-contained) | ✅ Session 36 |
+
+---
+
+## Session 36 — Changes
+
+| Item | Detail |
+|------|--------|
+| **Branch** | `fix/ui-ux-polish` — branched from `main` @ v0.0.3.C |
+| **Maximize on startup** | `MainWindow.xaml`: added `WindowState="Maximized"` — app opens fullscreen by default; `Width`/`Height` kept at 1400×900 for restore size |
+| **ModelOrientationDialog — layout** | Right column widened `180→210 px`; added `TextWrapping="Wrap"` to "Up axis" and "Front axis" label TextBlocks — text no longer clips at minimum dialog width |
+| **ModelOrientationDialog — buttons** | Added `HorizontalContentAlignment="Center"` to OK + Skip; removed whitespace-padding hack from `Content="  OK  "` |
+| **UnfoldSetupDialog — buttons** | Added `HorizontalContentAlignment="Center"` to OK + Cancel |
+| **UnfoldSetupDialog — inputs** | TextBox style: added `VerticalContentAlignment="Center"` + changed `Padding="4,2"→"4,0"` — text vertically centred in 26 px input rows |
+| **2D Align icons** | Replaced non-descriptive icons with semantic Unicode geometry characters: Left `⬛→◧`, CenterV `▪→◫`, Right `⬜→◨`, Top `🔼→⊤`, Bottom `🔽→⊥`, CenterH `↔→↕` |
+| **Audit** | Full grep scan of all `.cs` + `.xaml` for TODO/FIXME/TD-/BUG-/CRITICAL-; no open items found; all markers are documentation of fixed issues |
+| **Version** | `0.0.3.3 → 0.0.3.4` (v0.0.3.C → v0.0.3.D); window title + InformationalVersion updated |
+| **Tests** | 56 / 56 pass |
 
 ---
 
@@ -102,58 +118,8 @@ No circular dependencies. Domain has zero external dependencies.
 | **BUG-PDO-3 fix** | `MainViewModel.cs` `RunAutoArrange`: changed to `localX + minY + hNat` (`= localX + maxY`). After a 90° CW `RotateTransform`, canvas_X_min occurs at `ly = maxY`, so `PositionX` must be ≥ `maxY` to keep the piece on-screen. |
 | **Defensive guard** | `PatternCanvasControl.xaml.cs`: added `ScrollToShowPiece(piece)` call in `IsSelected` PropertyChanged handler; added `ScrollToShowPiece` method that centers the viewport on a piece if it's outside the visible scroll area. |
 | **Why PDO-specific** | PDO paper-model strips are wide (wNat > hNat), frequently hitting the `rot=90` branch. OBJ/FBX mesh pieces are more equidimensional and rarely trigger it. |
+| **Version** | Bumped `0.0.3.2 → 0.0.3.3` (v0.0.3.B → v0.0.3.C) |
 | **Tests** | 56 / 56 pass (no new tests needed — bug is in UI layout arithmetic, no testable pure-logic unit) |
-
----
-
-## Session 34 — Changes
-
-| Item | Detail |
-|------|--------|
-| **Verified s30–33 fixes** | Confirmed TD-PDO-1, TD-PDO-2, CRITICAL-3D-TEX, BUG-PDO-1, BUG-PDO-2 all correctly implemented via code-graph exploration |
-| **TD-PDO-4** | Added `_embeddedBitmapCache` (Dictionary<int, BitmapImage?>) to `MainViewModel`; `BitmapFromEmbedded` split into cached wrapper + `BitmapFromEmbeddedCore`; cache cleared on new mesh load — eliminates repeated PNG encode for 2048² textures |
-| **TD-25-1** | "Don't ask again" checkbox in `ModelOrientationDialog`; new `SkipModelOrientationDialog` bool in `AppSettings.GeneralSettings`; `MainViewModel.LoadMesh` honours the setting + persists on check |
-| **TD-PDO-3** | Pre-geo seek replaced: `Seek(120, Current)` → `Seek(154 + localeLen + commentLen, Begin)` — absolute formula derived from header byte-trace; correct for any localeLen (not just standard PD6 = 40) |
-| **Tests** | All 56 pass |
-
-### Tech debt summary (v0.0.3.A → v0.0.3.B)
-
-| ID | Priority | Status | Description |
-|----|----------|--------|-------------|
-| ~~TD-PDO-3~~ | 🟢 | ✅ s34 | 120-byte pre-geo skip replaced by absolute offset formula |
-| ~~TD-PDO-4~~ | 🟢 | ✅ s34 | `BitmapFromEmbedded` now cached; no repeated PNG encode |
-| ~~TD-25-1~~  | 🟢 | ✅ s34 | `ModelOrientationDialog` — "Don't ask again" checkbox added |
-
----
-
-## Session 30 — Changes
-
-| Item | Detail |
-|------|--------|
-| **PDO import Phase 1 — 3D geometry** | `PdoMeshLoader.cs` (new): parses PD6 header (sig, localeLen, cipher key, commentLen), skips 120-byte pre-geo settings, reads geo_count + per-geo: cipher-decoded wstr name, raw vertices (3×double), polygon shapes fan-triangulated into triangles, skips unk17 edge data |
-| **PDO cipher** | Subtraction cipher `decoded = (raw−key+256)%256`; applies only to `wstr` fields; all int/double/bool fields are raw LE |
-| **PDO wstr format** | `uint32` byteLen (raw, NOT char count) + byteLen bytes of cipher-encoded UTF-16LE; trailing null stripped |
-| **PDO pre-geo skip** | geo_count always at abs `74+commentLen+120` = abs 500 for PD6; verified on all 3 sample files |
-| **PDO import Phase 2 — UVs + embedded texture** | Per-point: read `unk13` (offsets 20-35 after vtxIdx) as texture UV [0,1]; per-shape: populate `mesh.UVs` + `mesh.FaceUVs`; fan-triangulate with UV indices |
-| **PDO texture decompression** | After all geos: read texture section (wstr name + 80 bytes settings + bool hasImage + w/h/csize + zlib-compressed RGB24); `ZLibStream` decompress → `mesh.EmbeddedTextures` |
-| **`EmbeddedTextureData` record** | New `Domain/Models/EmbeddedTextureData.cs`: `(Name, Width, Height, Rgb24Bytes)` |
-| **`Mesh.EmbeddedTextures`** | New `List<EmbeddedTextureData>` property on Mesh |
-| **`MainViewModel.BitmapFromEmbedded`** | New helper: `BitmapSource.Create(Rgb24)` → `PngBitmapEncoder` → in-memory `BitmapImage`; frozen for cross-thread use |
-| **`RebuildMaterialSlots` PDO fallback** | When `MaterialNames.Count == 0` and `SuggestedTexturePath == null`: uses `BitmapFromEmbedded(mesh.EmbeddedTextures[0])` → stores at `_materialBitmaps[-1]` → picked up by `BuildWpfModel` for 3D texture display |
-| **File dialog + tooltip** | `MainViewModel`: added `*.pdo` to Open Mesh filter; `MainWindow.xaml`: tooltip updated |
-| **`MultiFormatMeshLoader`** | Routes `.pdo` → `PdoMeshLoader` |
-| **Tests** | 7 new `PdoMeshLoaderTests`: geometry valid, vertex count exact, UVs finite in-bounds, embedded textures present with correct w/h/byte-count, invalid-signature guard; 41/41 suite green |
-| **Empirical recon** | Verified on 3 sample files: SoundEmitter (132 KB, 5 geos, 128×128 tex), waluigiblimp (6.1 MB, 2 geos, 2048×2048 tex), Pillar (18.4 MB, 1 geo, 2×textures 2048² + 1440×2880) |
-
----
-
-## Session 29 — Changes (archived → BUGS_HISTORY.md)
-
-| Item | Detail |
-|------|--------|
-| **TD-28-4 / TD-28-1 / TD-28-3** | Theme-aware: 3D bg auto-switch; SettingsDialog footer; 4 dialogs (Assembly/Texture/UnfoldSetup/ModelOrientation) |
-| **TD-24-1** | PieceFoldTree fold direction fix (`EdgeDir3D` + `signCorr`) |
-| **Build/Test** | ✅ 0 errors / 34 tests / app opens clean; published v0.0.2.H |
 
 ---
 
@@ -161,14 +127,9 @@ No circular dependencies. Domain has zero external dependencies.
 
 | ID | Priority | Status | Fixed in | Description |
 |----|----------|--------|----------|-------------|
-| ~~TD-PDO-1~~ | 🟡 Med | ✅ fixed | s32 | `coord` doubles per point extracted → `PdoLayout`; auto-unfold on load |
-| ~~TD-PDO-2~~ | 🟡 Med | ✅ fixed | s31 | Multi-texture PDO: per-face `MaterialId` from `unk11`; `MaterialNames` from `EmbeddedTextures` |
-| ~~TD-PDO-3~~ | 🟢 Low | ✅ fixed | s34 | Pre-geo seek: `Seek(120, Current)` → `Seek(154+localeLen+commentLen, Begin)` |
-| ~~TD-PDO-4~~ | 🟢 Low | ✅ fixed | s34 | `BitmapFromEmbedded` cached via `_embeddedBitmapCache`; core only called once per texture per mesh |
-| ~~CRITICAL-3D-TEX~~ | 🔴 Critical | ✅ fixed | s32 | `EnterPreview`/`CommitPreview` now pass `_materialBitmaps` to `BuildWpfModel` |
-| ~~TD-25-1~~ | 🟢 Low | ✅ fixed | s34 | "Don't ask again" checkbox in `ModelOrientationDialog`; persisted to `AppSettings.General` |
-| ~~BUG-PDO-3~~ | 🟡 Med | ✅ fixed | s35 | `RunAutoArrange` rot=90 formula error → PDO pieces placed off-screen, appear to "disappear" on first click |
 | **Performance** | 🟢 Low | 🔲 open | — | O(n²) overlap check (AABB + SAT); spatial grid needed for meshes > 2000 faces |
+
+*(All other items resolved — see [`BUGS_HISTORY.md`](BUGS_HISTORY.md) for full history)*
 
 ---
 
@@ -229,7 +190,7 @@ uint32 texCount
 
 ```
 Domain/Models/          Vertex Edge EdgeType Face Mesh PaperSizeModel ModelScale
-                        EmbeddedTextureData                                  ← NEW
+                        EmbeddedTextureData
 Domain/DualGraph/       DualGraph GraphNode GraphEdge
 Domain/Results/         UnfoldedFace GlueTab UnfoldResult AssemblyStep
 Domain/Settings/        AppSettings (View3D View2D Print General)
@@ -243,7 +204,7 @@ Application/Interfaces/ IMeshLoader IExporter
 Application/Services/   MeshService UnfoldService ProjectSerializer SettingsService
 
 Infrastructure/         ObjMeshLoader AssimpMeshLoader MultiFormatMeshLoader
-                        PdoMeshLoader                                        ← NEW
+                        PdoMeshLoader
                         SvgExporter PdfExporter AffineTransformHelper
 
 App/ViewModels/         MainViewModel PieceViewModel SettingsViewModel
@@ -258,7 +219,7 @@ App/                    MainWindow App
 
 Tests/                  MstAlgorithmTests (6)  UnfoldEngineTests (9)
                         GeometryAlgorithmTests (13)  SvgExporterTests (5)
-                        PdoMeshLoaderTests (7)                               ← NEW
+                        PdoMeshLoaderTests (7)
 App/Assets/             app.ico (6 sizes) logo.png
 ```
 
@@ -267,4 +228,4 @@ App/Assets/             app.ico (6 sizes) logo.png
 ## Recommended Next Steps
 
 1. **Performance** — Spatial grid / bucket partition for `OverlapDetector`; current O(n²) AABB loop becomes a bottleneck on meshes > 2000 faces
-2. **Merge `feat/pdo-import` → `main`** — branch is stable at v0.0.3.B; all tech debt cleared
+2. **Merge `fix/ui-ux-polish` → `main`** — branch is stable at v0.0.3.D; all UI/UX polish changes verified

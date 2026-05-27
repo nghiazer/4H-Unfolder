@@ -16,11 +16,12 @@
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
         <Style TargetType="TextBox">
-            <Setter Property="Background"  Value="{DynamicResource InputBg}"/>
-            <Setter Property="Foreground"  Value="{DynamicResource InputFg}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource InputBorder}"/>
-            <Setter Property="Padding"     Value="4,2"/>
-            <Setter Property="Height"      Value="26"/>
+            <Setter Property="Background"               Value="{DynamicResource InputBg}"/>
+            <Setter Property="Foreground"               Value="{DynamicResource InputFg}"/>
+            <Setter Property="BorderBrush"              Value="{DynamicResource InputBorder}"/>
+            <Setter Property="Padding"                  Value="4,0"/>
+            <Setter Property="Height"                   Value="26"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
         <Style TargetType="ComboBox">
             <Setter Property="Background"  Value="{DynamicResource InputBg}"/>
@@ -141,14 +142,16 @@
         <StackPanel DockPanel.Dock="Bottom"
                     Orientation="Horizontal" HorizontalAlignment="Right"
                     Margin="0,6,0,0">
-            <Button Content="  OK  "
+            <Button Content="OK"
                     Width="80" Height="30" Margin="0,0,10,0"
+                    HorizontalContentAlignment="Center"
                     Background="{DynamicResource BtnOkBg}"
                     Foreground="{DynamicResource BtnOkFg}"
                     BorderBrush="{DynamicResource BtnOkBorder}"
                     Click="OK_Click"/>
             <Button Content="Cancel"
                     Width="80" Height="30"
+                    HorizontalContentAlignment="Center"
                     Background="{DynamicResource BtnCancelBg}"
                     Foreground="{DynamicResource BtnCancelFg}"
                     BorderBrush="{DynamicResource BtnCancelBorder}"
