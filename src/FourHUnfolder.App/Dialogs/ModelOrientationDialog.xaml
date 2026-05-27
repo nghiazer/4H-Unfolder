@@ -50,7 +50,7 @@
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>       <!-- mesh preview -->
-                <ColumnDefinition Width="180"/>     <!-- controls -->
+                <ColumnDefinition Width="210"/>     <!-- controls -->
             </Grid.ColumnDefinitions>
 
             <!-- Mesh preview viewport.
@@ -117,7 +117,8 @@
 
                 <!-- Up axis -->
                 <TextBlock Text="Up axis (maps to world +Y)"
-                           Style="{StaticResource Label}" Margin="0,0,0,4"/>
+                           Style="{StaticResource Label}" Margin="0,0,0,4"
+                           TextWrapping="Wrap"/>
                 <ComboBox ItemsSource="{Binding AxisOptions}"
                           SelectedItem="{Binding UpAxis}"
                           ToolTip="Which axis of your model should point upward in the world?"
@@ -125,7 +126,8 @@
 
                 <!-- Front axis -->
                 <TextBlock Text="Front axis (maps to world +Z)"
-                           Style="{StaticResource Label}" Margin="0,0,0,4"/>
+                           Style="{StaticResource Label}" Margin="0,0,0,4"
+                           TextWrapping="Wrap"/>
                 <ComboBox ItemsSource="{Binding AxisOptions}"
                           SelectedItem="{Binding FrontAxis}"
                           ToolTip="Which axis of your model should face forward?"
@@ -172,7 +174,8 @@
         <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right"
                     Margin="0,12,0,0">
             <!-- TD-27-3: disable OK when axes are parallel -->
-            <Button Content="  OK  " Width="80" Height="30"
+            <Button Content="OK" Width="80" Height="30"
+                    HorizontalContentAlignment="Center"
                     Background="{DynamicResource BtnOkBg}"
                     Foreground="{DynamicResource BtnOkFg}"
                     BorderBrush="{DynamicResource BtnOkBorder}"
@@ -189,6 +192,7 @@
                 </Button.Style>
             </Button>
             <Button Content="Skip" Width="80" Height="30"
+                    HorizontalContentAlignment="Center"
                     Background="{DynamicResource CtrlBtnBg}"
                     Foreground="{DynamicResource TextMuted}"
                     BorderBrush="{DynamicResource BorderNormal}"
