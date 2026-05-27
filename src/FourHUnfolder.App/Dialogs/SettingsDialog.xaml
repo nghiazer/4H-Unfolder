@@ -156,7 +156,7 @@
                                        Style="{StaticResource FieldLabel}"/>
                             <Rectangle Grid.Column="1" Width="22" Height="22"
                                        Fill="{Binding Background3D, Converter={StaticResource HexBrush}}"
-                                       Stroke="#666" StrokeThickness="1" Margin="0,0,4,0"/>
+                                       Stroke="{DynamicResource ColorSwatchBorderBrush}" StrokeThickness="1" Margin="0,0,4,0"/>
                             <TextBox Grid.Column="2"
                                      Style="{StaticResource InputBox}"
                                      Text="{Binding Background3D, UpdateSourceTrigger=PropertyChanged}"
@@ -193,7 +193,7 @@
                             <TextBlock Text="Face color" Style="{StaticResource FieldLabel}"/>
                             <Rectangle Grid.Column="1" Width="22" Height="22"
                                        Fill="{Binding FaceColor3D, Converter={StaticResource HexBrush}}"
-                                       Stroke="#666" StrokeThickness="1" Margin="0,0,4,0"/>
+                                       Stroke="{DynamicResource ColorSwatchBorderBrush}" StrokeThickness="1" Margin="0,0,4,0"/>
                             <TextBox Grid.Column="2" Style="{StaticResource InputBox}"
                                      Text="{Binding FaceColor3D, UpdateSourceTrigger=PropertyChanged}" MaxLength="9"/>
                         </Grid>
@@ -207,7 +207,7 @@
                             <TextBlock Text="Back-face color" Style="{StaticResource FieldLabel}"/>
                             <Rectangle Grid.Column="1" Width="22" Height="22"
                                        Fill="{Binding BackFaceColor3D, Converter={StaticResource HexBrush}}"
-                                       Stroke="#666" StrokeThickness="1" Margin="0,0,4,0"/>
+                                       Stroke="{DynamicResource ColorSwatchBorderBrush}" StrokeThickness="1" Margin="0,0,4,0"/>
                             <TextBox Grid.Column="2" Style="{StaticResource InputBox}"
                                      Text="{Binding BackFaceColor3D, UpdateSourceTrigger=PropertyChanged}" MaxLength="9"/>
                         </Grid>
@@ -287,7 +287,7 @@
                             <TextBlock Text="Edge color" Style="{StaticResource FieldLabel}"/>
                             <Rectangle Grid.Column="1" Width="22" Height="22"
                                        Fill="{Binding EdgeOverlayColor, Converter={StaticResource HexBrush}}"
-                                       Stroke="#666" StrokeThickness="1" Margin="0,0,4,0"/>
+                                       Stroke="{DynamicResource ColorSwatchBorderBrush}" StrokeThickness="1" Margin="0,0,4,0"/>
                             <TextBox Grid.Column="2" Style="{StaticResource InputBox}"
                                      Text="{Binding EdgeOverlayColor, UpdateSourceTrigger=PropertyChanged}" MaxLength="9"/>
                         </Grid>
@@ -321,7 +321,7 @@
                                        ToolTip="Color shown when hovering over a fold edge that can be detached (made into a cut)"/>
                             <Rectangle Grid.Column="1" Width="22" Height="22"
                                        Fill="{Binding EdgeHoverDetachColor3D, Converter={StaticResource HexBrush}}"
-                                       Stroke="#666" StrokeThickness="1" Margin="0,0,4,0"/>
+                                       Stroke="{DynamicResource ColorSwatchBorderBrush}" StrokeThickness="1" Margin="0,0,4,0"/>
                             <TextBox Grid.Column="2" Style="{StaticResource InputBox}"
                                      Text="{Binding EdgeHoverDetachColor3D, UpdateSourceTrigger=PropertyChanged}" MaxLength="9"/>
                         </Grid>
@@ -335,7 +335,7 @@
                                        ToolTip="Color shown when hovering over a cut edge that can be re-attached (made into a fold)"/>
                             <Rectangle Grid.Column="1" Width="22" Height="22"
                                        Fill="{Binding EdgeHoverAttachColor3D, Converter={StaticResource HexBrush}}"
-                                       Stroke="#666" StrokeThickness="1" Margin="0,0,4,0"/>
+                                       Stroke="{DynamicResource ColorSwatchBorderBrush}" StrokeThickness="1" Margin="0,0,4,0"/>
                             <TextBox Grid.Column="2" Style="{StaticResource InputBox}"
                                      Text="{Binding EdgeHoverAttachColor3D, UpdateSourceTrigger=PropertyChanged}" MaxLength="9"/>
                         </Grid>
@@ -393,7 +393,7 @@
                             <TextBlock Text="Canvas background" Style="{StaticResource FieldLabel}"/>
                             <Rectangle Grid.Column="1" Width="22" Height="22"
                                        Fill="{Binding CanvasBackground, Converter={StaticResource HexBrush}}"
-                                       Stroke="#666" StrokeThickness="1" Margin="0,0,4,0"/>
+                                       Stroke="{DynamicResource ColorSwatchBorderBrush}" StrokeThickness="1" Margin="0,0,4,0"/>
                             <TextBox Grid.Column="2" Style="{StaticResource InputBox}"
                                      Text="{Binding CanvasBackground, UpdateSourceTrigger=PropertyChanged}" MaxLength="9"/>
                         </Grid>
@@ -406,7 +406,7 @@
                             <TextBlock Text="Paper color" Style="{StaticResource FieldLabel}"/>
                             <Rectangle Grid.Column="1" Width="22" Height="22"
                                        Fill="{Binding PaperColor, Converter={StaticResource HexBrush}}"
-                                       Stroke="#666" StrokeThickness="1" Margin="0,0,4,0"/>
+                                       Stroke="{DynamicResource ColorSwatchBorderBrush}" StrokeThickness="1" Margin="0,0,4,0"/>
                             <TextBox Grid.Column="2" Style="{StaticResource InputBox}"
                                      Text="{Binding PaperColor, UpdateSourceTrigger=PropertyChanged}" MaxLength="9"/>
                         </Grid>
@@ -439,7 +439,7 @@
                             <TextBlock Text="Grid color (ARGB)" Style="{StaticResource FieldLabel}"/>
                             <Rectangle Grid.Column="1" Width="22" Height="22"
                                        Fill="{Binding GridColor, Converter={StaticResource HexBrush}}"
-                                       Stroke="#666" StrokeThickness="1" Margin="0,0,4,0"/>
+                                       Stroke="{DynamicResource ColorSwatchBorderBrush}" StrokeThickness="1" Margin="0,0,4,0"/>
                             <TextBox Grid.Column="2" Style="{StaticResource InputBox}"
                                      Text="{Binding GridColor, UpdateSourceTrigger=PropertyChanged}" MaxLength="9"/>
                         </Grid>
@@ -470,7 +470,7 @@
                         <TextBlock Text="Face fill color (ARGB)" Style="{StaticResource FieldLabel}"/>
                         <Rectangle Grid.Column="1" Width="22" Height="22"
                                    Fill="{Binding FaceFillColor, Converter={StaticResource HexBrush}}"
-                                   Stroke="#666" StrokeThickness="1" Margin="0,0,4,0"/>
+                                   Stroke="{DynamicResource ColorSwatchBorderBrush}" StrokeThickness="1" Margin="0,0,4,0"/>
                         <TextBox Grid.Column="2" Style="{StaticResource InputBox}"
                                  Text="{Binding FaceFillColor, UpdateSourceTrigger=PropertyChanged}" MaxLength="9"/>
                     </Grid>
@@ -487,7 +487,7 @@
                             <TextBlock Text="Fold line color" Style="{StaticResource FieldLabel}"/>
                             <Rectangle Grid.Column="1" Width="22" Height="22"
                                        Fill="{Binding FoldLineColor2D, Converter={StaticResource HexBrush}}"
-                                       Stroke="#666" StrokeThickness="1" Margin="0,0,4,0"/>
+                                       Stroke="{DynamicResource ColorSwatchBorderBrush}" StrokeThickness="1" Margin="0,0,4,0"/>
                             <TextBox Grid.Column="2" Style="{StaticResource InputBox}"
                                      Text="{Binding FoldLineColor2D, UpdateSourceTrigger=PropertyChanged}" MaxLength="9"/>
                         </Grid>
@@ -529,7 +529,7 @@
                             <TextBlock Text="Cut line color" Style="{StaticResource FieldLabel}"/>
                             <Rectangle Grid.Column="1" Width="22" Height="22"
                                        Fill="{Binding CutLineColor2D, Converter={StaticResource HexBrush}}"
-                                       Stroke="#666" StrokeThickness="1" Margin="0,0,4,0"/>
+                                       Stroke="{DynamicResource ColorSwatchBorderBrush}" StrokeThickness="1" Margin="0,0,4,0"/>
                             <TextBox Grid.Column="2" Style="{StaticResource InputBox}"
                                      Text="{Binding CutLineColor2D, UpdateSourceTrigger=PropertyChanged}" MaxLength="9"/>
                         </Grid>
@@ -560,7 +560,7 @@
                         <TextBlock Text="Edge hover highlight color" Style="{StaticResource FieldLabel}"/>
                         <Rectangle Grid.Column="1" Width="22" Height="22"
                                    Fill="{Binding EdgeHoverColor, Converter={StaticResource HexBrush}}"
-                                   Stroke="#666" StrokeThickness="1" Margin="0,0,4,0"/>
+                                   Stroke="{DynamicResource ColorSwatchBorderBrush}" StrokeThickness="1" Margin="0,0,4,0"/>
                         <TextBox Grid.Column="2" Style="{StaticResource InputBox}"
                                  Text="{Binding EdgeHoverColor, UpdateSourceTrigger=PropertyChanged}" MaxLength="9"/>
                     </Grid>
@@ -612,7 +612,7 @@
                             <TextBlock Text="Glue tab color (ARGB)" Style="{StaticResource FieldLabel}"/>
                             <Rectangle Grid.Column="1" Width="22" Height="22"
                                        Fill="{Binding GlueTabColor, Converter={StaticResource HexBrush}}"
-                                       Stroke="#666" StrokeThickness="1" Margin="0,0,4,0"/>
+                                       Stroke="{DynamicResource ColorSwatchBorderBrush}" StrokeThickness="1" Margin="0,0,4,0"/>
                             <TextBox Grid.Column="2" Style="{StaticResource InputBox}"
                                      Text="{Binding GlueTabColor, UpdateSourceTrigger=PropertyChanged}" MaxLength="9"/>
                         </Grid>
@@ -634,7 +634,7 @@
                             <TextBlock Text="Edge ID color (ARGB)" Style="{StaticResource FieldLabel}"/>
                             <Rectangle Grid.Column="1" Width="22" Height="22"
                                        Fill="{Binding EdgeIdColor, Converter={StaticResource HexBrush}}"
-                                       Stroke="#666" StrokeThickness="1" Margin="0,0,4,0"/>
+                                       Stroke="{DynamicResource ColorSwatchBorderBrush}" StrokeThickness="1" Margin="0,0,4,0"/>
                             <TextBox Grid.Column="2" Style="{StaticResource InputBox}"
                                      Text="{Binding EdgeIdColor, UpdateSourceTrigger=PropertyChanged}" MaxLength="9"/>
                         </Grid>
@@ -763,7 +763,7 @@
                             <TextBlock Text="Fold line color" Style="{StaticResource FieldLabel}"/>
                             <Rectangle Grid.Column="1" Width="22" Height="22"
                                        Fill="{Binding PrintFoldColor, Converter={StaticResource HexBrush}}"
-                                       Stroke="#666" StrokeThickness="1" Margin="0,0,4,0"/>
+                                       Stroke="{DynamicResource ColorSwatchBorderBrush}" StrokeThickness="1" Margin="0,0,4,0"/>
                             <TextBox Grid.Column="2" Style="{StaticResource InputBox}"
                                      Text="{Binding PrintFoldColor, UpdateSourceTrigger=PropertyChanged}" MaxLength="9"/>
                         </Grid>
@@ -804,7 +804,7 @@
                             <TextBlock Text="Cut line color" Style="{StaticResource FieldLabel}"/>
                             <Rectangle Grid.Column="1" Width="22" Height="22"
                                        Fill="{Binding PrintCutColor, Converter={StaticResource HexBrush}}"
-                                       Stroke="#666" StrokeThickness="1" Margin="0,0,4,0"/>
+                                       Stroke="{DynamicResource ColorSwatchBorderBrush}" StrokeThickness="1" Margin="0,0,4,0"/>
                             <TextBox Grid.Column="2" Style="{StaticResource InputBox}"
                                      Text="{Binding PrintCutColor, UpdateSourceTrigger=PropertyChanged}" MaxLength="9"/>
                         </Grid>

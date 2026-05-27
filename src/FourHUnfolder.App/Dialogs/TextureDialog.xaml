@@ -8,15 +8,9 @@
         Background="{DynamicResource DialogBg}" Foreground="{DynamicResource TextPrimary}">
 
     <Window.Resources>
-        <!-- Checkerboard pattern for transparent-bg indicator -->
-        <DrawingBrush x:Key="CheckerBrush" TileMode="Tile" Viewport="0,0,8,8" ViewportUnits="Absolute">
-            <DrawingBrush.Drawing>
-                <DrawingGroup>
-                    <GeometryDrawing Brush="#555566" Geometry="M0,0 H8 V8 H0 Z"/>
-                    <GeometryDrawing Brush="#333344" Geometry="M0,0 H4 V4 H0 Z M4,4 H8 V8 H4 Z"/>
-                </DrawingGroup>
-            </DrawingBrush.Drawing>
-        </DrawingBrush>
+        <!-- CheckerBrush is created programmatically in code-behind (constructor)
+             using TransparencyCheckerA/B theme keys, then stored here.
+             The two Rectangle usages below reference it via DynamicResource. -->
     </Window.Resources>
 
     <Grid>
@@ -63,7 +57,7 @@
                                 <Border Width="32" Height="32" Margin="0,0,8,0"
                                         BorderBrush="{DynamicResource BorderNormal}" BorderThickness="1">
                                     <Grid>
-                                        <Rectangle Fill="{StaticResource CheckerBrush}"/>
+                                        <Rectangle Fill="{DynamicResource CheckerBrush}"/>
                                         <Image Source="{Binding Thumbnail}"
                                                Stretch="UniformToFill"
                                                RenderOptions.BitmapScalingMode="LowQuality"/>
@@ -109,7 +103,7 @@
                     Width="120" Height="120"
                     BorderBrush="{DynamicResource BorderNormal}" BorderThickness="1" CornerRadius="4">
                 <Grid>
-                    <Rectangle Fill="{StaticResource CheckerBrush}"/>
+                    <Rectangle Fill="{DynamicResource CheckerBrush}"/>
                     <Image x:Name="LargeThumbnail" Stretch="Uniform"
                            RenderOptions.BitmapScalingMode="HighQuality"/>
                     <TextBlock x:Name="NoTextureLbl"
