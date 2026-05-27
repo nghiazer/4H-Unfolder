@@ -199,7 +199,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
     public Brush ViewportBorderBrush =>
         _previewActive
             ? new SolidColorBrush(Colors.Orange)
-            : new SolidColorBrush(Color.FromRgb(61, 61, 92));
+            : (System.Windows.Application.Current.TryFindResource("SplitterBg") as Brush)
+              ?? new SolidColorBrush(Color.FromRgb(61, 61, 92));
 
     public bool CanRemoveTexture => HasTexture && !_previewActive;
 
@@ -257,6 +258,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         // Apply theme immediately when changed in settings
         _themeService.Apply(S.General.ThemeMode);
+
+        // ViewportBorderBrush resolves its colour from the theme at call-time;
+        // notify the binding so it re-evaluates with the newly applied theme.
+        OnPropertyChanged(nameof(ViewportBorderBrush));
 
         // When theme changes, auto-update canvas/3D-viewport backgrounds
         // if they're still at the previous theme's default (respects user customisation).

@@ -135,7 +135,7 @@
 
                 <!-- TD-27-3: parallel-axes warning -->
                 <TextBlock Text="⚠ Up and Front must be different axes!"
-                           Foreground="#ff6666" FontSize="10" TextWrapping="Wrap">
+                           Foreground="{DynamicResource WarningTextFg}" FontSize="10" TextWrapping="Wrap">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
                             <Setter Property="Visibility" Value="Collapsed"/>

@@ -80,4 +80,13 @@
     <SolidColorBrush x:Key="CtrlBtnFg"        Color="#1a1e2e"/>
     <SolidColorBrush x:Key="CtrlBtnBorder"    Color="#a0aac4"/>
 
+    <!-- ── Semantic extras ────────────────────────────────────────── -->
+    <!-- Warning / validation text (e.g. "axes are parallel") -->
+    <SolidColorBrush x:Key="WarningTextFg"            Color="#cc1111"/>
+    <!-- Stroke for colour-picker swatch rectangles in SettingsDialog -->
+    <SolidColorBrush x:Key="ColorSwatchBorderBrush"   Color="#aaaaaa"/>
+    <!-- Checkerboard pattern for transparent-texture preview (TextureDialog) -->
+    <SolidColorBrush x:Key="TransparencyCheckerA"     Color="#cccccc"/>
+    <SolidColorBrush x:Key="TransparencyCheckerB"     Color="#f0f0f0"/>
+
 </ResourceDictionary>
