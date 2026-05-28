@@ -1,7 +1,7 @@
 # 4H-Unfolder — Session Progress Log
 
-> **Last updated:** 2026-05-28 (session 38 — No-overlap auto-arrange, state reset on load, empty page trim; branch `fix/theme-system`)
-> **Branch:** `fix/theme-system`  (base: `fix/ui-ux-polish` @ v0.0.3.D → current: v0.0.3.F)
+> **Last updated:** 2026-05-29 (session 39 — Spatial grid O(n) overlap detection; branch `fix/perf-overlap-detector`)
+> **Branch:** `fix/perf-overlap-detector`  (base: `fix/theme-system` @ v0.0.3.F → current: v0.0.3.G)
 > **Target framework:** .NET 8 / WPF
 > **SDK required:** `winget install Microsoft.DotNet.SDK.8`
 > **History archive:** see [`BUGS_HISTORY.md`](BUGS_HISTORY.md) for all prior bug/tech-debt records
@@ -90,8 +90,20 @@ No circular dependencies. Domain has zero external dependencies.
 | `dotnet build 4H-Unfolder.sln` | ✅ 0 errors, 7 warnings (NuGet NU1603 only) |
 | `dotnet test` | ✅ 56 / 56 passed |
 | `dotnet run --project src/FourHUnfolder.App` | ✅ App opens maximized; PDO files auto-unfold on load |
-| Published `4H-Unfolder.exe` **v0.0.3.E** (win-x64, self-contained) | ✅ Session 37 |
 | Published `4H-Unfolder.exe` **v0.0.3.F** (win-x64, self-contained) | ✅ Session 38 |
+| Published `4H-Unfolder.exe` **v0.0.3.G** (win-x64, self-contained) | ✅ Session 39 |
+
+---
+
+## Session 39 — Changes
+
+| Item | Detail |
+|------|--------|
+| **Branch** | `fix/perf-overlap-detector` — branched from `fix/theme-system` @ v0.0.3.F |
+| **Spatial grid for OverlapDetector** | Replaced O(n²) nested loop with uniform bucket-partition broad phase. Each face is inserted into all grid cells its AABB covers (typically 1–4 cells); only pairs that share a cell are tested. Cell size = `max(2 × avgAABBSide, maxExtent / 256)` — keeps grid ≤ 256×256. Candidate pairs deduplicated with `HashSet<long>` (encodes canonical `i < j` pair as `(long)i<<32 | j`). AABB pre-check + SAT follow, identical to before. On spread-out geometry with n=2000 faces: ~4 000 comparisons vs 2 000 000 (~500× speedup). |
+| **Correctness guarantee** | If two AABBs overlap they must share ≥ 1 grid cell → no false negatives. Degenerate geometry guard: `cellSize` clamped to ≥ 1e-6. All 4 existing `OverlapDetectorTests` pass unchanged. |
+| **Version** | `0.0.3.6 → 0.0.3.7` (v0.0.3.F → v0.0.3.G) |
+| **Tests** | 56 / 56 pass |
 
 ---
 
@@ -109,31 +121,9 @@ No circular dependencies. Domain has zero external dependencies.
 
 ---
 
-## Session 37 — Changes
-
-| Item | Detail |
-|------|--------|
-| **Branch** | `fix/theme-system` — branched from `fix/ui-ux-polish` @ v0.0.3.D |
-| **Theme root cause** | `ThemeService.Apply()` used `merged.Insert(0, newDict)` → theme inserted at index 0 (lowest priority); App.xaml's static `LightTheme.xaml` at higher index always won every `DynamicResource` lookup → dark theme never applied to any binding except code-set values |
-| **ThemeService core fix** | Changed `merged.Insert(0,…)` → `merged.Add(…)` — last entry wins in WPF `MergedDictionaries`; now the applied theme always overrides App.xaml's static baseline |
-| **4 new theme keys** | Added `WarningTextFg`, `ColorSwatchBorderBrush`, `TransparencyCheckerA/B` to both `DarkTheme.xaml` and `LightTheme.xaml` |
-| **WarningTextFg** | `ModelOrientationDialog.xaml`: hardcoded `#ff6666` → `{DynamicResource WarningTextFg}` — warning text now adjusts shade per theme |
-| **ColorSwatchBorderBrush** | `SettingsDialog.xaml`: 17× `Stroke="#666"` → `{DynamicResource ColorSwatchBorderBrush}` — swatch borders visible in both themes |
-| **CheckerBrush — freeze workaround** | `TextureDialog.xaml.cs`: `ApplyCheckerBrush()` builds `DrawingBrush` in code-behind using `TryFindResource("TransparencyCheckerA/B")`, stores in `Window.Resources["CheckerBrush"]`; XAML uses `{DynamicResource CheckerBrush}`; `OnActivated` override re-builds brush so live theme switch is picked up when dialog is re-focused |
-| **ViewportBorderBrush** | `MainViewModel.cs`: getter now uses `TryFindResource("SplitterBg")` instead of hardcoded `#3d3d5c`; `OnSettingsChanged` notifies binding after `Apply()` |
-| **Code review (simplify)** | `/simplify` audit of all changes: 3 confirmed findings: (1) CheckerBrush not refreshed on live switch — fixed by `OnActivated`; (2) `↕` icon was semantically reversed for CenterH — fixed to `↔`; (3) duplicate LightTheme entry in MergedDictionaries at startup — noted, harmless, deferred |
-| **Version** | `0.0.3.4 → 0.0.3.5` (v0.0.3.D → v0.0.3.E); window title updated |
-| **Tests** | 56 / 56 pass |
-
----
-
 ## Remaining Tech Debt
 
-| ID | Priority | Status | Fixed in | Description |
-|----|----------|--------|----------|-------------|
-| **Performance** | 🟢 Low | 🔲 open | — | O(n²) overlap check (AABB + SAT); spatial grid needed for meshes > 2000 faces |
-
-*(All other items resolved — see [`BUGS_HISTORY.md`](BUGS_HISTORY.md) for full history)*
+*(No open tech debt — see [`BUGS_HISTORY.md`](BUGS_HISTORY.md) for full history)*
 
 ---
 
@@ -231,5 +221,5 @@ App/Assets/             app.ico (6 sizes) logo.png
 
 ## Recommended Next Steps
 
-1. **Performance** — Spatial grid / bucket partition for `OverlapDetector`; current O(n²) AABB loop becomes a bottleneck on meshes > 2000 faces
-2. **Merge `fix/theme-system` → `main`** — branch is stable at v0.0.3.F; theme fix + UX bug fixes applied
+1. **Merge `fix/perf-overlap-detector` → `main`** — branch is stable at v0.0.3.G; spatial grid O(n) overlap detection applied
+2. **Multi-page auto-layout** — allow pieces to flow across multiple pages automatically during auto-arrange
