@@ -1,7 +1,7 @@
 # 4H-Unfolder — Session Progress Log
 
-> **Last updated:** 2026-05-29 (session 39 — Spatial grid O(n) overlap detection; branch `fix/perf-overlap-detector`)
-> **Branch:** `fix/perf-overlap-detector`  (base: `fix/theme-system` @ v0.0.3.F → current: v0.0.3.G)
+> **Last updated:** 2026-05-29 (session 40 — Remove 2D canvas inner bounder layer; branch `fix/perf-overlap-detector`)
+> **Branch:** `fix/perf-overlap-detector`  (base: `fix/theme-system` @ v0.0.3.F → current: v0.0.3.H)
 > **Target framework:** .NET 8 / WPF
 > **SDK required:** `winget install Microsoft.DotNet.SDK.8`
 > **History archive:** see [`BUGS_HISTORY.md`](BUGS_HISTORY.md) for all prior bug/tech-debt records
@@ -41,7 +41,7 @@ No circular dependencies. Domain has zero external dependencies.
 | MST | `KruskalMstBuilder` | Kruskal + path-compressed Union-Find |
 | Edge marking | `EdgeMarker` | Fold / Cut / Boundary |
 | Unfold | `UnfoldEngine` | BFS circle-circle apex; disconnected components |
-| Overlap | `OverlapDetector` | AABB pre-check + SAT |
+| Overlap | `OverlapDetector` | Spatial grid broad-phase + AABB pre-check + SAT |
 | Tabs | `GlueTabGenerator` | Trapezoid/Rectangle/Triangle; side-angle param; alternate-flap |
 | Pieces | `PieceComputer` | Union-Find connected components |
 | SVG | `SvgExporter` | Per-face affine texture; edge-dedup; grayscale |
@@ -90,8 +90,22 @@ No circular dependencies. Domain has zero external dependencies.
 | `dotnet build 4H-Unfolder.sln` | ✅ 0 errors, 7 warnings (NuGet NU1603 only) |
 | `dotnet test` | ✅ 56 / 56 passed |
 | `dotnet run --project src/FourHUnfolder.App` | ✅ App opens maximized; PDO files auto-unfold on load |
-| Published `4H-Unfolder.exe` **v0.0.3.F** (win-x64, self-contained) | ✅ Session 38 |
 | Published `4H-Unfolder.exe` **v0.0.3.G** (win-x64, self-contained) | ✅ Session 39 |
+| Published `4H-Unfolder.exe` **v0.0.3.H** (win-x64, self-contained) | ✅ Session 40 |
+
+---
+
+## Session 40 — Changes
+
+| Item | Detail |
+|------|--------|
+| **Branch** | `fix/perf-overlap-detector` continuing @ v0.0.3.G → v0.0.3.H |
+| **Remove 2D canvas inner bounder** | `DrawPaper()` (`PatternCanvasControl.xaml.cs`): changed `RootCanvas.Background = HexBrush(canvasBg)` → `Scroller.Background = HexBrush(canvasBg)` + `RootCanvas.Background = Brushes.Transparent`. Previously `RootCanvas` had a fixed Width/Height forming a visible rectangle against `Canvas2DScrollerBg`, creating the "inner bounder" look. Now the whole 2D view is one uniform color. |
+| **Theme sync** | `DarkTheme.xaml`: `Canvas2DScrollerBg` `#2a2a4a` → `#3a3a5a`; `LightTheme.xaml`: `Canvas2DScrollerBg` `#cdd2de` → `#e8eaf0` — theme fallback before code-behind runs is now seamless with `CanvasBackground` defaults. |
+| **Settings label** | `SettingsDialog.xaml`: "Canvas background" → "2D view background" to reflect new scope. |
+| **Code review** | No issues found in either this session's canvas change or session 39's OverlapDetector change. |
+| **Version** | `0.0.3.7 → 0.0.3.8` (v0.0.3.G → v0.0.3.H) |
+| **Tests** | 56 / 56 pass |
 
 ---
 
@@ -103,20 +117,6 @@ No circular dependencies. Domain has zero external dependencies.
 | **Spatial grid for OverlapDetector** | Replaced O(n²) nested loop with uniform bucket-partition broad phase. Each face is inserted into all grid cells its AABB covers (typically 1–4 cells); only pairs that share a cell are tested. Cell size = `max(2 × avgAABBSide, maxExtent / 256)` — keeps grid ≤ 256×256. Candidate pairs deduplicated with `HashSet<long>` (encodes canonical `i < j` pair as `(long)i<<32 | j`). AABB pre-check + SAT follow, identical to before. On spread-out geometry with n=2000 faces: ~4 000 comparisons vs 2 000 000 (~500× speedup). |
 | **Correctness guarantee** | If two AABBs overlap they must share ≥ 1 grid cell → no false negatives. Degenerate geometry guard: `cellSize` clamped to ≥ 1e-6. All 4 existing `OverlapDetectorTests` pass unchanged. |
 | **Version** | `0.0.3.6 → 0.0.3.7` (v0.0.3.F → v0.0.3.G) |
-| **Tests** | 56 / 56 pass |
-
----
-
-## Session 38 — Changes
-
-| Item | Detail |
-|------|--------|
-| **Branch** | `fix/theme-system` continuing @ v0.0.3.E → v0.0.3.F |
-| **No-overlap auto-arrange** | `RunAutoArrange` (MainViewModel.cs): (1) removed `pw/ph = Math.Min(…,usable*)` caps — allocated space now matches rendered size; (2) rotation condition adds `&& wNat <= usableH` guard — prevents over-tall rotated pieces; (3) page-advance check adds `localY > gap` guard — prevents infinite advance for oversized first-row pieces |
-| **State reset on new model load** | `LoadMesh()`: resets `PagesWide=1`, `PagesTall=1`, `PixelsPerMm=DefaultPixelsPerMm` after `Pieces.Clear()`; fires `ViewResetRequested` event so canvas scrolls to origin |
-| **`ViewResetRequested` event** | New `Action?` event on `MainViewModel`; `PatternCanvasControl.OnDataContextChanged` subscribes/unsubscribes; handler scrolls `Scroller` to top-left |
-| **Empty page trim after drag** | New `GetCanvasBounds()` on `PieceViewModel` (rotated AABB in canvas mm); new `TrimEmptyPages()` on `MainViewModel` — detects empty page columns/rows, shifts piece positions, decrements `PagesWide`/`PagesTall`; called from `Canvas_MouseUp` after each drag |
-| **Version** | `0.0.3.5 → 0.0.3.6` (v0.0.3.E → v0.0.3.F) |
 | **Tests** | 56 / 56 pass |
 
 ---
@@ -221,5 +221,5 @@ App/Assets/             app.ico (6 sizes) logo.png
 
 ## Recommended Next Steps
 
-1. **Merge `fix/perf-overlap-detector` → `main`** — branch is stable at v0.0.3.G; spatial grid O(n) overlap detection applied
+1. **Merge `fix/perf-overlap-detector` → `main`** — branch is stable at v0.0.3.H; spatial grid + canvas bounder removal applied
 2. **Multi-page auto-layout** — allow pieces to flow across multiple pages automatically during auto-arrange
