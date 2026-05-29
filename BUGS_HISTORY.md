@@ -4,6 +4,17 @@
 
 ---
 
+## Session 39 — Changes
+
+| Item | Detail |
+|------|--------|
+| **Branch** | `fix/perf-overlap-detector` — branched from `fix/theme-system` @ v0.0.3.F |
+| **Spatial grid for OverlapDetector** | Replaced O(n²) nested loop with uniform bucket-partition broad phase. Each face is inserted into all grid cells its AABB covers (typically 1–4 cells); only pairs that share a cell are tested. Cell size = `max(2 × avgAABBSide, maxExtent / 256)`. Candidate pairs deduplicated with `HashSet<long>`. AABB pre-check + SAT follow, identical to before. |
+| **Version** | `0.0.3.6 → 0.0.3.7` (v0.0.3.F → v0.0.3.G) |
+| **Tests** | 56 / 56 pass |
+
+---
+
 ## Session 38 — Changes
 
 | Item | Detail |

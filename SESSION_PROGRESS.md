@@ -1,7 +1,7 @@
 # 4H-Unfolder — Session Progress Log
 
-> **Last updated:** 2026-05-29 (session 40 — Remove 2D canvas inner bounder layer; branch `fix/perf-overlap-detector`)
-> **Branch:** `fix/perf-overlap-detector`  (base: `fix/theme-system` @ v0.0.3.F → current: v0.0.3.H)
+> **Last updated:** 2026-05-29 (session 41 — Toolbar UX + Status Bar + Page label contrast; branch `feat/toolbar-ux`)
+> **Branch:** `feat/toolbar-ux`  (base: `fix/perf-overlap-detector` @ v0.0.3.H → current: v0.0.4.A)
 > **Target framework:** .NET 8 / WPF
 > **SDK required:** `winget install Microsoft.DotNet.SDK.8`
 > **History archive:** see [`BUGS_HISTORY.md`](BUGS_HISTORY.md) for all prior bug/tech-debt records
@@ -90,8 +90,23 @@ No circular dependencies. Domain has zero external dependencies.
 | `dotnet build 4H-Unfolder.sln` | ✅ 0 errors, 7 warnings (NuGet NU1603 only) |
 | `dotnet test` | ✅ 56 / 56 passed |
 | `dotnet run --project src/FourHUnfolder.App` | ✅ App opens maximized; PDO files auto-unfold on load |
-| Published `4H-Unfolder.exe` **v0.0.3.G** (win-x64, self-contained) | ✅ Session 39 |
 | Published `4H-Unfolder.exe` **v0.0.3.H** (win-x64, self-contained) | ✅ Session 40 |
+| Published `4H-Unfolder.exe` **v0.0.4.A** (win-x64, self-contained) | ✅ Session 41 |
+
+---
+
+## Session 41 — Changes
+
+| Item | Detail |
+|------|--------|
+| **Branch** | `feat/toolbar-ux` — branched from `fix/perf-overlap-detector` @ v0.0.3.H |
+| **Toolbar regrouping** | `MainWindow.xaml`: Reordered 12 toolbar buttons from 6 scattered groups → 4 semantic clusters: ① File/System (Load Mesh · Save · Load Project · Settings) ② Workflow (Unfold · Undo · Redo) ③ Export (SVG · PDF) ④ View/Tools (Texture · Assembly). Settings moved from far-right into File cluster; Undo/Redo joined Unfold. |
+| **Page label contrast** | `PatternCanvasControl.xaml.cs` `DrawPageAt()`: replaced hardcoded `Brushes.Gray` with `TryFindResource("Canvas2DPageLabelFg")`, font 10→11pt. New theme resource: Dark `#c0c0e0` (contrast 4.6:1 ✓), Light `#4a4a6a` (contrast 5.8:1 ✓) — both exceed WCAG AA 4.5:1. |
+| **Status bar restructure** | `MainWindow.xaml`: Status bar now has two left segments `[StatusText] ∣ [Zoom  100%]`. New resource `StatusTextFg` replaces neon blue `TextAccent` (Dark: `#d8d8e8` off-white, Light: `#2a2a44` dark navy). |
+| **StatusZoomText** | `MainViewModel.cs`: Added `StatusZoomText` computed property (% of `DefaultPixelsPerMm`), `OnPixelsPerMmChanged` partial to notify on scroll-zoom, and `OnSettingsChanged` notifies when default zoom changes in Settings. |
+| **Bug fix (review)** | `StatusZoomText` baseline fixed from hardcoded `3.0` → `_settingsService.Current.View2D.DefaultPixelsPerMm`, preventing wrong % when user changes Default zoom in Settings. |
+| **Version** | `0.0.3.8 → 0.0.4.0` (v0.0.3.H → v0.0.4.A) |
+| **Tests** | 56 / 56 pass |
 
 ---
 
@@ -105,18 +120,6 @@ No circular dependencies. Domain has zero external dependencies.
 | **Settings label** | `SettingsDialog.xaml`: "Canvas background" → "2D view background" to reflect new scope. |
 | **Code review** | No issues found in either this session's canvas change or session 39's OverlapDetector change. |
 | **Version** | `0.0.3.7 → 0.0.3.8` (v0.0.3.G → v0.0.3.H) |
-| **Tests** | 56 / 56 pass |
-
----
-
-## Session 39 — Changes
-
-| Item | Detail |
-|------|--------|
-| **Branch** | `fix/perf-overlap-detector` — branched from `fix/theme-system` @ v0.0.3.F |
-| **Spatial grid for OverlapDetector** | Replaced O(n²) nested loop with uniform bucket-partition broad phase. Each face is inserted into all grid cells its AABB covers (typically 1–4 cells); only pairs that share a cell are tested. Cell size = `max(2 × avgAABBSide, maxExtent / 256)` — keeps grid ≤ 256×256. Candidate pairs deduplicated with `HashSet<long>` (encodes canonical `i < j` pair as `(long)i<<32 | j`). AABB pre-check + SAT follow, identical to before. On spread-out geometry with n=2000 faces: ~4 000 comparisons vs 2 000 000 (~500× speedup). |
-| **Correctness guarantee** | If two AABBs overlap they must share ≥ 1 grid cell → no false negatives. Degenerate geometry guard: `cellSize` clamped to ≥ 1e-6. All 4 existing `OverlapDetectorTests` pass unchanged. |
-| **Version** | `0.0.3.6 → 0.0.3.7` (v0.0.3.F → v0.0.3.G) |
 | **Tests** | 56 / 56 pass |
 
 ---
@@ -221,5 +224,6 @@ App/Assets/             app.ico (6 sizes) logo.png
 
 ## Recommended Next Steps
 
-1. **Merge `fix/perf-overlap-detector` → `main`** — branch is stable at v0.0.3.H; spatial grid + canvas bounder removal applied
+1. **Merge `feat/toolbar-ux` → `main`** — branch is stable at v0.0.4.A; toolbar UX + status bar restructure applied
 2. **Multi-page auto-layout** — allow pieces to flow across multiple pages automatically during auto-arrange
+3. **Tiếp tục UX polish** — Vấn đề 1 (3D viewport controls), Vấn đề 3 (Settings discoverability)
