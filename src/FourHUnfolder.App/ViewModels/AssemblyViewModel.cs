@@ -93,7 +93,8 @@ public sealed partial class AssemblyViewModel : ObservableObject, IDisposable
 
     private readonly record struct SceneBounds(
         float BaseY, float ModelMinY, float ModelMaxY,
-        float ModelCx, float ModelCz, float CanvasXZRadius);
+        float ModelCx, float ModelCz, float CanvasXZRadius,
+        float StageScale, float StageY, float RawModelCenterY, float StageModelTop);
 
     // ── constants ─────────────────────────────────────────────────────────────
     private const double AnimDurationMs     = 1800;       // 600ms per phase × 3
@@ -167,8 +168,8 @@ public sealed partial class AssemblyViewModel : ObservableObject, IDisposable
     {
         get
         {
-            float sceneH  = _bounds.ModelMaxY - _bounds.BaseY;
-            float midY    = (_bounds.BaseY + _bounds.ModelMaxY) * 0.5f;
+            float sceneH  = _bounds.StageModelTop - _bounds.BaseY;
+            float midY    = (_bounds.BaseY + _bounds.StageModelTop) * 0.5f;
             float radius  = MathF.Max(sceneH, 2f * _bounds.CanvasXZRadius);
             float camDist = radius * 1.6f;
             // 30° elevation, 45° azimuth — classic 3/4 view framing both stages
@@ -403,9 +404,9 @@ public sealed partial class AssemblyViewModel : ObservableObject, IDisposable
         foreach (var pd in _pieceData)
             foreach (var tri in pd.Tris)
             {
-                positions.Add(ToP3D(tri.FinalA));
-                positions.Add(ToP3D(tri.FinalB));
-                positions.Add(ToP3D(tri.FinalC));
+                positions.Add(ToP3D(ToStage(tri.FinalA)));
+                positions.Add(ToP3D(ToStage(tri.FinalB)));
+                positions.Add(ToP3D(ToStage(tri.FinalC)));
                 indices.Add(idx); indices.Add(idx + 1); indices.Add(idx + 2);
                 idx += 3;
             }
@@ -424,8 +425,8 @@ public sealed partial class AssemblyViewModel : ObservableObject, IDisposable
 
             var (positions, indices, normals, uvCoords, bmp) =
                 BuildGeometryBuffers(tris, pd, (tri) =>
-                    isAssembled ? (tri.FinalA, tri.FinalB, tri.FinalC)
-                                : (tri.FlatA,  tri.FlatB,  tri.FlatC));
+                    isAssembled ? (ToStage(tri.FinalA), ToStage(tri.FinalB), ToStage(tri.FinalC))
+                                : (tri.FlatA,            tri.FlatB,           tri.FlatC));
 
             var geo  = MakeGeometry(positions, indices, normals, uvCoords);
             var mat  = MakeAssembledMaterial(bmp, uvCoords != null);
@@ -457,10 +458,10 @@ public sealed partial class AssemblyViewModel : ObservableObject, IDisposable
 
                     if (tFly > 0.0)
                     {
-                        // Phase 2: lerp fold shape → final 3-D position (unchanged)
-                        a = LerpV(tri.FoldA,  tri.FinalA, tFly);
-                        b = LerpV(tri.FoldB,  tri.FinalB, tFly);
-                        c = LerpV(tri.FoldC,  tri.FinalC, tFly);
+                        // Phase 2: lerp fold shape → staged final position (toward camera)
+                        a = LerpV(tri.FoldA,  ToStage(tri.FinalA), tFly);
+                        b = LerpV(tri.FoldB,  ToStage(tri.FinalB), tFly);
+                        c = LerpV(tri.FoldC,  ToStage(tri.FinalC), tFly);
                     }
                     else if (foldTransforms != null &&
                              foldTransforms.TryGetValue(tri.FaceId, out var T))
@@ -668,6 +669,13 @@ public sealed partial class AssemblyViewModel : ObservableObject, IDisposable
     private static Vector3 LerpV(Vector3 from, Vector3 to, double t) =>
         from + (float)t * (to - from);
 
+    /// Scales FinalA/B/C relative to raw model centroid, then lifts to stageY.
+    /// Ensures the assembled model appears above the canvas at canvas-matching scale.
+    private Vector3 ToStage(Vector3 raw) => new(
+        (raw.X - _bounds.ModelCx)         * _bounds.StageScale + _bounds.ModelCx,
+        (raw.Y - _bounds.RawModelCenterY) * _bounds.StageScale + _bounds.StageY,
+        (raw.Z - _bounds.ModelCz)         * _bounds.StageScale + _bounds.ModelCz);
+
     /// Lerps XZ from canvas to flat, adds a sin arc in Y so the piece lifts then lands.
     private static Vector3 LiftLerp(Vector3 canvas, Vector3 flat, double t, float liftY) =>
         new((float)((1 - t) * canvas.X + t * flat.X),
@@ -720,17 +728,19 @@ public sealed partial class AssemblyViewModel : ObservableObject, IDisposable
             sumZ += uf.V0.Y + uf.V1.Y + uf.V2.Y;
             vtxN += 3;
         }
-        double patCx = vtxN > 0 ? sumX / vtxN / scaleMmPerUnit : 0;
-        double patCz = vtxN > 0 ? sumZ / vtxN / scaleMmPerUnit : 0;
+        double patCx = vtxN > 0 ? sumX / vtxN : 0;  // raw model units (same space as mesh vertices)
+        double patCz = vtxN > 0 ? sumZ / vtxN : 0;
 
+        // u, v are in raw model units (edge-length-preserving unfold space).
+        // Centres the layout under the 3-D model at (modelCx, baseY, modelCz) without scaling.
         Vector3 ToFlatV(float u, float v) => new(
-            (float)(u / scaleMmPerUnit - patCx + modelCx),
+            (float)(u - patCx + modelCx),
             baseY,
-            (float)(v / scaleMmPerUnit - patCz + modelCz));
+            (float)(v - patCz + modelCz));
 
         // Canvas mm position → same 3D flat-plane space as ToFlatV.
         // FaceData vertices are piece-local mm; PositionX/Y is the centroid in mm.
-        // Converting mm back to raw unfold units (÷ scaleMmPerUnit) then applying ToFlatV.
+        // Divide by scaleMmPerUnit converts mm → raw model units, matching ToFlatV's input space.
         Vector3 CanvasV(Point local, double posX, double posY, double cosR, double sinR)
         {
             double worldMmX = local.X * cosR - local.Y * sinR + posX;
@@ -865,8 +875,25 @@ public sealed partial class AssemblyViewModel : ObservableObject, IDisposable
                 canvasXZR = MathF.Max(canvasXZR, MathF.Sqrt(MathF.Pow(tri.CanvasC.X - modelCx, 2) + MathF.Pow(tri.CanvasC.Z - modelCz, 2)));
             }
 
+        // Compute raw model XZ radius (for stage scale so ghost matches canvas visually)
+        float rawModelXZR = 0f;
+        foreach (var v in mesh.Vertices)
+            rawModelXZR = MathF.Max(rawModelXZR,
+                MathF.Sqrt(MathF.Pow(v.Position.X - modelCx, 2) + MathF.Pow(v.Position.Z - modelCz, 2)));
+
+        // Scale assembled model to ~65% of canvas XZ radius; minimum 1.2× so pieces GROW in Phase 2
+        float stageScale = rawModelXZR > 0.001f
+            ? MathF.Max(1.2f, canvasXZR * 0.65f / rawModelXZR)
+            : 1.2f;
+
+        // Staged model center: one model-height above the raw model top (clearly above canvas, toward camera)
+        float rawModelCenterY = (modelMinY + modelMaxY) * 0.5f;
+        float stageY          = modelMaxY + modelH * 1.0f;
+        float stageModelTop   = stageY + stageScale * (modelMaxY - rawModelCenterY);
+
         float      liftHeight  = modelH * LiftHeightFraction;
-        SceneBounds sceneBounds = new(baseY, modelMinY, modelMaxY, modelCx, modelCz, canvasXZR);
+        SceneBounds sceneBounds = new(baseY, modelMinY, modelMaxY, modelCx, modelCz, canvasXZR,
+                                      stageScale, stageY, rawModelCenterY, stageModelTop);
         return ([.. pieceDataList], [.. stepInfoList], liftHeight, sceneBounds);
     }
 
