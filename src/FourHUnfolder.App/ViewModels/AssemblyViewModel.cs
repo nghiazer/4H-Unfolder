@@ -91,6 +91,10 @@ public sealed partial class AssemblyViewModel : ObservableObject, IDisposable
         public required int FaceCount     { get; init; }
     }
 
+    private readonly record struct SceneBounds(
+        float BaseY, float ModelMinY, float ModelMaxY,
+        float ModelCx, float ModelCz, float CanvasXZRadius);
+
     // ── constants ─────────────────────────────────────────────────────────────
     private const double AnimDurationMs     = 1800;       // 600ms per phase × 3
     private const double PauseDurationMs    = 500;
@@ -102,6 +106,7 @@ public sealed partial class AssemblyViewModel : ObservableObject, IDisposable
     private readonly PieceAnimData[]                         _pieceData;
     private readonly StepInfo[]                              _stepInfos;
     private readonly float                                   _liftHeight;
+    private readonly SceneBounds                             _bounds;
     private readonly IReadOnlyDictionary<int, BitmapImage?>? _materialBitmaps;
     private readonly bool                                     _hasTexture;
 
@@ -156,6 +161,26 @@ public sealed partial class AssemblyViewModel : ObservableObject, IDisposable
 
     public string StepCountText => $"{CurrentStep + 1} / {_stepInfos.Length}";
 
+    /// Camera position + look-direction that frames both the flat canvas plane (bottom)
+    /// and the assembled 3-D model (top) simultaneously at window open.
+    public (Point3D Position, Vector3D LookDirection) CameraHint
+    {
+        get
+        {
+            float sceneH  = _bounds.ModelMaxY - _bounds.BaseY;
+            float midY    = (_bounds.BaseY + _bounds.ModelMaxY) * 0.5f;
+            float radius  = MathF.Max(sceneH, 2f * _bounds.CanvasXZRadius);
+            float camDist = radius * 1.6f;
+            // 30° elevation, 45° azimuth — classic 3/4 view framing both stages
+            float camX = _bounds.ModelCx + camDist * 0.612f;  // cos(30°)*cos(45°)
+            float camY = midY            + camDist * 0.500f;  // sin(30°)
+            float camZ = _bounds.ModelCz + camDist * 0.612f;
+            var pos  = new Point3D(camX, camY, camZ);
+            var look = new Vector3D(_bounds.ModelCx - camX, midY - camY, _bounds.ModelCz - camZ);
+            return (pos, look);
+        }
+    }
+
     // ── constructor ───────────────────────────────────────────────────────────
 
     public AssemblyViewModel(
@@ -168,7 +193,7 @@ public sealed partial class AssemblyViewModel : ObservableObject, IDisposable
         _materialBitmaps = materialBitmaps;
         _hasTexture      = materialBitmaps?.Values.Any(b => b != null) == true;
 
-        (_pieceData, _stepInfos, _liftHeight) = BuildAssemblyData(mesh, unfoldResult, pieces, scaleMmPerUnit);
+        (_pieceData, _stepInfos, _liftHeight, _bounds) = BuildAssemblyData(mesh, unfoldResult, pieces, scaleMmPerUnit);
 
         _timer = new DispatcherTimer(DispatcherPriority.Render)
         {
@@ -299,6 +324,7 @@ public sealed partial class AssemblyViewModel : ObservableObject, IDisposable
     private Model3DGroup BuildFrame(int stepIdx, double t)
     {
         var group = new Model3DGroup();
+        AppendFinalModelGhost(group);
 
         // ── Split raw t into three sub-phases ────────────────────────────────
         double tLift, tFold, tFly;
@@ -364,6 +390,27 @@ public sealed partial class AssemblyViewModel : ObservableObject, IDisposable
 
         var geo = new MeshGeometry3D { Positions = positions, TriangleIndices = indices };
         var mat = new DiffuseMaterial(new SolidColorBrush(Color.FromArgb(30, 0xcc, 0xdd, 0xff)));
+        group.Children.Add(new GeometryModel3D(geo, mat));
+    }
+
+    // ── final model ghost — very faint destination hint, shown throughout ────
+
+    private void AppendFinalModelGhost(Model3DGroup group)
+    {
+        var positions = new Point3DCollection();
+        var indices   = new Int32Collection();
+        int idx = 0;
+        foreach (var pd in _pieceData)
+            foreach (var tri in pd.Tris)
+            {
+                positions.Add(ToP3D(tri.FinalA));
+                positions.Add(ToP3D(tri.FinalB));
+                positions.Add(ToP3D(tri.FinalC));
+                indices.Add(idx); indices.Add(idx + 1); indices.Add(idx + 2);
+                idx += 3;
+            }
+        var geo = new MeshGeometry3D { Positions = positions, TriangleIndices = indices };
+        var mat = new DiffuseMaterial(new SolidColorBrush(Color.FromArgb(22, 0xff, 0xcc, 0x66)));
         group.Children.Add(new GeometryModel3D(geo, mat));
     }
 
@@ -639,13 +686,13 @@ public sealed partial class AssemblyViewModel : ObservableObject, IDisposable
 
     // ── assembly data builder ─────────────────────────────────────────────────
 
-    private static (PieceAnimData[], StepInfo[], float liftHeight) BuildAssemblyData(
+    private static (PieceAnimData[], StepInfo[], float liftHeight, SceneBounds bounds) BuildAssemblyData(
         Mesh                          mesh,
         UnfoldResult                  unfoldResult,
         IReadOnlyList<PieceViewModel> pieces,
         double                        scaleMmPerUnit)
     {
-        if (pieces.Count == 0 || scaleMmPerUnit <= 0) return ([], [], 0f);
+        if (pieces.Count == 0 || scaleMmPerUnit <= 0) return ([], [], 0f, default);
 
         // 1. Determine assembly order via AssemblyPlanner
         var pieceLookup = pieces.ToDictionary(p => p.GroupId);
@@ -653,7 +700,7 @@ public sealed partial class AssemblyViewModel : ObservableObject, IDisposable
             .Select(p => (p.GroupId, p.Faces.Select(f => f.FaceId).ToArray()))
             .ToArray();
         var steps = AssemblyPlanner.Build(mesh, pieceGroups);
-        if (steps.Count == 0) return ([], [], 0f);
+        if (steps.Count == 0) return ([], [], 0f, default);
 
         // 2. UnfoldedFace lookup (faceId → UnfoldedFace)
         var unfoldMap = unfoldResult.Faces.ToDictionary(f => f.FaceId);
@@ -664,7 +711,7 @@ public sealed partial class AssemblyViewModel : ObservableObject, IDisposable
         float modelCx   = mesh.Vertices.Count > 0 ? mesh.Vertices.Average(v => v.Position.X) : 0f;
         float modelCz   = mesh.Vertices.Count > 0 ? mesh.Vertices.Average(v => v.Position.Z) : 0f;
         float modelH    = Math.Max(modelMaxY - modelMinY, 0.001f);
-        float baseY     = modelMinY - modelH * 0.7f;  // flat plane well below model
+        float baseY     = modelMinY - modelH * 1.5f;  // flat plane below model — wider gap for clear bottom-top staging
 
         double sumX = 0, sumZ = 0; int vtxN = 0;
         foreach (var uf in unfoldResult.Faces)
@@ -808,8 +855,19 @@ public sealed partial class AssemblyViewModel : ObservableObject, IDisposable
             });
         }
 
-        float liftHeight = modelH * LiftHeightFraction;
-        return ([.. pieceDataList], [.. stepInfoList], liftHeight);
+        // Compute XZ radius of canvas layout for camera framing
+        float canvasXZR = 0f;
+        foreach (var pd in pieceDataList)
+            foreach (var tri in pd.Tris)
+            {
+                canvasXZR = MathF.Max(canvasXZR, MathF.Sqrt(MathF.Pow(tri.CanvasA.X - modelCx, 2) + MathF.Pow(tri.CanvasA.Z - modelCz, 2)));
+                canvasXZR = MathF.Max(canvasXZR, MathF.Sqrt(MathF.Pow(tri.CanvasB.X - modelCx, 2) + MathF.Pow(tri.CanvasB.Z - modelCz, 2)));
+                canvasXZR = MathF.Max(canvasXZR, MathF.Sqrt(MathF.Pow(tri.CanvasC.X - modelCx, 2) + MathF.Pow(tri.CanvasC.Z - modelCz, 2)));
+            }
+
+        float      liftHeight  = modelH * LiftHeightFraction;
+        SceneBounds sceneBounds = new(baseY, modelMinY, modelMaxY, modelCx, modelCz, canvasXZR);
+        return ([.. pieceDataList], [.. stepInfoList], liftHeight, sceneBounds);
     }
 
     // ── IDisposable ───────────────────────────────────────────────────────────
