@@ -6,6 +6,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Media.Media3D;
+using HelixToolkit.Wpf;
 using Microsoft.Extensions.DependencyInjection;
 using FourHUnfolder.App.Dialogs;
 using FourHUnfolder.App.ViewModels;
@@ -17,6 +18,9 @@ public partial class MainWindow : Window
     private MainViewModel Vm => (MainViewModel)DataContext;
     private TextureDialog?    _textureDialog;
     private EditFlapsDialog?  _editFlapsDialog;
+
+    // ── Dimension line visuals added to Viewport3D ────────────────────────────
+    private readonly List<Visual3D> _dimensionVisuals = new();
 
     // ── Feature B: 3D edge hover state ────────────────────────────────────────
     private int   _hoveredEdgeId = -1;
@@ -35,8 +39,10 @@ public partial class MainWindow : Window
         Loaded     += OnLoaded;
         Closing    += OnClosing;
         Vm.PropertyChanged        += OnVmPropertyChanged;
-        Vm.FitPageRequested       += () => PatternCanvas.FitPageToWindow();
+        Vm.FitPageRequested        += () => PatternCanvas.FitPageToWindow();
         Vm.ZoomToSelectedRequested += () => PatternCanvas.ZoomToSelected();
+        Vm.FindRequested           += () => { FindBar.Visibility = Visibility.Visible; FindTextBox.Focus(); };
+        Vm.DimensionLinesChanged   += OnDimensionLinesChanged;
     }
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
@@ -346,6 +352,79 @@ public partial class MainWindow : Window
         {
             _textureDialog.Activate();
         }
+    }
+
+    // ── Find bar (Ctrl+Shift+F) ───────────────────────────────────────────────
+
+    private void FindTextBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Return)
+        {
+            if (int.TryParse(FindTextBox.Text.Trim(), out int gid))
+                Vm.FindPiece(gid);
+            else
+                Vm.StatusText = "Enter a numeric part ID.";
+            FindBar.Visibility = Visibility.Collapsed;
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            FindBar.Visibility = Visibility.Collapsed;
+            e.Handled = true;
+        }
+    }
+
+    private void FindClose_Click(object sender, RoutedEventArgs e) =>
+        FindBar.Visibility = Visibility.Collapsed;
+
+    // ── Dimension lines in 3D viewport ───────────────────────────────────────
+
+    private void OnDimensionLinesChanged(bool show)
+    {
+        foreach (var v in _dimensionVisuals)
+            Viewport3D.Children.Remove(v);
+        _dimensionVisuals.Clear();
+
+        if (!show) return;
+        var mesh = Vm.CurrentMesh;
+        if (mesh == null || mesh.Vertices.Count == 0) return;
+
+        float minX = float.MaxValue, minY = float.MaxValue, minZ = float.MaxValue;
+        float maxX = float.MinValue, maxY = float.MinValue, maxZ = float.MinValue;
+        foreach (var v in mesh.Vertices)
+        {
+            var p = v.Position;
+            if (p.X < minX) minX = p.X; if (p.X > maxX) maxX = p.X;
+            if (p.Y < minY) minY = p.Y; if (p.Y > maxY) maxY = p.Y;
+            if (p.Z < minZ) minZ = p.Z; if (p.Z > maxZ) maxZ = p.Z;
+        }
+
+        double scale = Vm.CurrentScaleMmPerUnit;
+        double w = (maxX - minX) * scale;
+        double h = (maxY - minY) * scale;
+        double d = (maxZ - minZ) * scale;
+
+        var lines = new LinesVisual3D
+        {
+            Color     = Colors.Orange,
+            Thickness = 2,
+            Points    = new Point3DCollection([
+                new(minX, minY - 0.05, minZ), new(maxX, minY - 0.05, minZ),   // width
+                new(maxX + 0.05, minY, minZ), new(maxX + 0.05, maxY, minZ),   // height
+                new(minX, maxY + 0.05, minZ), new(minX, maxY + 0.05, maxZ),   // depth
+            ])
+        };
+        AddDimVisual(lines);
+
+        AddDimVisual(new BillboardTextVisual3D { Text = $"W: {w:F1}mm",  Position = new((minX+maxX)/2, minY-0.18, minZ),    Foreground = Brushes.Orange, FontSize = 14 });
+        AddDimVisual(new BillboardTextVisual3D { Text = $"H: {h:F1}mm",  Position = new(maxX+0.18, (minY+maxY)/2, minZ),    Foreground = Brushes.Orange, FontSize = 14 });
+        AddDimVisual(new BillboardTextVisual3D { Text = $"D: {d:F1}mm",  Position = new(minX, maxY+0.18, (minZ+maxZ)/2),    Foreground = Brushes.Orange, FontSize = 14 });
+    }
+
+    private void AddDimVisual(Visual3D v)
+    {
+        Viewport3D.Children.Add(v);
+        _dimensionVisuals.Add(v);
     }
 
     /// <returns>Face index (>= 0) or -1 if nothing was hit.</returns>

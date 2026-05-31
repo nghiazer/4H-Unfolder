@@ -1,7 +1,7 @@
 # 4H-Unfolder — Session Progress Log
 
-> **Last updated:** 2026-06-01 (session 37 — Pepakura feature set; branch `feat/pepakura-features`)
-> **Branch:** `feat/pepakura-features`  (base: `feat/glue-tab-editor` @ v0.0.5.A → current: v0.0.6.A)
+> **Last updated:** 2026-06-01 (session 38 — Remaining Pepakura features; branch `feat/pepakura-features`)
+> **Branch:** `feat/pepakura-features`  (base: `feat/glue-tab-editor` @ v0.0.5.A → current: v0.0.7.A)
 > **Target framework:** .NET 8 / WPF
 > **SDK required:** `winget install Microsoft.DotNet.SDK.8`
 > **History archive:** see [`BUGS_HISTORY.md`](BUGS_HISTORY.md) for all prior bug/tech-debt records
@@ -92,8 +92,48 @@ No circular dependencies. Domain has zero external dependencies.
 |------|--------|
 | `dotnet build 4H-Unfolder.sln` | ✅ 0 errors, 7 warnings (NuGet NU1603 only) |
 | `dotnet test` | ✅ 56 / 56 passed |
-| `dotnet run --project src/FourHUnfolder.App` | ✅ App opens; all 11 new features accessible |
-| Published `4H-Unfolder.exe` **v0.0.6.A** (win-x64, self-contained) | ✅ Session 37 |
+| `dotnet run --project src/FourHUnfolder.App` | ✅ App opens; all features accessible |
+| Published `4H-Unfolder.exe` **v0.0.7.A** (win-x64, self-contained) | ✅ Session 38 |
+
+---
+
+## Session 38 — Changes (v0.0.7.A)
+
+### Branch `feat/pepakura-features` (continued from s37)
+
+9 remaining Pepakura Designer features implemented, identified from 3D Model / 2D Layout / Others menus.
+
+| Feature | Where | Implementation |
+|---------|-------|----------------|
+| **Texture On/Off** | Others | `ShowTexture` toggle; canvas skips ImageBrush fill when off |
+| **Highlight Fold Lines** | Others | `HighlightFoldLines` toggle; fold width ×3 + blue (#0055FF) |
+| **Show Part Name** | 2D Layout | `ShowPartNames` toggle; "P{GroupId}" label at piece centroid |
+| **Show Page Number** | 2D Layout | `ShowPageNumbers` toggle; large semi-transparent number inside each page |
+| **Separate All Faces** | 3D Model | `SeparateAllFacesCommand`; sets all connecting edges to Cut + auto-arrange |
+| **Apply Transparency of Print Setting** | 2D Layout | `ApplyPrintTransparency` toggle; texture polygons rendered at 0.85 opacity |
+| **Show Dimension Lines** | 3D Model | `ShowDimensionLines` + event; adds `LinesVisual3D` + 3 `BillboardTextVisual3D` W/H/D labels |
+| **Find Text (Ctrl+Shift+F)** | 2D Layout | `OpenFindCommand` + FindBar overlay; type GroupId → select + auto-scroll |
+| **Insert Image** | 2D Layout | `InsertImageCommand`; 50%-opacity background image layer; persisted in ProjectState |
+
+#### Domain / persistence changes
+- `AppSettings.View2DSettings`: 5 new flags (ShowTexture, HighlightFoldLines, ShowPartNames, ShowPageNumbers, ApplyPrintTransparency)
+- `ProjectState`: new `InsertedImagePath: string?`
+- `MainViewModel`: 6 new observable properties + 7 new commands + 2 new events + `CurrentScaleMmPerUnit`
+- `PatternCanvasControl`: `DrawInsertedImage()`, page-number rendering in `DrawPageAt`, 4 new toolbar toggle buttons
+- `MainWindow`: Find bar overlay, dimension-line add/remove from `Viewport3D.Children`
+
+#### Bug fixes in cross-review
+- Fixed `InvalidOperationException` in ShowPartNames when piece has no faces (added `piece.Faces.Length > 0` guard)
+
+#### Deferred as too complex (TD-38)
+| ID | Description |
+|----|-------------|
+| TD-38-1 | Add Outline Padding — needs Clipper2 polygon offset library |
+| TD-38-2 | Merge Adjacent Flaps — complex tab polygon union |
+| TD-38-3 | Join Adjacent Isolated Edges — connectivity graph |
+| TD-38-4 | Select Symmetrical Pair — mesh symmetry detection |
+| TD-38-5 | Split Window — multi-window WPF management |
+| TD-38-6 | Change Coordinates — scope unclear |
 
 ---
 
@@ -227,7 +267,7 @@ Tests/                  MstAlgorithmTests (6)  UnfoldEngineTests (9)
 
 ## Recommended Next Steps
 
-1. **Merge `feat/pepakura-features` → `feat/glue-tab-editor` → `main`** — stable at v0.0.6.A
-2. **TD-36-1** — Add unit tests for FlapOverride serialization + GlueTabGenerator border modes
-3. **Performance** — Spatial grid for `OverlapDetector`; bottleneck on meshes > 2000 faces
-4. **TD-36-2** — Wire EditFlapsViewModel defaults to `AppSettings` fallback
+1. **Merge `feat/pepakura-features` → `feat/glue-tab-editor` → `main`** — stable at v0.0.7.A
+2. **TD-38-1/2** — Add Outline Padding + Merge Adjacent Flaps (need Clipper2 library)
+3. **TD-36-1** — Add unit tests for FlapOverride serialization + GlueTabGenerator border modes
+4. **Performance** — Spatial grid for `OverlapDetector`; bottleneck on meshes > 2000 faces

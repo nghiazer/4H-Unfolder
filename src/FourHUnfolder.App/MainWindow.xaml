@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:helix="http://helix-toolkit.org/wpf"
         xmlns:ctrl="clr-namespace:FourHUnfolder.App.Controls"
-        Title="4H-Unfolder v0.0.6.A — Paper Model Unfolder"
+        Title="4H-Unfolder v0.0.7.A — Paper Model Unfolder"
         Icon="Assets/app.ico"
         Width="1400" Height="900"
         WindowStartupLocation="CenterScreen"
@@ -59,6 +59,7 @@
         <KeyBinding Key="F4"                        Command="{Binding ZoomToSelectedCommand}"/>
         <KeyBinding Key="G" Modifiers="Ctrl"        Command="{Binding GroupCommand}"/>
         <KeyBinding Key="G" Modifiers="Ctrl+Shift"  Command="{Binding UngroupCommand}"/>
+        <KeyBinding Key="F" Modifiers="Ctrl+Shift"  Command="{Binding OpenFindCommand}"/>
     </Window.InputBindings>
 
     <Grid>
@@ -149,7 +150,21 @@
             </Border>
         </Grid>
 
-        <!-- ═══ Row 1 — status bar ═══════════════════════════════════════ -->
+        <!-- ═══ Row 1 — status bar + Find bar overlay ═════════════════════ -->
+        <!-- Find bar: shown on Ctrl+Shift+F, hidden by default -->
+        <Border x:Name="FindBar" Grid.Row="1" Visibility="Collapsed"
+                Background="{DynamicResource ToolbarBg}" Padding="8,4"
+                HorizontalAlignment="Right" VerticalAlignment="Center"
+                CornerRadius="4" Margin="0,2,8,2" Panel.ZIndex="10">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="Find part #:" VerticalAlignment="Center"
+                           Foreground="{DynamicResource TextSecondary}" Margin="0,0,6,0"/>
+                <TextBox x:Name="FindTextBox" Width="100" VerticalAlignment="Center"
+                         KeyDown="FindTextBox_KeyDown"/>
+                <Button Content="✕" Click="FindClose_Click" Margin="4,0,0,0"
+                        Style="{StaticResource IconBtn}" FontSize="13" Padding="4,2"/>
+            </StackPanel>
+        </Border>
         <StatusBar Grid.Row="1" Background="{DynamicResource StatusBarBg}" Padding="4,0">
             <StatusBarItem>
                 <TextBlock Text="{Binding StatusText}"
@@ -273,6 +288,32 @@
                         Command="{Binding ToggleShow2DOnlyCommand}"
                         IsEnabled="{Binding CanExport}"
                         ToolTip="Show 2D Layout Only (hide 3D viewport)"/>
+                <Separator/>
+                <!-- Cluster 6: New Pepakura features (s38) -->
+                <Button Style="{StaticResource IconBtn}" Content="⬚"
+                        Command="{Binding SeparateAllFacesCommand}"
+                        IsEnabled="{Binding CanUnfold}"
+                        ToolTip="Separate All Faces — set every edge to cut (each face = own piece)"/>
+                <Button Style="{StaticResource IconBtn}" Content="⬛"
+                        Command="{Binding ToggleApplyPrintTransparencyCommand}"
+                        IsEnabled="{Binding CanExport}"
+                        ToolTip="Apply Transparency of Print Setting — preview canvas at 85% opacity"/>
+                <Button Style="{StaticResource IconBtn}" Content="⟷"
+                        Command="{Binding ToggleShowDimensionLinesCommand}"
+                        IsEnabled="{Binding CanUnfold}"
+                        ToolTip="Show Dimension Lines — overlay W/H/D labels in 3D viewport"/>
+                <Button Style="{StaticResource IconBtn}" Content="🔍"
+                        Command="{Binding OpenFindCommand}"
+                        IsEnabled="{Binding CanExport}"
+                        ToolTip="Find Part (Ctrl+Shift+F) — search piece by number"/>
+                <Button Style="{StaticResource IconBtn}" Content="🗺"
+                        Command="{Binding InsertImageCommand}"
+                        IsEnabled="{Binding CanExport}"
+                        ToolTip="Insert Image — add background reference image to 2D canvas"/>
+                <Button Style="{StaticResource IconBtn}" Content="✕🗺"
+                        Command="{Binding RemoveInsertedImageCommand}"
+                        IsEnabled="{Binding CanExport}"
+                        ToolTip="Remove Inserted Image"/>
             </StackPanel>
         </Border>
 
