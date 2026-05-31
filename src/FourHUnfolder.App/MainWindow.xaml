@@ -206,6 +206,10 @@
                         Command="{Binding OpenAssemblyAnimationCommand}"
                         IsEnabled="{Binding CanExport}"
                         ToolTip="Assembly animation — step-by-step fold guide"/>
+                <Button Style="{StaticResource IconBtn}" Content="✂"
+                        Click="EditFlapsButton_Click"
+                        IsEnabled="{Binding CanExport}"
+                        ToolTip="Edit Flaps — control glue tab placement per edge"/>
             </StackPanel>
         </Border>
 

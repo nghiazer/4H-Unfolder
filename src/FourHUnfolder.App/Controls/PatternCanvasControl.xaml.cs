@@ -24,6 +24,7 @@ public partial class PatternCanvasControl : UserControl
     private sealed class EdgeTag
     {
         public int  PieceId, FaceId, EdgeIdx, MeshEdgeId;
+        public bool IsBoundary;
         public Line VisualLine = null!;
     }
     // ── constants ────────────────────────────────────────────────────────────
@@ -52,6 +53,10 @@ public partial class PatternCanvasControl : UserControl
     // edge-edit mode
     private bool  _editModeActive;
     private Line? _hoveredEdgeLine;   // currently highlighted edge (restored on leave / mode-off)
+
+    // flap-edit mode (driven by EditFlapsDialog)
+    private bool             _flapEditActive;
+    private FourHUnfolder.App.Dialogs.EditFlapsDialog? _flapDialog;
 
     // rotate-by-point mode
     private bool   _rotatePtActive;
@@ -430,7 +435,8 @@ public partial class PatternCanvasControl : UserControl
                 var et = new EdgeTag
                 {
                     PieceId = piece.GroupId, FaceId = fd.FaceId,
-                    EdgeIdx = i, MeshEdgeId = meshEdgeId
+                    EdgeIdx = i, MeshEdgeId = meshEdgeId,
+                    IsBoundary = isBoundary
                 };
 
                 // Visual line — rendering only, no hit test
@@ -461,8 +467,9 @@ public partial class PatternCanvasControl : UserControl
                     hitLine.MouseRightButtonDown += Edge_RightClick;
                     hitLine.MouseEnter           += Edge_MouseEnter;
                     hitLine.MouseLeave           += Edge_MouseLeave;
-                    hitLine.MouseLeftButtonDown  += Edge_LeftClick;
                 }
+                // All edges handle left-click (boundary edges only act in flap-edit mode)
+                hitLine.MouseLeftButtonDown += Edge_LeftClick;
                 container.Children.Add(hitLine);
             }
         }
@@ -1213,6 +1220,40 @@ public partial class PatternCanvasControl : UserControl
         }
     }
 
+    // ── Flap-edit mode ────────────────────────────────────────────────────────
+
+    internal void SetFlapEditMode(FourHUnfolder.App.Dialogs.EditFlapsDialog? dialog)
+    {
+        // Unsubscribe from old dialog's VM
+        if (_flapDialog?.Vm != null)
+            _flapDialog.Vm.PropertyChanged -= OnFlapVmPropertyChanged;
+
+        _flapDialog     = dialog;
+        _flapEditActive = dialog?.Vm.FlapEditActive ?? false;
+
+        if (_flapDialog?.Vm != null)
+        {
+            _flapDialog.Vm.PropertyChanged += OnFlapVmPropertyChanged;
+            _flapEditActive = _flapDialog.Vm.FlapEditActive;
+
+            // Deactivate edge-edit mode for mutual exclusion
+            if (_editModeActive)
+            {
+                _editModeActive = false;
+                if (EditEdgesBtn != null) EditEdgesBtn.IsChecked = false;
+                if (_hoveredEdgeLine != null) { RestoreEdgeStyle(_hoveredEdgeLine); _hoveredEdgeLine = null; }
+            }
+        }
+    }
+
+    private void OnFlapVmPropertyChanged(object? s, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(FourHUnfolder.App.ViewModels.EditFlapsViewModel.FlapEditActive))
+            _flapEditActive = _flapDialog?.Vm.FlapEditActive ?? false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+
     private void Edge_MouseEnter(object sender, MouseEventArgs e)
     {
         if (!_editModeActive || sender is not Line hitLine) return;
@@ -1238,6 +1279,17 @@ public partial class PatternCanvasControl : UserControl
     {
         if (sender is not Line line || line.Tag is not EdgeTag et) return;
         if (_vm == null) return;
+
+        // Flap-edit mode: delegate edge click to the dialog
+        if (_flapEditActive && _flapDialog != null)
+        {
+            _flapDialog.NotifyEdgeClicked(et.MeshEdgeId, et.IsBoundary, et.FaceId);
+            e.Handled = true;
+            return;
+        }
+
+        // Boundary edges have no fold/cut toggle — ignore outside flap-edit mode
+        if (et.IsBoundary) return;
 
         // F4: double-click on any edge → snap piece so that edge aligns to H or V
         if (e.ClickCount == 2 && !_editModeActive)

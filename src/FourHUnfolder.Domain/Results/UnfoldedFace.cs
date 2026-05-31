@@ -25,12 +25,16 @@ public sealed class UnfoldedFace
     /// UV texture coordinates for V0, V1, V2.  Null when the mesh has no UV data.
     public Vector2[]? UVCoords   { get; }
 
+    /// Mesh edge IDs for edges [0]=V0-V1, [1]=V1-V2, [2]=V2-V0. -1 = not resolved.
+    public int[]   MeshEdgeIds   { get; }
+
     public UnfoldedFace(int faceId,
                         Vector2 v0, Vector2 v1, Vector2 v2,
                         bool[]  edgeIsFold,
                         bool[]? edgeIsBoundary = null,
                         Vector2[]? uvCoords    = null,
-                        int     materialId     = -1)
+                        int     materialId     = -1,
+                        int[]?  meshEdgeIds    = null)
     {
         FaceId         = faceId;
         MaterialId     = materialId;
@@ -38,6 +42,7 @@ public sealed class UnfoldedFace
         EdgeIsFold     = edgeIsFold;
         EdgeIsBoundary = edgeIsBoundary ?? [false, false, false];
         UVCoords       = uvCoords;
+        MeshEdgeIds    = meshEdgeIds ?? [-1, -1, -1];
     }
 
     public Vector2[] Vertices => [V0, V1, V2];

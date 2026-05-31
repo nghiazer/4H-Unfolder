@@ -14,7 +14,8 @@ namespace FourHUnfolder.App;
 public partial class MainWindow : Window
 {
     private MainViewModel Vm => (MainViewModel)DataContext;
-    private TextureDialog? _textureDialog;
+    private TextureDialog?    _textureDialog;
+    private EditFlapsDialog?  _editFlapsDialog;
 
     // ── Feature B: 3D edge hover state ────────────────────────────────────────
     private int   _hoveredEdgeId = -1;
@@ -62,6 +63,12 @@ public partial class MainWindow : Window
         {
             _hoveredEdgeId  = -1;
             _edgeGridDirty  = true;   // TD-25-2
+
+            // Close Edit Flaps dialog when project is reset or mesh is reloaded
+            if (e.PropertyName == nameof(MainViewModel.IsUnfolded) && !Vm.IsUnfolded)
+            {
+                _editFlapsDialog?.Close();
+            }
         }
     }
 
@@ -286,6 +293,27 @@ public partial class MainWindow : Window
         double projX = a.X + t * dx, projY = a.Y + t * dy;
         double fx = p.X - projX, fy = p.Y - projY;
         return Math.Sqrt(fx * fx + fy * fy);
+    }
+
+    // ── Edit Flaps dialog ─────────────────────────────────────────────────────
+
+    private void EditFlapsButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_editFlapsDialog == null || !_editFlapsDialog.IsLoaded)
+        {
+            _editFlapsDialog = new EditFlapsDialog(Vm) { Owner = this };
+            _editFlapsDialog.Closed += (_, _) =>
+            {
+                PatternCanvas.SetFlapEditMode(null);
+                _editFlapsDialog = null;
+            };
+            PatternCanvas.SetFlapEditMode(_editFlapsDialog);
+            _editFlapsDialog.Show();
+        }
+        else
+        {
+            _editFlapsDialog.Activate();
+        }
     }
 
     // ── texture dialog ────────────────────────────────────────────────────────
