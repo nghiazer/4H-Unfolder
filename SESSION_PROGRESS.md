@@ -1,7 +1,7 @@
 # 4H-Unfolder — Session Progress Log
 
-> **Last updated:** 2026-05-25 (session 35 — BUG-PDO-3: PDO piece disappears on first click; branch `feat/pdo-import`)
-> **Branch:** `feat/pdo-import`  (base: `main` @ v0.0.2.H → current: v0.0.3.B)
+> **Last updated:** 2026-05-30 (session 44 — Assembly Animation Phase 0 + Viewport polish + Stage Transform; branch `feat/assembly-phase0`)
+> **Branch:** `feat/assembly-phase0`  (base: `feat/toolbar-ux` @ v0.0.4.C → current: v0.0.4.F)
 > **Target framework:** .NET 8 / WPF
 > **SDK required:** `winget install Microsoft.DotNet.SDK.8`
 > **History archive:** see [`BUGS_HISTORY.md`](BUGS_HISTORY.md) for all prior bug/tech-debt records
@@ -41,7 +41,7 @@ No circular dependencies. Domain has zero external dependencies.
 | MST | `KruskalMstBuilder` | Kruskal + path-compressed Union-Find |
 | Edge marking | `EdgeMarker` | Fold / Cut / Boundary |
 | Unfold | `UnfoldEngine` | BFS circle-circle apex; disconnected components |
-| Overlap | `OverlapDetector` | AABB pre-check + SAT |
+| Overlap | `OverlapDetector` | Spatial grid broad-phase + AABB pre-check + SAT |
 | Tabs | `GlueTabGenerator` | Trapezoid/Rectangle/Triangle; side-angle param; alternate-flap |
 | Pieces | `PieceComputer` | Union-Find connected components |
 | SVG | `SvgExporter` | Per-face affine texture; edge-dedup; grayscale |
@@ -56,12 +56,14 @@ No circular dependencies. Domain has zero external dependencies.
 - **Edge-Edit mode** (✏): hover highlight, LMB attach/detach; color in Settings
 - **Rotate-by-Point mode** (⊙): pivot → handle → live rotation; undoable
 - **Auto-align edge** — double-click edge → snap to nearest 90°; undoable
-- **Parts alignment** — 6 toolbar buttons: Align L/R/T/B/Center-H/V; undoable
+- **Parts alignment** — 6 toolbar buttons: Align L `◧` / R `◨` / T `⊤` / B `⊥` / Center-H `↔` / Center-V `◫`; undoable
 - **Edge ID labels + glue arrows** on cut edges (pair numbers 1,2,3…); color in Settings
 - **Multi-texture** — per-material texture slots; TextureDialog with material list; per-face texture in 2D
 - **Save/Load `.4hu`** — self-contained ZIP bundle (mesh + texture + state)
 - **Unsaved changes warning** on Load/Open/Close
-- **Strip-packing auto-arrange** — sort by area desc, try 90° rotation
+- **Strip-packing auto-arrange** — FFD, try 90° rotation; guaranteed no bounding-box overlap (bug fixes: cap removal, rotation guard, page-advance guard)
+- **State reset on model load** — zoom, page count, canvas scroll reset to default when loading a new mesh
+- **Empty page trim after drag** — empty page columns/rows collapse automatically after piece movement
 - Export SVG + Export PDF (📑 toolbar button)
 - Undo/Redo (Ctrl+Z/Y) for all edit operations
 - **Assembly animation** (🎬) — step-by-step fold guide with:
@@ -85,90 +87,71 @@ No circular dependencies. Domain has zero external dependencies.
 
 | Item | Result |
 |------|--------|
-| `dotnet build 4H-Unfolder.sln` | ✅ 0 errors, 7 warnings (NuGet NU1603 only) |
+| `dotnet build 4H-Unfolder.sln` | ✅ 0 errors, 5 warnings (NuGet NU1603 only) |
 | `dotnet test` | ✅ 56 / 56 passed |
-| `dotnet run --project src/FourHUnfolder.App` | ✅ App opens, PDO files auto-unfold on load |
-| Published `4H-Unfolder.exe` **v0.0.3.B** (win-x64, self-contained) | ✅ Session 34 |
-| BUG-PDO-3 fix | ✅ Session 35 — PDO piece no longer disappears on first click |
-| Published `4H-Unfolder.exe` **v0.0.3.C** (win-x64, self-contained) | ✅ Session 35 |
+| `dotnet run --project src/FourHUnfolder.App` | ✅ App opens maximized; PDO files auto-unfold on load |
+| Published `4H-Unfolder.exe` **v0.0.3.H** (win-x64, self-contained) | ✅ Session 40 |
+| Published `4H-Unfolder.exe` **v0.0.4.A** (win-x64, self-contained) | ✅ Session 41 |
+| Published `4H-Unfolder.exe` **v0.0.4.B** (win-x64, self-contained) | ✅ Session 42 |
+| Published `4H-Unfolder.exe` **v0.0.4.C** (win-x64, self-contained) | ✅ Session 43 |
+| Published `4H-Unfolder.exe` **v0.0.4.D** (win-x64, self-contained) | ✅ Session 44 |
+| Published `4H-Unfolder.exe` **v0.0.4.E** (win-x64, self-contained) | ✅ Session 44 |
+| Published `4H-Unfolder.exe` **v0.0.4.F** (win-x64, self-contained) | ✅ Session 44 |
 
 ---
 
-## Session 35 — Changes
+## Session 44 — Changes
 
 | Item | Detail |
 |------|--------|
-| **BUG-PDO-3 root cause** | `RunAutoArrange` rot=90 branch: `PositionX = localX - (-minY)` → double-negation error; evaluates to `localX + minY`. For centered pieces `minY < 0`, placing most of the rotated piece at negative canvas_X (off-screen left). Users saw pieces "disappear" when clicking PDO pieces. |
-| **BUG-PDO-3 fix** | `MainViewModel.cs` `RunAutoArrange`: changed to `localX + minY + hNat` (`= localX + maxY`). After a 90° CW `RotateTransform`, canvas_X_min occurs at `ly = maxY`, so `PositionX` must be ≥ `maxY` to keep the piece on-screen. |
-| **Defensive guard** | `PatternCanvasControl.xaml.cs`: added `ScrollToShowPiece(piece)` call in `IsSelected` PropertyChanged handler; added `ScrollToShowPiece` method that centers the viewport on a piece if it's outside the visible scroll area. |
-| **Why PDO-specific** | PDO paper-model strips are wide (wNat > hNat), frequently hitting the `rot=90` branch. OBJ/FBX mesh pieces are more equidimensional and rarely trigger it. |
-| **Tests** | 56 / 56 pass (no new tests needed — bug is in UI layout arithmetic, no testable pure-logic unit) |
+| **Branch** | New branch `feat/assembly-phase0` off `feat/toolbar-ux` @ v0.0.4.C → v0.0.4.E |
+| **Assembly Phase 0: Lift-off** | `AssemblyViewModel.cs`: Added `CanvasA/B/C` to `TriData` struct. Each animation step now has a Phase 0 (t∈[0,1/3]): piece starts flat at its 2D canvas layout position (on baseY plane, matching the 2D canvas XZ position) and arcs upward via sin-arc LiftLerp before settling at the flat fold-origin. Duration extended from 1200ms → 1800ms (600ms × 3 phases). `AppendGhost` now uses `CanvasA/B/C` so upcoming pieces preview at their canvas positions. |
+| **Viewport spatial layout** | `baseY = modelMinY - 1.5 × modelH` (was 0.7) for clearer bottom/top staging. `SceneBounds` record stores baseY + model extents + canvas XZRadius. `CameraHint` property computes a 30°/45° `PerspectiveCamera` framing both canvas plane (bottom) and 3D model (top). `AppendFinalModelGhost` renders faint amber (α=22) wireframe of full assembled model every frame as destination hint. |
+| **Camera setup** | `AssemblyAnimationWindow.xaml.cs` `Window_Loaded`: sets `Viewport3D.Camera` to `PerspectiveCamera` from `CameraHint` — FOV=40°, NearPlane=0.01, FarPlane=100k. XAML gains `Loaded="Window_Loaded"`. |
+| **Scale fix (critical)** | `BuildAssemblyData`: `patCx/patCz` and `ToFlatV` previously divided by `scaleMmPerUnit`, making flat/canvas positions `scaleMmPerUnit²` times smaller than the 3D model (e.g., 200× smaller for A4 OBJ models). Fixed to use raw model units throughout: `patCx = sumX/vtxN` (no scale), `ToFlatV(u,v) = (u - patCx + modelCx, baseY, ...)`. PDO files (scaleMmPerUnit=1) unaffected. `CanvasV` already passed raw model units via `÷scaleMmPerUnit`, now correctly matched to fixed `ToFlatV`. |
+| **Stage Transform (Phase 2)** | `BuildAssemblyData`: computes `rawModelXZR` + `stageScale = max(1.2, canvasXZR×0.65/rawModelXZR)` + `stageY = modelMaxY + modelH` + `stageModelTop`. New `ToStage(Vector3)` instance method scales+translates all `FinalA/B/C` usage: `AppendFinalModelGhost`, Phase 2 in `AppendCurrent`, `AppendStatic(isAssembled:true)`. `CameraHint` uses `StageModelTop` for sceneH. Effect: assembled ghost visually matches canvas scale; Phase 2 pieces grow (stageScale≥1.2) as they fly upward = clearly "toward camera". |
+| **Commits** | `9afbd24` Phase 0 (v0.0.4.D), `d77d0c2` Viewport layout + camera (v0.0.4.E), scale+stage fix (v0.0.4.F) |
+| **Tests** | 56 / 56 pass |
 
 ---
 
-## Session 34 — Changes
+## Session 43 — Changes
 
 | Item | Detail |
 |------|--------|
-| **Verified s30–33 fixes** | Confirmed TD-PDO-1, TD-PDO-2, CRITICAL-3D-TEX, BUG-PDO-1, BUG-PDO-2 all correctly implemented via code-graph exploration |
-| **TD-PDO-4** | Added `_embeddedBitmapCache` (Dictionary<int, BitmapImage?>) to `MainViewModel`; `BitmapFromEmbedded` split into cached wrapper + `BitmapFromEmbeddedCore`; cache cleared on new mesh load — eliminates repeated PNG encode for 2048² textures |
-| **TD-25-1** | "Don't ask again" checkbox in `ModelOrientationDialog`; new `SkipModelOrientationDialog` bool in `AppSettings.GeneralSettings`; `MainViewModel.LoadMesh` honours the setting + persists on check |
-| **TD-PDO-3** | Pre-geo seek replaced: `Seek(120, Current)` → `Seek(154 + localeLen + commentLen, Begin)` — absolute formula derived from header byte-trace; correct for any localeLen (not just standard PD6 = 40) |
-| **Tests** | All 56 pass |
-
-### Tech debt summary (v0.0.3.A → v0.0.3.B)
-
-| ID | Priority | Status | Description |
-|----|----------|--------|-------------|
-| ~~TD-PDO-3~~ | 🟢 | ✅ s34 | 120-byte pre-geo skip replaced by absolute offset formula |
-| ~~TD-PDO-4~~ | 🟢 | ✅ s34 | `BitmapFromEmbedded` now cached; no repeated PNG encode |
-| ~~TD-25-1~~  | 🟢 | ✅ s34 | `ModelOrientationDialog` — "Don't ask again" checkbox added |
+| **Branch** | `feat/toolbar-ux` continuing @ v0.0.4.B → v0.0.4.C |
+| **Toolbar icon fix** | `MainWindow.xaml`: Unfold button icon `⚙` → `📐` — eliminates confusion with Settings `⚙` icon |
+| **ModelOrientationDialog refactor** | (session 43, committed `aed9582`) Layout overhaul: `Skip` → `Cancel` (neutral style); `OK` → `Import` (accent, Height 30→34); `AXIS REFERENCE` TextWrapping=Wrap + Height=Auto; FlipUV checkbox+tip moved into right column under Front axis (no gray box); `Don't ask again` to footer left; description + tip `TextMuted` → `TextSecondary` |
+| **UnfoldSetupDialog refactor** | Unified 2-col grid (130px label / `*` control): row order Preset → Orientation → Custom Size (logical top-down flow). `CustomInput` style adds `Opacity=0.45` when `IsEnabled=False` — locked fields visually dimmed. Footer buttons Height 30→34 + `VerticalContentAlignment=Center`. |
+| **AssemblyAnimationWindow refactor** | Legend overlay removed from viewport (100% clean 3D space). New Row 2: Step Timeline Slider (Minimum=0, Maximum=`StepMaxIndex`, TwoWay bind `CurrentStep`, IsSnapToTickEnabled). Controls toolbar → 3-column Grid: step description left · 5 nav buttons centre · 3-item legend right. Step description moved from separate Row 1 Border into toolbar left col. |
+| **AssemblyViewModel: StepMaxIndex** | New computed property `StepMaxIndex = Math.Max(Length-1, 0)` for Slider Maximum binding |
+| **AssemblyViewModel: OnCurrentStepChanged** | New `partial void OnCurrentStepChanged(int)` — Slider drag triggers `_animT=1.0` + `RefreshModel()`. Guard `_suppressStepRefresh` prevents double-render when timer internally increments `CurrentStep`. |
+| **Bug fix (review)** | Timer tick sets `CurrentStep++` wrapped with `_suppressStepRefresh=true/false` — prevents `OnCurrentStepChanged` double-calling `RefreshModel()` during auto-play |
+| **Publish cleanup** | `publish/v0.0.2.A–H` → `publish/v0.0.2.zip` (530 MB); `publish/v0.0.3.A–H` → `publish/v0.0.3.zip` (529 MB); 16 folders deleted |
+| **Version** | `0.0.4.1 → 0.0.4.2` (v0.0.4.B → v0.0.4.C) |
+| **Tests** | 56 / 56 pass |
 
 ---
 
-## Session 30 — Changes
+## Session 42 — Changes
 
 | Item | Detail |
 |------|--------|
-| **PDO import Phase 1 — 3D geometry** | `PdoMeshLoader.cs` (new): parses PD6 header (sig, localeLen, cipher key, commentLen), skips 120-byte pre-geo settings, reads geo_count + per-geo: cipher-decoded wstr name, raw vertices (3×double), polygon shapes fan-triangulated into triangles, skips unk17 edge data |
-| **PDO cipher** | Subtraction cipher `decoded = (raw−key+256)%256`; applies only to `wstr` fields; all int/double/bool fields are raw LE |
-| **PDO wstr format** | `uint32` byteLen (raw, NOT char count) + byteLen bytes of cipher-encoded UTF-16LE; trailing null stripped |
-| **PDO pre-geo skip** | geo_count always at abs `74+commentLen+120` = abs 500 for PD6; verified on all 3 sample files |
-| **PDO import Phase 2 — UVs + embedded texture** | Per-point: read `unk13` (offsets 20-35 after vtxIdx) as texture UV [0,1]; per-shape: populate `mesh.UVs` + `mesh.FaceUVs`; fan-triangulate with UV indices |
-| **PDO texture decompression** | After all geos: read texture section (wstr name + 80 bytes settings + bool hasImage + w/h/csize + zlib-compressed RGB24); `ZLibStream` decompress → `mesh.EmbeddedTextures` |
-| **`EmbeddedTextureData` record** | New `Domain/Models/EmbeddedTextureData.cs`: `(Name, Width, Height, Rgb24Bytes)` |
-| **`Mesh.EmbeddedTextures`** | New `List<EmbeddedTextureData>` property on Mesh |
-| **`MainViewModel.BitmapFromEmbedded`** | New helper: `BitmapSource.Create(Rgb24)` → `PngBitmapEncoder` → in-memory `BitmapImage`; frozen for cross-thread use |
-| **`RebuildMaterialSlots` PDO fallback** | When `MaterialNames.Count == 0` and `SuggestedTexturePath == null`: uses `BitmapFromEmbedded(mesh.EmbeddedTextures[0])` → stores at `_materialBitmaps[-1]` → picked up by `BuildWpfModel` for 3D texture display |
-| **File dialog + tooltip** | `MainViewModel`: added `*.pdo` to Open Mesh filter; `MainWindow.xaml`: tooltip updated |
-| **`MultiFormatMeshLoader`** | Routes `.pdo` → `PdoMeshLoader` |
-| **Tests** | 7 new `PdoMeshLoaderTests`: geometry valid, vertex count exact, UVs finite in-bounds, embedded textures present with correct w/h/byte-count, invalid-signature guard; 41/41 suite green |
-| **Empirical recon** | Verified on 3 sample files: SoundEmitter (132 KB, 5 geos, 128×128 tex), waluigiblimp (6.1 MB, 2 geos, 2048×2048 tex), Pillar (18.4 MB, 1 geo, 2×textures 2048² + 1440×2880) |
-
----
-
-## Session 29 — Changes (archived → BUGS_HISTORY.md)
-
-| Item | Detail |
-|------|--------|
-| **TD-28-4 / TD-28-1 / TD-28-3** | Theme-aware: 3D bg auto-switch; SettingsDialog footer; 4 dialogs (Assembly/Texture/UnfoldSetup/ModelOrientation) |
-| **TD-24-1** | PieceFoldTree fold direction fix (`EdgeDir3D` + `signCorr`) |
-| **Build/Test** | ✅ 0 errors / 34 tests / app opens clean; published v0.0.2.H |
+| **Branch** | `feat/toolbar-ux` continuing @ v0.0.4.A → v0.0.4.B |
+| **GroupBox consolidation** | `SettingsDialog.xaml`: reduced from 22 GroupBoxes across 4 tabs → 8 GroupBoxes (3D: 6→2, 2D: 9→3, Print: 5→2, General: 2→1). Sub-headings use new `SubHead` TextBlock style instead of nested GroupBox. |
+| **Unified grid layout** | Each GroupBox now uses a single outer Grid with fixed 3-column layout (190px label / `*` control / 64px numeric) + RowDefinitions. Eliminates per-row `<Grid.ColumnDefinitions>` repetition and the mix of 190/28/110, 190/140/40, 190/140/50 etc. widths. |
+| **Slider + NumericBox two-way** | All 19 sliders: static TextBlock → `NumericBox` TextBox with `Mode=TwoWay, UpdateSourceTrigger=LostFocus`. Kéo slider → textbox cập nhật; gõ số → Tab/click ra → slider nhảy. New `NumericBox` style (BasedOn InputBox, Width=58, TextAlignment=Right). |
+| **Footer buttons fix** | Height 30→34 for all 4 buttons (OK/Apply/Cancel/Reset). Added `HorizontalContentAlignment="Center" VerticalContentAlignment="Center"`. Removed space-padding hack `"  OK  "` → `"OK"`. Fixes "Applv" clipping bug. |
+| **Scroll reset on tab switch** | `SettingsDialog.xaml.cs` `NavList_SelectionChanged`: added `ContentScroller.ScrollToVerticalOffset(0)`. ScrollViewer named `x:Name="ContentScroller"`. |
+| **Bug fix (review)** | `ContentScroller.ScrollToTop()` không phải WPF API → fixed to `ScrollToVerticalOffset(0)`. |
+| **Version** | `0.0.4.0 → 0.0.4.1` (v0.0.4.A → v0.0.4.B) |
+| **Tests** | 56 / 56 pass |
 
 ---
 
 ## Remaining Tech Debt
 
-| ID | Priority | Status | Fixed in | Description |
-|----|----------|--------|----------|-------------|
-| ~~TD-PDO-1~~ | 🟡 Med | ✅ fixed | s32 | `coord` doubles per point extracted → `PdoLayout`; auto-unfold on load |
-| ~~TD-PDO-2~~ | 🟡 Med | ✅ fixed | s31 | Multi-texture PDO: per-face `MaterialId` from `unk11`; `MaterialNames` from `EmbeddedTextures` |
-| ~~TD-PDO-3~~ | 🟢 Low | ✅ fixed | s34 | Pre-geo seek: `Seek(120, Current)` → `Seek(154+localeLen+commentLen, Begin)` |
-| ~~TD-PDO-4~~ | 🟢 Low | ✅ fixed | s34 | `BitmapFromEmbedded` cached via `_embeddedBitmapCache`; core only called once per texture per mesh |
-| ~~CRITICAL-3D-TEX~~ | 🔴 Critical | ✅ fixed | s32 | `EnterPreview`/`CommitPreview` now pass `_materialBitmaps` to `BuildWpfModel` |
-| ~~TD-25-1~~ | 🟢 Low | ✅ fixed | s34 | "Don't ask again" checkbox in `ModelOrientationDialog`; persisted to `AppSettings.General` |
-| ~~BUG-PDO-3~~ | 🟡 Med | ✅ fixed | s35 | `RunAutoArrange` rot=90 formula error → PDO pieces placed off-screen, appear to "disappear" on first click |
-| **Performance** | 🟢 Low | 🔲 open | — | O(n²) overlap check (AABB + SAT); spatial grid needed for meshes > 2000 faces |
+*(No open tech debt — see [`BUGS_HISTORY.md`](BUGS_HISTORY.md) for full history)*
 
 ---
 
@@ -229,7 +212,7 @@ uint32 texCount
 
 ```
 Domain/Models/          Vertex Edge EdgeType Face Mesh PaperSizeModel ModelScale
-                        EmbeddedTextureData                                  ← NEW
+                        EmbeddedTextureData
 Domain/DualGraph/       DualGraph GraphNode GraphEdge
 Domain/Results/         UnfoldedFace GlueTab UnfoldResult AssemblyStep
 Domain/Settings/        AppSettings (View3D View2D Print General)
@@ -243,7 +226,7 @@ Application/Interfaces/ IMeshLoader IExporter
 Application/Services/   MeshService UnfoldService ProjectSerializer SettingsService
 
 Infrastructure/         ObjMeshLoader AssimpMeshLoader MultiFormatMeshLoader
-                        PdoMeshLoader                                        ← NEW
+                        PdoMeshLoader
                         SvgExporter PdfExporter AffineTransformHelper
 
 App/ViewModels/         MainViewModel PieceViewModel SettingsViewModel
@@ -258,7 +241,7 @@ App/                    MainWindow App
 
 Tests/                  MstAlgorithmTests (6)  UnfoldEngineTests (9)
                         GeometryAlgorithmTests (13)  SvgExporterTests (5)
-                        PdoMeshLoaderTests (7)                               ← NEW
+                        PdoMeshLoaderTests (7)
 App/Assets/             app.ico (6 sizes) logo.png
 ```
 
@@ -266,5 +249,6 @@ App/Assets/             app.ico (6 sizes) logo.png
 
 ## Recommended Next Steps
 
-1. **Performance** — Spatial grid / bucket partition for `OverlapDetector`; current O(n²) AABB loop becomes a bottleneck on meshes > 2000 faces
-2. **Merge `feat/pdo-import` → `main`** — branch is stable at v0.0.3.B; all tech debt cleared
+1. **Merge `feat/assembly-phase0` → `feat/toolbar-ux` → `main`** — both branches stable; assembly animation fully polished
+2. **Multi-page auto-layout** — allow pieces to flow across multiple pages automatically during auto-arrange
+3. **UX polish** — 3D viewport navigation controls (trackpad pinch-zoom, keyboard shortcuts)

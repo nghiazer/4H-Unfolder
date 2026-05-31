@@ -33,9 +33,10 @@ public sealed class ThemeService
         if (_current != null)
             merged.Remove(_current);
 
-        // Insert at index 0 so it is a base layer; higher-priority resources
-        // declared later (e.g., in Window.Resources) can still override.
-        merged.Insert(0, newDict);
+        // Add at the END so it has highest priority (WPF MergedDictionaries: last wins).
+        // App.xaml statically loads LightTheme.xaml at index 0; by appending here we
+        // always override it — regardless of whether we're switching to Dark or Light.
+        merged.Add(newDict);
         _current = newDict;
     }
 }

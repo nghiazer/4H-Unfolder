@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using Microsoft.Win32;
 using FourHUnfolder.App.ViewModels;
 
@@ -10,13 +11,65 @@ public partial class TextureDialog : Window
     private MainViewModel? Vm => DataContext as MainViewModel;
     private MaterialTextureViewModel? _selected;
 
-    public TextureDialog() => InitializeComponent();
+    public TextureDialog()
+    {
+        InitializeComponent();
+        // Build the checkerboard brush using current theme colours so it updates
+        // correctly on Light ↔ Dark switch (DrawingBrush in XAML cannot use
+        // DynamicResource because WPF freezes it; code-behind bypasses this).
+        ApplyCheckerBrush();
+    }
+
+    /// <summary>
+    /// Creates (or replaces) the <c>CheckerBrush</c> Window resource using the
+    /// two <c>TransparencyCheckerA/B</c> theme keys from Application.Resources.
+    /// </summary>
+    private void ApplyCheckerBrush()
+    {
+        // Use fully-qualified System.Windows.Application to avoid ambiguity with
+        // the project's FourHUnfolder.Application namespace.
+        var app = System.Windows.Application.Current;
+        var colorA = (app.TryFindResource("TransparencyCheckerA") as SolidColorBrush)?.Color
+                     ?? Color.FromRgb(0x33, 0x33, 0x44);
+        var colorB = (app.TryFindResource("TransparencyCheckerB") as SolidColorBrush)?.Color
+                     ?? Color.FromRgb(0x55, 0x55, 0x66);
+
+        // Geometry.Parse is System.Windows.Media.Geometry — qualify to avoid clash
+        // with FourHUnfolder.Geometry namespace.
+        var brush = new DrawingBrush
+        {
+            TileMode      = TileMode.Tile,
+            Viewport      = new Rect(0, 0, 8, 8),
+            ViewportUnits = BrushMappingMode.Absolute,
+            Drawing       = new DrawingGroup
+            {
+                Children =
+                {
+                    new GeometryDrawing(new SolidColorBrush(colorB), null,
+                        System.Windows.Media.Geometry.Parse("M0,0 H8 V8 H0 Z")),
+                    new GeometryDrawing(new SolidColorBrush(colorA), null,
+                        System.Windows.Media.Geometry.Parse("M0,0 H4 V4 H0 Z M4,4 H8 V8 H4 Z"))
+                }
+            }
+        };
+        Resources["CheckerBrush"] = brush;
+    }
 
     protected override void OnContentRendered(EventArgs e)
     {
         base.OnContentRendered(e);
         if (MaterialList.Items.Count > 0)
             MaterialList.SelectedIndex = 0;
+    }
+
+    // Rebuild the checker brush whenever the dialog is activated (e.g. after switching
+    // theme in Settings and then re-focusing this dialog).  The brush is baked with
+    // hard Color values so it can't auto-update via DynamicResource; re-building on
+    // each activation is cheap (one DrawingBrush) and keeps it in sync with the theme.
+    protected override void OnActivated(EventArgs e)
+    {
+        base.OnActivated(e);
+        ApplyCheckerBrush();
     }
 
     private void MaterialList_SelectionChanged(object sender, SelectionChangedEventArgs e)

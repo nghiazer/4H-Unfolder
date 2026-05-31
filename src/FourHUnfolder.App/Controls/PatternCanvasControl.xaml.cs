@@ -94,6 +94,7 @@ public partial class PatternCanvasControl : UserControl
         {
             old.Pieces.CollectionChanged -= OnPiecesChanged;
             old.PropertyChanged          -= OnVmPropertyChanged;
+            old.ViewResetRequested       -= OnViewReset;
         }
 
         _vm = e.NewValue as MainViewModel;
@@ -104,6 +105,7 @@ public partial class PatternCanvasControl : UserControl
 
         _vm.Pieces.CollectionChanged += OnPiecesChanged;
         _vm.PropertyChanged          += OnVmPropertyChanged;
+        _vm.ViewResetRequested       += OnViewReset;
 
         RebuildAll();
     }
@@ -113,6 +115,15 @@ public partial class PatternCanvasControl : UserControl
         // Suppress per-Add/Clear rebuilds during batch RebuildPieces; PiecesVersion fires one rebuild
         if (_vm?.BatchingPieces == true) return;
         Dispatcher.Invoke(RebuildAll);
+    }
+
+    private void OnViewReset()
+    {
+        Dispatcher.Invoke(() =>
+        {
+            Scroller.ScrollToTop();
+            Scroller.ScrollToLeftEnd();
+        });
     }
 
     private void OnVmPropertyChanged(object? s, PropertyChangedEventArgs e)
@@ -202,7 +213,8 @@ public partial class PatternCanvasControl : UserControl
     private void DrawPaper(PaperSizeModel paper)
     {
         var s2d = _vm?.View2DSettings;
-        RootCanvas.Background = HexBrush(s2d?.CanvasBackground, "#3a3a5a");
+        Scroller.Background   = HexBrush(s2d?.CanvasBackground, "#3a3a5a");
+        RootCanvas.Background = Brushes.Transparent;
 
         int pagesWide = _vm?.PagesWide ?? 1;
         int pagesTall = _vm?.PagesTall ?? 1;
@@ -244,9 +256,10 @@ public partial class PatternCanvasControl : UserControl
         string pageLabel = (_vm?.PagesWide * _vm?.PagesTall > 1)
             ? $"{paper.Name}  p.{row * (_vm?.PagesWide ?? 1) + col + 1}"
             : $"{paper.Name}  ({_vm?.FormatMm(paper.WidthMm) ?? ""} × {_vm?.FormatMm(paper.HeightMm) ?? ""})";
+        var lblBrush = TryFindResource("Canvas2DPageLabelFg") as Brush ?? Brushes.Gray;
         var lbl = new TextBlock
         {
-            Text = pageLabel, Foreground = Brushes.Gray, FontSize = 10
+            Text = pageLabel, Foreground = lblBrush, FontSize = 11
         };
         Canvas.SetLeft(lbl, ox);
         Canvas.SetTop (lbl, oy - 16);
@@ -830,6 +843,7 @@ public partial class PatternCanvasControl : UserControl
                     piece.PositionX + cxs.Zip(cys, (x, y) => x * cosR - y * sinR).Max(),
                     piece.PositionY + cxs.Zip(cys, (x, y) => x * sinR + y * cosR).Max());
             }
+            _vm.TrimEmptyPages();
         }
 
         _preDragPositions = null;

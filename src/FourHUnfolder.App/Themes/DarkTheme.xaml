@@ -34,6 +34,7 @@
     <SolidColorBrush x:Key="TextAccent"     Color="#a0c8ff"/>
     <SolidColorBrush x:Key="TextHint"       Color="#666688"/>
     <SolidColorBrush x:Key="PanelHeadFg"    Color="#ffffff"/>
+    <SolidColorBrush x:Key="StatusTextFg"   Color="#d8d8e8"/>
 
     <!-- ── Borders ───────────────────────────────────────────────── -->
     <SolidColorBrush x:Key="BorderNormal"   Color="#3d3d5c"/>
@@ -41,8 +42,9 @@
 
     <!-- ── 2D canvas ─────────────────────────────────────────────── -->
     <SolidColorBrush x:Key="Canvas2DBg"           Color="#3a3a5a"/>
-    <SolidColorBrush x:Key="Canvas2DScrollerBg"   Color="#2a2a4a"/>
+    <SolidColorBrush x:Key="Canvas2DScrollerBg"   Color="#3a3a5a"/>
     <SolidColorBrush x:Key="Canvas2DZoomBadgeBg"  Color="#99000022"/>
+    <SolidColorBrush x:Key="Canvas2DPageLabelFg" Color="#c0c0e0"/>
 
     <!-- ── Form controls ─────────────────────────────────────────── -->
     <SolidColorBrush x:Key="GroupBoxFg"     Color="#a0c0ff"/>
@@ -79,5 +81,14 @@
     <SolidColorBrush x:Key="CtrlBtnBg"        Color="#2a2a4a"/>
     <SolidColorBrush x:Key="CtrlBtnFg"        Color="#d0d8f0"/>
     <SolidColorBrush x:Key="CtrlBtnBorder"    Color="#4a4a6a"/>
+
+    <!-- ── Semantic extras ────────────────────────────────────────── -->
+    <!-- Warning / validation text (e.g. "axes are parallel") -->
+    <SolidColorBrush x:Key="WarningTextFg"            Color="#ff6666"/>
+    <!-- Stroke for colour-picker swatch rectangles in SettingsDialog -->
+    <SolidColorBrush x:Key="ColorSwatchBorderBrush"   Color="#666666"/>
+    <!-- Checkerboard pattern for transparent-texture preview (TextureDialog) -->
+    <SolidColorBrush x:Key="TransparencyCheckerA"     Color="#333344"/>
+    <SolidColorBrush x:Key="TransparencyCheckerB"     Color="#555566"/>
 
 </ResourceDictionary>
