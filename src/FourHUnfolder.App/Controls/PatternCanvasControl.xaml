@@ -153,6 +153,11 @@
                               IsChecked="{Binding SnapToGrid, Mode=OneWay}"
                               Click="SnapToggle_Click"
                               ToolTip="Snap to grid when dragging"/>
+                <ToggleButton Style="{StaticResource Toggle2D}" x:Name="FoldAnglesBtn"
+                              Content="∠"
+                              IsChecked="{Binding ShowFoldAngles, Mode=OneWay}"
+                              Click="FoldAngles_Click"
+                              ToolTip="Show fold angle labels on fold edges"/>
             </StackPanel>
         </Border>
     </Grid>

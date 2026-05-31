@@ -17,8 +17,9 @@ public partial class PieceViewModel : ObservableObject
 
     [ObservableProperty] private double _positionX;
     [ObservableProperty] private double _positionY;
-    [ObservableProperty] private double _rotation;    // degrees
+    [ObservableProperty] private double _rotation;      // degrees
     [ObservableProperty] private bool   _isSelected;
+    [ObservableProperty] private int?   _userGroupId;   // null = no user group
 
     public PieceViewModel(int groupId, FaceData[] faces, TabData[] glueTabs,
                           double posX, double posY)

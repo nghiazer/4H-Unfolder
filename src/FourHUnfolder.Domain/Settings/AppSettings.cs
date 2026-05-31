@@ -98,6 +98,13 @@ public sealed class AppSettings
         // Edge ID annotations on cut edges
         public bool   ShowEdgeIds       { get; set; } = true;
         public string EdgeIdColor       { get; set; } = "#cc333333";
+
+        // Fold angle labels on fold edges
+        public bool   ShowFoldAngles    { get; set; } = false;
+        public string FoldAngleColor    { get; set; } = "#888888";
+
+        // View mode
+        public bool   Show2DOnly        { get; set; } = false;
     }
 
     // ── Print / SVG Export ────────────────────────────────────────────────────

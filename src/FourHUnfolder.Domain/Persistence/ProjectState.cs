@@ -14,6 +14,7 @@ public sealed class ProjectState
 
     // ── Unfold settings ───────────────────────────────────────────────────────
     public double   ScaleMmPerUnit { get; set; } = 1.0;
+    public bool     MirrorX        { get; set; } = false;
 
     public PaperDto Paper { get; set; } = new();
 
@@ -55,9 +56,10 @@ public sealed class ProjectState
 
     public sealed class PieceLayoutDto
     {
-        public int    GroupId   { get; set; }
-        public double PositionX { get; set; }
-        public double PositionY { get; set; }
-        public double Rotation  { get; set; }
+        public int    GroupId     { get; set; }
+        public double PositionX   { get; set; }
+        public double PositionY   { get; set; }
+        public double Rotation    { get; set; }
+        public int?   UserGroupId { get; set; }
     }
 }

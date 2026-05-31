@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Media.Media3D;
 using Microsoft.Extensions.DependencyInjection;
 using FourHUnfolder.App.Dialogs;
@@ -33,7 +34,9 @@ public partial class MainWindow : Window
         DataContext = App.Services.GetRequiredService<MainViewModel>();
         Loaded     += OnLoaded;
         Closing    += OnClosing;
-        Vm.PropertyChanged += OnVmPropertyChanged;
+        Vm.PropertyChanged        += OnVmPropertyChanged;
+        Vm.FitPageRequested       += () => PatternCanvas.FitPageToWindow();
+        Vm.ZoomToSelectedRequested += () => PatternCanvas.ZoomToSelected();
     }
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
@@ -314,6 +317,19 @@ public partial class MainWindow : Window
         {
             _editFlapsDialog.Activate();
         }
+    }
+
+    // ── copy to clipboard ─────────────────────────────────────────────────────
+
+    private void CopyToClipboard_Click(object sender, RoutedEventArgs e)
+    {
+        if (!Vm.CanExport) return;
+        var rtb = new RenderTargetBitmap(
+            (int)PatternCanvas.ActualWidth, (int)PatternCanvas.ActualHeight,
+            96, 96, PixelFormats.Pbgra32);
+        rtb.Render(PatternCanvas);
+        Clipboard.SetImage(rtb);
+        Vm.StatusText = "2D layout copied to clipboard.";
     }
 
     // ── texture dialog ────────────────────────────────────────────────────────
