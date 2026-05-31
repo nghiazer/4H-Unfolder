@@ -7,6 +7,7 @@
         Icon="Assets/app.ico"
         Width="1400" Height="900"
         WindowStartupLocation="CenterScreen"
+        WindowState="Maximized"
         Background="{DynamicResource AppBg}">
 
     <Window.Resources>
@@ -162,7 +163,7 @@
                         Command="{Binding LoadMeshCommand}"
                         ToolTip="Load Mesh (.obj, .pdo, .fbx, .stl, …)"/>
                 <Separator/>
-                <Button Style="{StaticResource IconBtn}" Content="⚙"
+                <Button Style="{StaticResource IconBtn}" Content="📐"
                         Command="{Binding UnfoldCommand}" IsEnabled="{Binding CanUnfold}"
                         ToolTip="Unfold — open setup dialog"/>
                 <Separator/>
