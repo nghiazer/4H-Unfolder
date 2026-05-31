@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:helix="http://helix-toolkit.org/wpf"
         xmlns:ctrl="clr-namespace:FourHUnfolder.App.Controls"
-        Title="4H-Unfolder v0.0.5.A — Paper Model Unfolder"
+        Title="4H-Unfolder v0.0.6.A — Paper Model Unfolder"
         Icon="Assets/app.ico"
         Width="1400" Height="900"
         WindowStartupLocation="CenterScreen"
@@ -54,6 +54,11 @@
         <KeyBinding Key="Z" Modifiers="Ctrl"       Command="{Binding UndoCommand}"/>
         <KeyBinding Key="Y" Modifiers="Ctrl"       Command="{Binding RedoCommand}"/>
         <KeyBinding Key="Z" Modifiers="Ctrl+Shift" Command="{Binding RedoCommand}"/>
+        <KeyBinding Key="A" Modifiers="Ctrl"       Command="{Binding SelectAllCommand}"/>
+        <KeyBinding Key="F3"                        Command="{Binding FitPageCommand}"/>
+        <KeyBinding Key="F4"                        Command="{Binding ZoomToSelectedCommand}"/>
+        <KeyBinding Key="G" Modifiers="Ctrl"        Command="{Binding GroupCommand}"/>
+        <KeyBinding Key="G" Modifiers="Ctrl+Shift"  Command="{Binding UngroupCommand}"/>
     </Window.InputBindings>
 
     <Grid>
@@ -66,7 +71,7 @@
         <!-- ═══ Row 0 — viewports ════════════════════════════════════════ -->
         <Grid Grid.Row="0">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="{Binding LeftColumnWidth}"/>
                 <ColumnDefinition Width="{Binding SplitterColumnWidth}"/>
                 <ColumnDefinition Width="{Binding RightColumnWidth}"/>
             </Grid.ColumnDefinitions>
@@ -222,6 +227,52 @@
                         Click="EditFlapsButton_Click"
                         IsEnabled="{Binding CanExport}"
                         ToolTip="Edit Flaps — control glue tab placement per edge"/>
+                <Separator/>
+                <!-- Cluster 5: 2D Layout tools -->
+                <Button Style="{StaticResource IconBtn}" Content="⇔"
+                        Command="{Binding OpenScaleDialogCommand}"
+                        IsEnabled="{Binding CanExport}"
+                        ToolTip="Rescale model (change physical output size)"/>
+                <Button Style="{StaticResource IconBtn}" Content="⇅"
+                        Command="{Binding ToggleMirrorInversionCommand}"
+                        IsEnabled="{Binding CanUnfold}"
+                        ToolTip="Mirror Inversion — flip model along X axis (both 3D and 2D)"/>
+                <Button Style="{StaticResource IconBtn}" Content="⊞"
+                        Command="{Binding FitPageCommand}"
+                        IsEnabled="{Binding CanExport}"
+                        ToolTip="Fit Page to Window  (F3)"/>
+                <Button Style="{StaticResource IconBtn}" Content="⊡"
+                        Command="{Binding ZoomToSelectedCommand}"
+                        IsEnabled="{Binding CanExport}"
+                        ToolTip="Zoom to Selected pieces  (F4)"/>
+                <Button Style="{StaticResource IconBtn}" Content="⬜"
+                        Command="{Binding SelectAllCommand}"
+                        IsEnabled="{Binding CanExport}"
+                        ToolTip="Select All pieces  (Ctrl+A)"/>
+                <Button Style="{StaticResource IconBtn}" Content="⊕"
+                        Command="{Binding GroupCommand}"
+                        IsEnabled="{Binding CanExport}"
+                        ToolTip="Group selected pieces  (Ctrl+G)"/>
+                <Button Style="{StaticResource IconBtn}" Content="⊖"
+                        Command="{Binding UngroupCommand}"
+                        IsEnabled="{Binding CanExport}"
+                        ToolTip="Ungroup selected pieces  (Ctrl+Shift+G)"/>
+                <Button Style="{StaticResource IconBtn}" Content="↺"
+                        Command="{Binding UndoUnfoldCommand}"
+                        IsEnabled="{Binding CanExport}"
+                        ToolTip="Undo Unfold — clear all edge/flap overrides and reset layout"/>
+                <Button Style="{StaticResource IconBtn}" Content="✂"
+                        Command="{Binding ResetCutlineEdgesCommand}"
+                        IsEnabled="{Binding CanExport}"
+                        ToolTip="Reset all cut edges → fold (Undo-able)"/>
+                <Button Style="{StaticResource IconBtn}" Content="📋"
+                        Click="CopyToClipboard_Click"
+                        IsEnabled="{Binding CanExport}"
+                        ToolTip="Copy 2D layout to clipboard (bitmap)"/>
+                <Button Style="{StaticResource IconBtn}" Content="□"
+                        Command="{Binding ToggleShow2DOnlyCommand}"
+                        IsEnabled="{Binding CanExport}"
+                        ToolTip="Show 2D Layout Only (hide 3D viewport)"/>
             </StackPanel>
         </Border>
 

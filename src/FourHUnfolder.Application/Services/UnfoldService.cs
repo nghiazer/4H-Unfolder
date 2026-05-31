@@ -73,7 +73,12 @@ public class UnfoldService
                 cutEdgePairIds[edge.Id] = ++pairCounter;
         }
 
-        return new UnfoldResult(rawResult.Faces, tabs, hasOverlaps, cutEdgePairIds);
+        // Build meshEdgeId → dihedral angle (degrees) for all interior fold edges
+        var dihedralAngles = new Dictionary<int, float>();
+        foreach (var ge in dualGraph.Edges)
+            dihedralAngles[ge.SharedMeshEdgeId] = ge.Weight * (180f / MathF.PI);
+
+        return new UnfoldResult(rawResult.Faces, tabs, hasOverlaps, cutEdgePairIds, dihedralAngles);
     }
 
     /// <summary>

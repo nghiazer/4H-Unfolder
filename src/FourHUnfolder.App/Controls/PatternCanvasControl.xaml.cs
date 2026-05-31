@@ -78,7 +78,7 @@ public partial class PatternCanvasControl : UserControl
     private Dictionary<int, (double X, double Y)>? _multiDragOrigins;
 
     // TD-N6: pre-drag snapshot for undo support (captured on MouseDown)
-    private Dictionary<int, (double X, double Y, double Rot)>? _preDragPositions;
+    private Dictionary<int, (double X, double Y, double Rot, int? UserGroupId)>? _preDragPositions;
 
     // ── constructor ──────────────────────────────────────────────────────────
     public PatternCanvasControl()
@@ -573,6 +573,39 @@ public partial class PatternCanvasControl : UserControl
                 }
             }
         }
+
+        // Fold angle labels on fold edges
+        if (s2d?.ShowFoldAngles == true && _vm?.EdgeDihedralAngles is { Count: > 0 } angles)
+        {
+            var angleBrush = HexBrush(s2d?.FoldAngleColor, "#888888");
+            double fontSize = Math.Max(5, _pxPerMm * 1.8);
+            var drawn = new HashSet<int>();
+            foreach (var fd in piece.Faces)
+            {
+                Point[] verts = [Sc(fd.V0), Sc(fd.V1), Sc(fd.V2)];
+                for (int i = 0; i < 3; i++)
+                {
+                    if (!fd.EdgeIsFold[i]) continue;
+                    int meshEdgeId = fd.MeshEdgeIds[i];
+                    if (!drawn.Add(meshEdgeId)) continue;
+                    if (!angles.TryGetValue(meshEdgeId, out var deg)) continue;
+
+                    var p0 = verts[i]; var p1 = verts[(i + 1) % 3];
+                    double mx = (p0.X + p1.X) / 2;
+                    double my = (p0.Y + p1.Y) / 2;
+                    var lbl = new TextBlock
+                    {
+                        Text             = $"{deg:F0}°",
+                        FontSize         = fontSize,
+                        Foreground       = angleBrush,
+                        IsHitTestVisible = false
+                    };
+                    Canvas.SetLeft(lbl, mx - fontSize * 0.8);
+                    Canvas.SetTop (lbl, my - fontSize * 0.7);
+                    container.Children.Add(lbl);
+                }
+            }
+        }
     }
 
     // ── transform sync ───────────────────────────────────────────────────────
@@ -613,6 +646,57 @@ public partial class PatternCanvasControl : UserControl
             Scroller.ScrollToHorizontalOffset(Math.Max(0, cx - Scroller.ViewportWidth  / 2));
             Scroller.ScrollToVerticalOffset  (Math.Max(0, cy - Scroller.ViewportHeight / 2));
         }
+    }
+
+    /// Zooms and scrolls so the full paper area (all pages) fits in the viewport.
+    public void FitPageToWindow()
+    {
+        if (_vm == null || Scroller.ViewportWidth <= 0 || Scroller.ViewportHeight <= 0) return;
+        double sep    = MainViewModel.PageSepMm;
+        double paperW = _vm.PagesWide * _vm.PaperSizeModel.WidthMm  + (_vm.PagesWide - 1) * sep;
+        double paperH = _vm.PagesTall * _vm.PaperSizeModel.HeightMm + (_vm.PagesTall - 1) * sep;
+        double scaleX = (Scroller.ViewportWidth  - PaperMarginPx * 2 - 4) / paperW;
+        double scaleY = (Scroller.ViewportHeight - PaperMarginPx * 2 - 4) / paperH;
+        double newPx  = Math.Max(0.5, Math.Min(12.0, Math.Min(scaleX, scaleY)));
+        _pxPerMm = newPx;
+        if (_vm != null) _vm.PixelsPerMm = newPx;
+        RebuildAll();
+        Scroller.ScrollToHome();
+    }
+
+    /// Zooms and scrolls so all selected pieces fill the viewport (falls back to FitPageToWindow).
+    public void ZoomToSelected()
+    {
+        if (_vm == null) return;
+        var sel = _vm.Pieces.Where(p => p.IsSelected).ToList();
+        if (sel.Count == 0) { FitPageToWindow(); return; }
+
+        double minX = double.MaxValue, maxX = double.MinValue;
+        double minY = double.MaxValue, maxY = double.MinValue;
+        foreach (var p in sel)
+        {
+            var (bMinX, bMaxX, bMinY, bMaxY) = p.GetCanvasBounds();
+            if (bMinX < minX) minX = bMinX;
+            if (bMaxX > maxX) maxX = bMaxX;
+            if (bMinY < minY) minY = bMinY;
+            if (bMaxY > maxY) maxY = bMaxY;
+        }
+        double bboxW = maxX - minX;
+        double bboxH = maxY - minY;
+        if (bboxW < 1 || bboxH < 1) { FitPageToWindow(); return; }
+        if (Scroller.ViewportWidth <= 0 || Scroller.ViewportHeight <= 0) return;
+
+        double scaleX = (Scroller.ViewportWidth  - 40) / bboxW;
+        double scaleY = (Scroller.ViewportHeight - 40) / bboxH;
+        double newPx  = Math.Max(0.5, Math.Min(12.0, Math.Min(scaleX, scaleY)));
+        _pxPerMm = newPx;
+        if (_vm != null) _vm.PixelsPerMm = newPx;
+        RebuildAll();
+
+        double cx = (minX + maxX) / 2.0 * newPx + PaperMarginPx;
+        double cy = (minY + maxY) / 2.0 * newPx + PaperMarginPx;
+        Scroller.ScrollToHorizontalOffset(Math.Max(0, cx - Scroller.ViewportWidth  / 2));
+        Scroller.ScrollToVerticalOffset  (Math.Max(0, cy - Scroller.ViewportHeight / 2));
     }
 
     private void UpdateCanvasSize()
@@ -656,13 +740,19 @@ public partial class PatternCanvasControl : UserControl
         _dragOriginX     = piece.PositionX;
         _dragOriginY     = piece.PositionY;
 
-        // Snapshot origins of every selected piece for multi-drag
+        // Snapshot origins of every selected piece for multi-drag.
+        // Also include pieces in the same user group as any selected piece.
+        var dragUserGroups = _vm?.Pieces
+            .Where(p => p.IsSelected && p.UserGroupId != null)
+            .Select(p => p.UserGroupId)
+            .ToHashSet();
         _multiDragOrigins = _vm?.Pieces
-            .Where(p => p.IsSelected)
+            .Where(p => p.IsSelected ||
+                        (p.UserGroupId != null && dragUserGroups != null && dragUserGroups.Contains(p.UserGroupId)))
             .ToDictionary(p => p.GroupId, p => (p.PositionX, p.PositionY));
 
         _preDragPositions = _vm?.Pieces
-            .ToDictionary(p => p.GroupId, p => (p.PositionX, p.PositionY, p.Rotation));
+            .ToDictionary(p => p.GroupId, p => (p.PositionX, p.PositionY, p.Rotation, p.UserGroupId));
 
         RootCanvas.CaptureMouse();
         e.Handled = true;
@@ -897,7 +987,7 @@ public partial class PatternCanvasControl : UserControl
         var sel = _vm.Pieces.Where(p => p.IsSelected).ToList();
         if (sel.Count < 2) return;
 
-        var pre = _vm.Pieces.ToDictionary(p => p.GroupId, p => (p.PositionX, p.PositionY, p.Rotation));
+        var pre = _vm.Pieces.ToDictionary(p => p.GroupId, p => (p.PositionX, p.PositionY, p.Rotation, p.UserGroupId));
 
         // Compute each piece's AABB in canvas mm coords
         static (double minX, double minY, double maxX, double maxY) PieceAabb(PieceViewModel piece)
@@ -953,7 +1043,7 @@ public partial class PatternCanvasControl : UserControl
         if (_vm == null) return;
         var selected = _vm.Pieces.Where(p => p.IsSelected).ToList();
         if (selected.Count == 0) return;
-        var pre = _vm.Pieces.ToDictionary(p => p.GroupId, p => (p.PositionX, p.PositionY, p.Rotation));
+        var pre = _vm.Pieces.ToDictionary(p => p.GroupId, p => (p.PositionX, p.PositionY, p.Rotation, p.UserGroupId));
         foreach (var piece in selected)
         {
             piece.Rotation = (piece.Rotation + delta + 360) % 360;
@@ -972,6 +1062,10 @@ public partial class PatternCanvasControl : UserControl
     // ── snap toggle (via ViewModel command) ──────────────────────────────────
     private void SnapToggle_Click(object s, RoutedEventArgs e) =>
         _vm?.ToggleSnapCommand.Execute(null);
+
+    // ── fold-angle label toggle ───────────────────────────────────────────────
+    private void FoldAngles_Click(object s, RoutedEventArgs e) =>
+        _vm?.ToggleShowFoldAnglesCommand.Execute(null);
 
     // ── middle-mouse pan ─────────────────────────────────────────────────────
 
@@ -1180,7 +1274,7 @@ public partial class PatternCanvasControl : UserControl
             _pieceRotation0 = piece.Rotation;
             // Capture pre-rotate state for undo
             _preDragPositions = _vm?.Pieces
-                .ToDictionary(p => p.GroupId, p => (p.PositionX, p.PositionY, p.Rotation));
+                .ToDictionary(p => p.GroupId, p => (p.PositionX, p.PositionY, p.Rotation, p.UserGroupId));
             _rotatePtPhase = 2;
         }
     }
@@ -1328,7 +1422,7 @@ public partial class PatternCanvasControl : UserControl
         double delta   = snapped - edgeAngle;
 
         // Capture pre-snap for undo
-        var snap = _vm!.Pieces.ToDictionary(p => p.GroupId, p => (p.PositionX, p.PositionY, p.Rotation));
+        var snap = _vm!.Pieces.ToDictionary(p => p.GroupId, p => (p.PositionX, p.PositionY, p.Rotation, p.UserGroupId));
         piece.Rotation = (piece.Rotation + delta + 360) % 360;
         _vm.PushDragUndo(snap);
     }

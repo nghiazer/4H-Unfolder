@@ -50,6 +50,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
     // edge overrides: mesh edge ID → EdgeType (user's join/split operations)
     private readonly Dictionary<int, EdgeType> _edgeOverrides = new();
 
+    // mirror inversion flag (true = X coordinates negated)
+    private bool _mirrorX;
+
     // flap overrides: mesh edge ID → FlapOverride (per-edge tab placement control)
     private readonly Dictionary<int, FlapOverride> _flapOverrides = new();
 
@@ -76,7 +79,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private readonly record struct EditSnapshot(
         IReadOnlyDictionary<int, EdgeType>    EdgeOverrides,
         IReadOnlyDictionary<int, FlapOverride> FlapOverrides,
-        IReadOnlyDictionary<int, (double X, double Y, double Rot)> PieceLayouts);
+        IReadOnlyDictionary<int, (double X, double Y, double Rot, int? UserGroupId)> PieceLayouts);
 
     private readonly Stack<EditSnapshot> _undoStack = new();
     private readonly Stack<EditSnapshot> _redoStack = new();
@@ -177,9 +180,26 @@ public partial class MainViewModel : ObservableObject, IDisposable
     /// Fired when a new model is loaded so the canvas can scroll back to the origin.
     public event Action? ViewResetRequested;
 
-    // ── grid / snap (fast-path toggles, kept in sync with settings) ───────────
-    [ObservableProperty] private bool _gridVisible = true;
-    [ObservableProperty] private bool _snapToGrid  = false;
+    // ── grid / snap / view (fast-path toggles, kept in sync with settings) ──────
+    [ObservableProperty] private bool _gridVisible    = true;
+    [ObservableProperty] private bool _snapToGrid     = false;
+    [ObservableProperty] private bool _show2DOnly     = false;
+    [ObservableProperty] private bool _showFoldAngles = false;
+
+    partial void OnShow2DOnlyChanged(bool value)
+    {
+        OnPropertyChanged(nameof(LeftColumnWidth));
+        PatchSettings(s => s.View2D.Show2DOnly = value);
+    }
+
+    partial void OnShowFoldAnglesChanged(bool value)
+    {
+        PatchSettings(s => s.View2D.ShowFoldAngles = value);
+        OnPropertyChanged(nameof(View2DSettings));  // trigger canvas RebuildAll
+    }
+
+    /// Dihedral angles from the last unfold result (meshEdgeId → degrees).
+    public IReadOnlyDictionary<int, float>? EdgeDihedralAngles => _lastUnfoldResult?.EdgeDihedralAngles;
 
     // ── settings-derived 3D viewport bindings ─────────────────────────────────
     public Brush  Viewport3DBackground       => ParseBrush(S.View3D.BackgroundColor, "#0d0d1a");
@@ -215,7 +235,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     public bool CanRemoveTexture => HasTexture && !_previewActive;
 
-    // ── column widths for split-view (show 2D panel only after unfolding) ─────
+    // ── column widths for split-view ─────────────────────────────────────────
+    public GridLength LeftColumnWidth =>
+        Show2DOnly ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
     public GridLength RightColumnWidth =>
         IsUnfolded ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
     public GridLength SplitterColumnWidth =>
@@ -239,8 +261,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         // Apply initial values from settings
         _pixelsPerMm   = settingsService.Current.View2D.DefaultPixelsPerMm;
-        _gridVisible   = settingsService.Current.View2D.ShowGrid;
-        _snapToGrid    = settingsService.Current.View2D.SnapToGrid;
+        _gridVisible    = settingsService.Current.View2D.ShowGrid;
+        _snapToGrid     = settingsService.Current.View2D.SnapToGrid;
+        _show2DOnly     = settingsService.Current.View2D.Show2DOnly;
+        _showFoldAngles = settingsService.Current.View2D.ShowFoldAngles;
         _lastThemeMode = settingsService.Current.General.ThemeMode;
 
         _settingsService.SettingsChanged += OnSettingsChanged;
@@ -296,8 +320,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
 
         // Sync fast-path toggles from new settings
-        GridVisible = S.View2D.ShowGrid;
-        SnapToGrid  = S.View2D.SnapToGrid;
+        GridVisible    = S.View2D.ShowGrid;
+        SnapToGrid     = S.View2D.SnapToGrid;
+        Show2DOnly     = S.View2D.Show2DOnly;
+        ShowFoldAngles = S.View2D.ShowFoldAngles;
 
         // Update paper size if the default changed
         var matchedPaper = PaperSizeModel.Presets
@@ -344,6 +370,18 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         SnapToGrid = !SnapToGrid;
         PatchSettings(s => s.View2D.SnapToGrid = SnapToGrid);
+    }
+
+    [RelayCommand]
+    private void ToggleShow2DOnly()
+    {
+        Show2DOnly = !Show2DOnly;
+    }
+
+    [RelayCommand]
+    private void ToggleShowFoldAngles()
+    {
+        ShowFoldAngles = !ShowFoldAngles;
     }
 
     // Applies a single settings mutation without going through SettingsService.Apply
@@ -403,7 +441,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         new Dictionary<int, EdgeType>(_edgeOverrides),
         new Dictionary<int, FlapOverride>(_flapOverrides),
         Pieces.ToDictionary(p => p.GroupId,
-                            p => (p.PositionX, p.PositionY, p.Rotation)));
+                            p => (p.PositionX, p.PositionY, p.Rotation, p.UserGroupId)));
 
     private void RestoreSnapshot(EditSnapshot snap)
     {
@@ -415,7 +453,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
         // Restore saved piece positions (best-effort: group IDs may differ after re-run)
         foreach (var piece in Pieces)
             if (snap.PieceLayouts.TryGetValue(piece.GroupId, out var pos))
-            { piece.PositionX = pos.X; piece.PositionY = pos.Y; piece.Rotation = pos.Rot; }
+            {
+                piece.PositionX   = pos.X;
+                piece.PositionY   = pos.Y;
+                piece.Rotation    = pos.Rot;
+                piece.UserGroupId = pos.UserGroupId;
+            }
     }
 
     private void NotifyUndoRedo()
@@ -604,6 +647,47 @@ public partial class MainViewModel : ObservableObject, IDisposable
         catch (Exception ex) { Error("Unfold failed", ex); }
     }
 
+    // ── RESCALE (post-unfold scale change) ────────────────────────────────────
+    [RelayCommand(CanExecute = nameof(CanExport))]
+    private void OpenScaleDialog()
+    {
+        if (_currentMesh == null) return;
+        var dlg = new Dialogs.ScaleDialog(
+            UnfoldService.BoundingBoxInfo(_currentMesh),
+            currentTargetMm: ScaleMmPerUnit * 200.0)  // rough guess of current target
+        {
+            Owner = WpfApp.Current.MainWindow
+        };
+        if (dlg.ShowDialog() != true) return;
+
+        PushUndoState();
+        double newScale = UnfoldService.ComputeScale(_currentMesh, dlg.Result!);
+        ScaleMmPerUnit  = newScale;
+        MarkDirty();
+        RerunUnfold(preservePositions: false);
+        RunAutoArrange();
+        StatusText = $"Rescaled — scale factor {newScale:F4} mm/unit.";
+    }
+
+    // ── MIRROR INVERSION ─────────────────────────────────────────────────────
+    [RelayCommand(CanExecute = nameof(CanUnfold))]
+    private void ToggleMirrorInversion()
+    {
+        if (_currentMesh == null) return;
+        _mirrorX = !_mirrorX;
+        _currentMesh.ApplyTransform(System.Numerics.Matrix4x4.CreateScale(-1, 1, 1));
+        var tex  = LoadBitmapImage(_committedTexturePath);
+        MeshModel = BuildWpfModel(_currentMesh, tex, _materialBitmaps);
+        if (IsUnfolded)
+        {
+            PushUndoState();
+            RerunUnfold(preservePositions: false);
+            RunAutoArrange();
+        }
+        MarkDirty();
+        StatusText = _mirrorX ? "Mirror X — model flipped." : "Mirror X — model restored.";
+    }
+
     // ── ASSEMBLY ANIMATION ────────────────────────────────────────────────────
     [RelayCommand(CanExecute = nameof(CanExport))]
     private void OpenAssemblyAnimation()
@@ -774,6 +858,18 @@ public partial class MainViewModel : ObservableObject, IDisposable
     /// Fired when the Edit Flaps dialog should be opened (MainWindow handles lifecycle).
     public event Action? EditFlapsRequested;
 
+    /// Fired by F3 — MainWindow calls PatternCanvas.FitPageToWindow().
+    public event Action? FitPageRequested;
+
+    /// Fired by F4 — MainWindow calls PatternCanvas.ZoomToSelected().
+    public event Action? ZoomToSelectedRequested;
+
+    [RelayCommand(CanExecute = nameof(CanExport))]
+    private void FitPage() => FitPageRequested?.Invoke();
+
+    [RelayCommand(CanExecute = nameof(CanExport))]
+    private void ZoomToSelected() => ZoomToSelectedRequested?.Invoke();
+
     public AppSettings.PrintSettings CurrentPrintSettings => _settingsService.Current.Print;
 
     public void SetFlapOverride(int meshEdgeId, FlapOverride? ov)
@@ -795,6 +891,29 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _flapOverrides.Clear();
         MarkDirty();
         RerunUnfold();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanExport))]
+    private void ResetCutlineEdges()
+    {
+        if (_edgeOverrides.Count == 0) return;
+        PushUndoState();
+        _edgeOverrides.Clear();
+        MarkDirty();
+        RerunUnfold();
+        StatusText = "Reset — all cut edges restored to fold.";
+    }
+
+    [RelayCommand(CanExecute = nameof(CanExport))]
+    private void UndoUnfold()
+    {
+        PushUndoState();
+        _edgeOverrides.Clear();
+        _flapOverrides.Clear();
+        MarkDirty();
+        RerunUnfold(preservePositions: false);
+        RunAutoArrange();
+        StatusText = "Undo unfold — all overrides cleared, layout reset.";
     }
 
     public FlapOverride? GetFlapOverride(int meshEdgeId) =>
@@ -865,6 +984,40 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _cachedOverlayGroupId = null;
         _cachedOverlayModel   = null;
         SelectedFaceId        = -1;
+    }
+
+    [RelayCommand(CanExecute = nameof(CanExport))]
+    private void SelectAll()
+    {
+        foreach (var p in Pieces) p.IsSelected = true;
+        StatusText = $"Selected all — {Pieces.Count} piece(s).";
+    }
+
+    // ── Group / Ungroup ───────────────────────────────────────────────────────
+    private int _nextUserGroupId = 1;
+
+    private bool CanGroup() => CanExport && Pieces.Any(p => p.IsSelected);
+    private bool CanUngroup() => CanExport && Pieces.Any(p => p.IsSelected && p.UserGroupId != null);
+
+    [RelayCommand(CanExecute = nameof(CanGroup))]
+    private void Group()
+    {
+        PushUndoState();
+        int gid = _nextUserGroupId++;
+        foreach (var p in Pieces.Where(p => p.IsSelected))
+            p.UserGroupId = gid;
+        MarkDirty();
+        StatusText = $"Grouped — {Pieces.Count(p => p.UserGroupId == gid)} pieces in user group {gid}.";
+    }
+
+    [RelayCommand(CanExecute = nameof(CanUngroup))]
+    private void Ungroup()
+    {
+        PushUndoState();
+        foreach (var p in Pieces.Where(p => p.IsSelected))
+            p.UserGroupId = null;
+        MarkDirty();
+        StatusText = "Ungrouped — selected pieces separated.";
     }
 
     /// Called from 2D canvas when a piece is clicked.
@@ -1307,7 +1460,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     /// <param name="bottomMm">Bottommost mm coordinate of the piece's bounding box.</param>
     /// Pushes an undo snapshot that captures the pre-drag positions.
     /// Called from the canvas after a drag completes with actual movement.
-    public void PushDragUndo(IReadOnlyDictionary<int, (double X, double Y, double Rot)> preDrag)
+    public void PushDragUndo(IReadOnlyDictionary<int, (double X, double Y, double Rot, int? UserGroupId)> preDrag)
     {
         _undoStack.Push(new EditSnapshot(
             new Dictionary<int, EdgeType>(_edgeOverrides),
@@ -1385,6 +1538,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             MeshPath       = _currentMeshPath,
             TexturePath    = _committedTexturePath,
             ScaleMmPerUnit = ScaleMmPerUnit,
+            MirrorX        = _mirrorX,
             PagesWide      = PagesWide,
             PagesTall      = PagesTall,
             Paper          = new ProjectState.PaperDto
@@ -1404,10 +1558,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
         foreach (var piece in Pieces)
             state.Layouts.Add(new ProjectState.PieceLayoutDto
             {
-                GroupId   = piece.GroupId,
-                PositionX = piece.PositionX,
-                PositionY = piece.PositionY,
-                Rotation  = piece.Rotation
+                GroupId     = piece.GroupId,
+                PositionX   = piece.PositionX,
+                PositionY   = piece.PositionY,
+                Rotation    = piece.Rotation,
+                UserGroupId = piece.UserGroupId
             });
 
         // TD-22-2: persist per-material texture paths (for .pmc non-bundle format)
@@ -1432,6 +1587,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _edgeOverrides.Clear();
         _flapOverrides.Clear();
         RebuildMaterialSlots(_currentMesh);
+
+        // Restore mirror state
+        _mirrorX = state.MirrorX;
+        if (_mirrorX)
+            _currentMesh.ApplyTransform(System.Numerics.Matrix4x4.CreateScale(-1, 1, 1));
 
         // Restore edge overrides
         foreach (var (id, typeName) in state.EdgeOverrides)
@@ -1461,9 +1621,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             if (layoutMap.TryGetValue(piece.GroupId, out var layout))
             {
-                piece.PositionX = layout.PositionX;
-                piece.PositionY = layout.PositionY;
-                piece.Rotation  = layout.Rotation;
+                piece.PositionX   = layout.PositionX;
+                piece.PositionY   = layout.PositionY;
+                piece.Rotation    = layout.Rotation;
+                piece.UserGroupId = layout.UserGroupId;
             }
         }
 

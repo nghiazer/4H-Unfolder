@@ -79,7 +79,7 @@ the exact line from `find_definition`.
 
 ---
 
-## Current branch: `feat/glue-tab-editor` (v0.0.5.A)
+## Current branch: `feat/pepakura-features` (v0.0.6.A)
 
 ### Tech debt open (session 36)
 | ID | Priority | Description |

@@ -1,7 +1,7 @@
 # 4H-Unfolder — Session Progress Log
 
-> **Last updated:** 2026-05-31 (session 36 — Edit Flaps dialog; branch `feat/glue-tab-editor`)
-> **Branch:** `feat/glue-tab-editor`  (base: `main` @ v0.0.3.C → current: v0.0.5.A)
+> **Last updated:** 2026-06-01 (session 37 — Pepakura feature set; branch `feat/pepakura-features`)
+> **Branch:** `feat/pepakura-features`  (base: `feat/glue-tab-editor` @ v0.0.5.A → current: v0.0.6.A)
 > **Target framework:** .NET 8 / WPF
 > **SDK required:** `winget install Microsoft.DotNet.SDK.8`
 > **History archive:** see [`BUGS_HISTORY.md`](BUGS_HISTORY.md) for all prior bug/tech-debt records
@@ -92,12 +92,44 @@ No circular dependencies. Domain has zero external dependencies.
 |------|--------|
 | `dotnet build 4H-Unfolder.sln` | ✅ 0 errors, 7 warnings (NuGet NU1603 only) |
 | `dotnet test` | ✅ 56 / 56 passed |
-| `dotnet run --project src/FourHUnfolder.App` | ✅ App opens maximized; Edit Flaps ✂ available |
-| Published `4H-Unfolder.exe` **v0.0.5.A** (win-x64, self-contained) | ✅ Session 36 |
+| `dotnet run --project src/FourHUnfolder.App` | ✅ App opens; all 11 new features accessible |
+| Published `4H-Unfolder.exe` **v0.0.6.A** (win-x64, self-contained) | ✅ Session 37 |
 
 ---
 
-## Session 36 — Changes
+## Session 37 — Changes (v0.0.6.A)
+
+### Branch `feat/pepakura-features` (off `feat/glue-tab-editor` @ v0.0.5.A)
+
+11 missing Pepakura Designer features implemented, mapped from 3D Model / 2D Layout / Others menus.
+
+| Feature | Shortcut | Files changed |
+|---------|----------|---------------|
+| **Select All** | `Ctrl+A` | `MainViewModel` + `MainWindow.xaml` KeyBinding |
+| **Reset Cutline Edges** | Toolbar ✂ | `MainViewModel.ResetCutlineEdgesCommand` |
+| **Show 2D Layout Only** | Toolbar □ | `LeftColumnWidth` col-0 binding; `AppSettings.View2D.Show2DOnly` |
+| **Undo Unfold** | Toolbar ↺ | `MainViewModel.UndoUnfoldCommand` — clears edge+flap overrides, re-unfolds, auto-arranges |
+| **Copy to Clipboard** | Toolbar 📋 | `MainWindow.CopyToClipboard_Click` — `RenderTargetBitmap` → `Clipboard.SetImage` |
+| **Fit Page to Window** | `F3` | `PatternCanvasControl.FitPageToWindow()` — computes px/mm to fill viewport |
+| **Zoom to Selected** | `F4` | `PatternCanvasControl.ZoomToSelected()` — union AABB of selected pieces |
+| **Show Fold Angle** | `∠` toggle | `UnfoldResult.EdgeDihedralAngles`; labels rendered in `RenderPieceShapes`; `AppSettings.View2D.ShowFoldAngles` |
+| **Scale dialog** | Toolbar ⇔ | New `ScaleDialog.xaml` + `MainViewModel.OpenScaleDialogCommand`; reuses `UnfoldService.ComputeScale` |
+| **Mirror Inversion** | Toolbar ⇅ | `Matrix4x4.CreateScale(-1,1,1)` toggle; persisted as `ProjectState.MirrorX` |
+| **Group / Ungroup** | `Ctrl+G` / `Ctrl+Shift+G` | `PieceViewModel.UserGroupId`; drag expands to all grouped peers; undo snapshot + `.4hu` persistence |
+
+#### Domain / pipeline changes
+- `UnfoldResult`: new `EdgeDihedralAngles: IReadOnlyDictionary<int, float>` (meshEdgeId → degrees)
+- `UnfoldService`: populates `EdgeDihedralAngles` from `dualGraph.Edges`
+- `ProjectState`: new `MirrorX: bool` + `PieceLayoutDto.UserGroupId: int?`
+- `AppSettings.View2DSettings`: new `ShowFoldAngles`, `FoldAngleColor`, `Show2DOnly`
+- `EditSnapshot`: extended tuple `(X, Y, Rot, int? UserGroupId)` for full undo fidelity
+
+#### New file
+- `ScaleDialog.xaml` + `ScaleDialog.xaml.cs`
+
+---
+
+## Session 36 — Changes (archived)
 
 ### Branch `feat/glue-tab-editor` (off `main` @ v0.0.3.C)
 
@@ -195,6 +227,7 @@ Tests/                  MstAlgorithmTests (6)  UnfoldEngineTests (9)
 
 ## Recommended Next Steps
 
-1. **TD-36-1** — Add unit tests for FlapOverride serialization + GlueTabGenerator border modes
-2. **Merge `feat/glue-tab-editor` → `main`** — stable at v0.0.5.A; all tech debt logged
+1. **Merge `feat/pepakura-features` → `feat/glue-tab-editor` → `main`** — stable at v0.0.6.A
+2. **TD-36-1** — Add unit tests for FlapOverride serialization + GlueTabGenerator border modes
 3. **Performance** — Spatial grid for `OverlapDetector`; bottleneck on meshes > 2000 faces
+4. **TD-36-2** — Wire EditFlapsViewModel defaults to `AppSettings` fallback
