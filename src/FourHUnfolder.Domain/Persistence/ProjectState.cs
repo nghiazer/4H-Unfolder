@@ -41,6 +41,9 @@ public sealed class ProjectState
     /// Maps materialId → embedded file extension for .4hu bundles (null for .pmc).
     public Dictionary<int, string?> BundledMaterialTextureExts { get; set; } = new();
 
+    // ── Inserted reference image (optional background layer in 2D canvas) ────
+    public string? InsertedImagePath { get; set; }
+
     // ── Load-time warnings (not serialised) ──────────────────────────────────
     [System.Text.Json.Serialization.JsonIgnore]
     public List<string> Warnings { get; } = new();

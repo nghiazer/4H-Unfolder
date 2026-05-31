@@ -121,6 +121,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
     /// Read-only access to the current loaded mesh (used by MainWindow for screen-space edge hover).
     public Mesh? CurrentMesh => _currentMesh;
 
+    /// Scale factor mm-per-model-unit (used by MainWindow for dimension lines).
+    public double CurrentScaleMmPerUnit => ScaleMmPerUnit;
+
     /// Returns the bitmap for the given materialId (from multi-material slots), or
     /// falls back to Canvas2DTexture if no per-material texture is defined.
     public BitmapImage? GetCanvas2DTexture(int materialId)
@@ -185,6 +188,17 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _snapToGrid     = false;
     [ObservableProperty] private bool _show2DOnly     = false;
     [ObservableProperty] private bool _showFoldAngles = false;
+    [ObservableProperty] private bool _showTexture            = true;
+    [ObservableProperty] private bool _highlightFoldLines     = false;
+    [ObservableProperty] private bool _showPartNames          = false;
+    [ObservableProperty] private bool _showPageNumbers        = false;
+    [ObservableProperty] private bool _applyPrintTransparency = false;
+    [ObservableProperty] private bool _showDimensionLines     = false;
+
+    // inserted reference image for 2D canvas background
+    private BitmapImage? _insertedImage;
+    private string?      _insertedImagePath;
+    public  BitmapImage? InsertedImage => _insertedImage;
 
     partial void OnShow2DOnlyChanged(bool value)
     {
@@ -197,6 +211,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
         PatchSettings(s => s.View2D.ShowFoldAngles = value);
         OnPropertyChanged(nameof(View2DSettings));  // trigger canvas RebuildAll
     }
+
+    partial void OnShowTextureChanged(bool value)            { PatchSettings(s => s.View2D.ShowTexture = value);            OnPropertyChanged(nameof(View2DSettings)); }
+    partial void OnHighlightFoldLinesChanged(bool value)     { PatchSettings(s => s.View2D.HighlightFoldLines = value);     OnPropertyChanged(nameof(View2DSettings)); }
+    partial void OnShowPartNamesChanged(bool value)          { PatchSettings(s => s.View2D.ShowPartNames = value);          OnPropertyChanged(nameof(View2DSettings)); }
+    partial void OnShowPageNumbersChanged(bool value)        { PatchSettings(s => s.View2D.ShowPageNumbers = value);        OnPropertyChanged(nameof(View2DSettings)); }
+    partial void OnApplyPrintTransparencyChanged(bool value) { PatchSettings(s => s.View2D.ApplyPrintTransparency = value); OnPropertyChanged(nameof(View2DSettings)); }
+    partial void OnShowDimensionLinesChanged(bool value)     => DimensionLinesChanged?.Invoke(value);
 
     /// Dihedral angles from the last unfold result (meshEdgeId → degrees).
     public IReadOnlyDictionary<int, float>? EdgeDihedralAngles => _lastUnfoldResult?.EdgeDihedralAngles;
@@ -263,8 +284,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _pixelsPerMm   = settingsService.Current.View2D.DefaultPixelsPerMm;
         _gridVisible    = settingsService.Current.View2D.ShowGrid;
         _snapToGrid     = settingsService.Current.View2D.SnapToGrid;
-        _show2DOnly     = settingsService.Current.View2D.Show2DOnly;
-        _showFoldAngles = settingsService.Current.View2D.ShowFoldAngles;
+        _show2DOnly             = settingsService.Current.View2D.Show2DOnly;
+        _showFoldAngles         = settingsService.Current.View2D.ShowFoldAngles;
+        _showTexture            = settingsService.Current.View2D.ShowTexture;
+        _highlightFoldLines     = settingsService.Current.View2D.HighlightFoldLines;
+        _showPartNames          = settingsService.Current.View2D.ShowPartNames;
+        _showPageNumbers        = settingsService.Current.View2D.ShowPageNumbers;
+        _applyPrintTransparency = settingsService.Current.View2D.ApplyPrintTransparency;
         _lastThemeMode = settingsService.Current.General.ThemeMode;
 
         _settingsService.SettingsChanged += OnSettingsChanged;
@@ -843,6 +869,34 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand] private void ApplyPreview()   { if (!_previewActive) return; _committedTexturePath = _pendingTexturePath; CommitPreview(); MarkDirty(); }
     [RelayCommand] private void CancelPreview()  { if (!_previewActive) return; CommitPreview(revert: true); }
 
+    // ── Reference image insert / remove ─────────────────────────────────────
+
+    [RelayCommand]
+    private void InsertImage()
+    {
+        var dlg = new OpenFileDialog
+        {
+            Title  = "Insert Reference Image",
+            Filter = "Images (*.png;*.jpg;*.jpeg;*.bmp)|*.png;*.jpg;*.jpeg;*.bmp|All files (*.*)|*.*"
+        };
+        if (dlg.ShowDialog() != true) return;
+        _insertedImagePath = dlg.FileName;
+        _insertedImage     = LoadBitmapImage(dlg.FileName);
+        OnPropertyChanged(nameof(InsertedImage));
+        MarkDirty();
+        StatusText = $"Inserted image: {Path.GetFileName(dlg.FileName)}";
+    }
+
+    [RelayCommand]
+    private void RemoveInsertedImage()
+    {
+        _insertedImagePath = null;
+        _insertedImage     = null;
+        OnPropertyChanged(nameof(InsertedImage));
+        MarkDirty();
+        StatusText = "Inserted image removed.";
+    }
+
     // ══════════════════════════════════════════════════════════════════════════
     //  EDGE TOGGLE (join / split)  — called from PatternCanvasControl
     // ══════════════════════════════════════════════════════════════════════════
@@ -864,11 +918,25 @@ public partial class MainViewModel : ObservableObject, IDisposable
     /// Fired by F4 — MainWindow calls PatternCanvas.ZoomToSelected().
     public event Action? ZoomToSelectedRequested;
 
+    /// Fired by Ctrl+Shift+F — MainWindow shows FindBar.
+    public event Action? FindRequested;
+
+    /// Fired when ShowDimensionLines toggles — MainWindow adds/removes visuals from Viewport3D.
+    public event Action<bool>? DimensionLinesChanged;
+
     [RelayCommand(CanExecute = nameof(CanExport))]
     private void FitPage() => FitPageRequested?.Invoke();
 
     [RelayCommand(CanExecute = nameof(CanExport))]
     private void ZoomToSelected() => ZoomToSelectedRequested?.Invoke();
+
+    [RelayCommand] private void ToggleShowTexture()            => ShowTexture            = !ShowTexture;
+    [RelayCommand] private void ToggleHighlightFoldLines()     => HighlightFoldLines     = !HighlightFoldLines;
+    [RelayCommand] private void ToggleShowPartNames()          => ShowPartNames          = !ShowPartNames;
+    [RelayCommand] private void ToggleShowPageNumbers()        => ShowPageNumbers        = !ShowPageNumbers;
+    [RelayCommand] private void ToggleApplyPrintTransparency() => ApplyPrintTransparency = !ApplyPrintTransparency;
+    [RelayCommand] private void ToggleShowDimensionLines()     => ShowDimensionLines     = !ShowDimensionLines;
+    [RelayCommand] private void OpenFind()                     => FindRequested?.Invoke();
 
     public AppSettings.PrintSettings CurrentPrintSettings => _settingsService.Current.Print;
 
@@ -902,6 +970,19 @@ public partial class MainViewModel : ObservableObject, IDisposable
         MarkDirty();
         RerunUnfold();
         StatusText = "Reset — all cut edges restored to fold.";
+    }
+
+    [RelayCommand(CanExecute = nameof(CanUnfold))]
+    private void SeparateAllFaces()
+    {
+        if (_currentMesh == null) return;
+        PushUndoState();
+        foreach (var edge in _currentMesh.Edges.Where(e => e.ConnectsFaces))
+            _edgeOverrides[edge.Id] = EdgeType.Cut;
+        RerunUnfold();
+        RunAutoArrange();
+        MarkDirty();
+        StatusText = "Separated — every face is now an independent piece.";
     }
 
     [RelayCommand(CanExecute = nameof(CanExport))]
@@ -1028,6 +1109,16 @@ public partial class MainViewModel : ObservableObject, IDisposable
         SelectedFaceId = piece.Faces.FirstOrDefault()?.FaceId ?? -1;
         BuildSelectionOverlay(piece);
         StatusText = $"Selected piece #{groupId}  ·  {piece.Faces.Length} triangles";
+    }
+
+    /// Selects piece with the given GroupId; canvas auto-scrolls via IsSelected handler.
+    public void FindPiece(int groupId)
+    {
+        var piece = Pieces.FirstOrDefault(p => p.GroupId == groupId);
+        if (piece == null) { StatusText = $"Part #{groupId} not found."; return; }
+        foreach (var p in Pieces) p.IsSelected = (p == piece);
+        BuildSelectionOverlay(piece);
+        StatusText = $"Found part #{groupId} — {piece.Faces.Length} triangles.";
     }
 
     /// Cuts all fold edges connecting faceId to its piece → face becomes its own piece.
@@ -1535,13 +1626,14 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         var state = new ProjectState
         {
-            MeshPath       = _currentMeshPath,
-            TexturePath    = _committedTexturePath,
-            ScaleMmPerUnit = ScaleMmPerUnit,
-            MirrorX        = _mirrorX,
-            PagesWide      = PagesWide,
-            PagesTall      = PagesTall,
-            Paper          = new ProjectState.PaperDto
+            MeshPath          = _currentMeshPath,
+            TexturePath       = _committedTexturePath,
+            ScaleMmPerUnit    = ScaleMmPerUnit,
+            MirrorX           = _mirrorX,
+            InsertedImagePath = _insertedImagePath,
+            PagesWide         = PagesWide,
+            PagesTall         = PagesTall,
+            Paper             = new ProjectState.PaperDto
             {
                 Name     = PaperSizeModel.Name,
                 WidthMm  = PaperSizeModel.WidthMm,
@@ -1659,6 +1751,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
         UpdateTextureUI(tex, _committedTexturePath, isPreview: false);
         RefreshDerivedVisibility();
         RefreshColumnBindings();
+
+        // Restore inserted reference image
+        _insertedImagePath = state.InsertedImagePath;
+        _insertedImage     = LoadBitmapImage(_insertedImagePath);
+        if (_insertedImage != null) OnPropertyChanged(nameof(InsertedImage));
 
         if (state.Warnings.Count > 0)
             StatusText = $"Project loaded with warnings: {string.Join("; ", state.Warnings)}";

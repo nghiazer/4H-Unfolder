@@ -158,6 +158,26 @@
                               IsChecked="{Binding ShowFoldAngles, Mode=OneWay}"
                               Click="FoldAngles_Click"
                               ToolTip="Show fold angle labels on fold edges"/>
+                <ToggleButton Style="{StaticResource Toggle2D}" x:Name="ShowTextureBtn"
+                              Content="🖼"
+                              IsChecked="{Binding ShowTexture, Mode=OneWay}"
+                              Click="ShowTexture_Click"
+                              ToolTip="Texture On/Off — toggle texture rendering on 2D canvas"/>
+                <ToggleButton Style="{StaticResource Toggle2D}" x:Name="HighlightFoldBtn"
+                              Content="━"
+                              IsChecked="{Binding HighlightFoldLines, Mode=OneWay}"
+                              Click="HighlightFold_Click"
+                              ToolTip="Highlight Fold Lines — thicker/blue fold lines"/>
+                <ToggleButton Style="{StaticResource Toggle2D}" x:Name="PartNamesBtn"
+                              Content="🏷"
+                              IsChecked="{Binding ShowPartNames, Mode=OneWay}"
+                              Click="PartNames_Click"
+                              ToolTip="Show Part Name — display P1, P2… at piece centroid"/>
+                <ToggleButton Style="{StaticResource Toggle2D}" x:Name="PageNumbersBtn"
+                              Content="#"
+                              IsChecked="{Binding ShowPageNumbers, Mode=OneWay}"
+                              Click="PageNumbers_Click"
+                              ToolTip="Show Page Number — large page numbers on each page"/>
             </StackPanel>
         </Border>
     </Grid>

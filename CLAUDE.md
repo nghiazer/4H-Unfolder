@@ -79,7 +79,15 @@ the exact line from `find_definition`.
 
 ---
 
-## Current branch: `feat/pepakura-features` (v0.0.6.A)
+## Current branch: `feat/pepakura-features` (v0.0.7.A)
+
+### Tech debt open (session 38)
+| ID | Priority | Description |
+|----|----------|-------------|
+| TD-38-1 | 🔴 High | Add Outline Padding — needs Clipper2 polygon offset library |
+| TD-38-2 | 🔴 High | Merge Adjacent Flaps — complex tab polygon union geometry |
+| TD-38-3 | 🟡 Med | Join Adjacent Isolated Edges — connectivity graph needed |
+| TD-38-4/5/6 | 🟢 Low | Select Symmetrical Pair / Split Window / Change Coordinates |
 
 ### Tech debt open (session 36)
 | ID | Priority | Description |

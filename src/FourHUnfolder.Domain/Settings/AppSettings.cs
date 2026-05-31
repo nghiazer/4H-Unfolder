@@ -105,6 +105,21 @@ public sealed class AppSettings
 
         // View mode
         public bool   Show2DOnly        { get; set; } = false;
+
+        // Texture visibility toggle (on = render textures, off = solid fill only)
+        public bool   ShowTexture           { get; set; } = true;
+
+        // Fold line emphasis
+        public bool   HighlightFoldLines    { get; set; } = false;
+
+        // Part name labels (P1, P2…) at piece centroid
+        public bool   ShowPartNames         { get; set; } = false;
+
+        // Page number labels inside each page rect
+        public bool   ShowPageNumbers       { get; set; } = false;
+
+        // Apply SVG print-opacity (0.85) to canvas texture preview
+        public bool   ApplyPrintTransparency { get; set; } = false;
     }
 
     // ── Print / SVG Export ────────────────────────────────────────────────────

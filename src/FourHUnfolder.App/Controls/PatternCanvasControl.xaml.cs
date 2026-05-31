@@ -143,6 +143,7 @@ public partial class PatternCanvasControl : UserControl
             case nameof(MainViewModel.PagesTall):
             case nameof(MainViewModel.PiecesVersion):   // single rebuild after batch RebuildPieces
             case nameof(MainViewModel.Canvas2DTexture): // texture added/removed/changed
+            case nameof(MainViewModel.InsertedImage):   // inserted reference image added/removed
                 Dispatcher.Invoke(RebuildAll);
                 break;
         }
@@ -174,6 +175,7 @@ public partial class PatternCanvasControl : UserControl
         _pxPerMm = _vm.PixelsPerMm;
 
         DrawPaper(_vm.PaperSizeModel);
+        DrawInsertedImage();
 
         foreach (var piece in _vm.Pieces)
             AddPiece(piece);
@@ -266,6 +268,25 @@ public partial class PatternCanvasControl : UserControl
         Panel.SetZIndex(lbl, 0);
         RootCanvas.Children.Add(lbl);
 
+        // Large page number inside page (optional) — e.g. "1", "2"
+        if (s2d?.ShowPageNumbers == true)
+        {
+            int pgNum = row * (_vm?.PagesWide ?? 1) + col + 1;
+            double fontSize = Math.Max(24, Math.Min(pw, ph) * 0.12);
+            var pgLbl = new TextBlock
+            {
+                Text             = pgNum.ToString(),
+                FontSize         = fontSize,
+                Foreground       = new SolidColorBrush(Color.FromArgb(40, 80, 80, 160)),
+                FontWeight       = FontWeights.Bold,
+                IsHitTestVisible = false
+            };
+            Canvas.SetLeft(pgLbl, ox + pw / 2 - fontSize * 0.35);
+            Canvas.SetTop (pgLbl, oy + ph / 2 - fontSize * 0.65);
+            Panel.SetZIndex(pgLbl, 0);
+            RootCanvas.Children.Add(pgLbl);
+        }
+
         // Grid lines — tagged for fast show/hide toggle
         bool showGrid = _vm?.GridVisible ?? (s2d?.ShowGrid ?? true);
         double gridMm = Math.Max(1, s2d?.GridSizeMm ?? 10);
@@ -296,6 +317,28 @@ public partial class PatternCanvasControl : UserControl
             Panel.SetZIndex(line, 1);
             RootCanvas.Children.Add(line);
         }
+    }
+
+    // ── inserted reference image layer ──────────────────────────────────────
+    private void DrawInsertedImage()
+    {
+        if (_vm?.InsertedImage == null) return;
+        double sep    = MainViewModel.PageSepMm;
+        double totalW = (_vm.PagesWide  * _vm.PaperSizeModel.WidthMm  + (_vm.PagesWide  - 1) * sep) * _pxPerMm;
+        double totalH = (_vm.PagesTall  * _vm.PaperSizeModel.HeightMm + (_vm.PagesTall  - 1) * sep) * _pxPerMm;
+        var img = new System.Windows.Controls.Image
+        {
+            Source           = _vm.InsertedImage,
+            Width            = totalW,
+            Height           = totalH,
+            Opacity          = 0.5,
+            Stretch          = System.Windows.Media.Stretch.Uniform,
+            IsHitTestVisible = false
+        };
+        Canvas.SetLeft(img, PaperMarginPx);
+        Canvas.SetTop (img, PaperMarginPx);
+        Panel.SetZIndex(img, 0);
+        RootCanvas.Children.Add(img);
     }
 
     // ── grid fast-toggle (no full rebuild needed) ─────────────────────────────
@@ -355,11 +398,14 @@ public partial class PatternCanvasControl : UserControl
         var solidFill = HexBrush(s2d?.FaceFillColor, "#c8fffde2");
         var selFill   = new SolidColorBrush(Color.FromArgb(180, 160, 210, 255));
 
-        var foldBrush  = HexBrush(s2d?.FoldLineColor, "#4169e1");
+        bool   highlightFolds = s2d?.HighlightFoldLines == true;
+        var foldBrush  = highlightFolds
+            ? new SolidColorBrush(Color.FromRgb(0, 85, 255))
+            : HexBrush(s2d?.FoldLineColor, "#4169e1");
         var cutBrush   = HexBrush(s2d?.CutLineColor,  "#ff0000");
         // Boundary edges: outer mesh edges drawn as thin dark border (no tab, no fold)
         var boundBrush = new SolidColorBrush(Color.FromRgb(80, 80, 80));
-        double foldW   = s2d?.FoldLineWidth ?? 0.8;
+        double foldW   = highlightFolds ? (s2d?.FoldLineWidth ?? 0.8) * 3.0 : (s2d?.FoldLineWidth ?? 0.8);
         double cutW    = s2d?.CutLineWidth  ?? 1.0;
         var foldDash   = ParseDash(s2d?.FoldLineDash ?? "4,2");
 
@@ -373,16 +419,18 @@ public partial class PatternCanvasControl : UserControl
 
             // Per-face fill: texture when UV data available, else solid; selection overrides all
             Brush fill;
+            bool  textureFillApplied = false;
             if (piece.IsSelected)
             {
                 fill = selFill;
             }
-            else if (texture != null && fd.UVCoords is { Length: >= 3 })
+            else if (texture != null && fd.UVCoords is { Length: >= 3 } && s2d?.ShowTexture != false)
             {
-                fill = BuildTextureBrush(texture,
+                var tb = BuildTextureBrush(texture,
                            Sc(fd.V0), Sc(fd.V1), Sc(fd.V2),
-                           fd.UVCoords[0], fd.UVCoords[1], fd.UVCoords[2])
-                       ?? solidFill;
+                           fd.UVCoords[0], fd.UVCoords[1], fd.UVCoords[2]);
+                fill              = tb ?? solidFill;
+                textureFillApplied = tb != null;
             }
             else
             {
@@ -395,6 +443,7 @@ public partial class PatternCanvasControl : UserControl
                 Fill            = fill,
                 Stroke          = null,
                 StrokeThickness = 0,
+                Opacity         = (textureFillApplied && s2d?.ApplyPrintTransparency == true) ? 0.85 : 1.0,
                 Points          = new PointCollection([Sc(fd.V0), Sc(fd.V1), Sc(fd.V2)])
             };
             poly.Tag = piece;
@@ -605,6 +654,25 @@ public partial class PatternCanvasControl : UserControl
                     container.Children.Add(lbl);
                 }
             }
+        }
+
+        // Part name label (P1, P2…) at piece centroid
+        if (s2d?.ShowPartNames == true && piece.Faces.Length > 0)
+        {
+            double cx = piece.Faces.SelectMany(f => new[] { f.V0, f.V1, f.V2 }).Average(p => p.X) * _pxPerMm;
+            double cy = piece.Faces.SelectMany(f => new[] { f.V0, f.V1, f.V2 }).Average(p => p.Y) * _pxPerMm;
+            double fs = Math.Max(8, _pxPerMm * 3);
+            var nameLbl = new TextBlock
+            {
+                Text             = $"P{piece.GroupId}",
+                FontSize         = fs,
+                Foreground       = HexBrush("#CC000000", "#000000"),
+                FontWeight       = FontWeights.Bold,
+                IsHitTestVisible = false
+            };
+            Canvas.SetLeft(nameLbl, cx - fs * 0.8);
+            Canvas.SetTop (nameLbl, cy - fs * 0.6);
+            container.Children.Add(nameLbl);
         }
     }
 
@@ -1066,6 +1134,11 @@ public partial class PatternCanvasControl : UserControl
     // ── fold-angle label toggle ───────────────────────────────────────────────
     private void FoldAngles_Click(object s, RoutedEventArgs e) =>
         _vm?.ToggleShowFoldAnglesCommand.Execute(null);
+
+    private void ShowTexture_Click(object s, RoutedEventArgs e)    => _vm?.ToggleShowTextureCommand.Execute(null);
+    private void HighlightFold_Click(object s, RoutedEventArgs e)  => _vm?.ToggleHighlightFoldLinesCommand.Execute(null);
+    private void PartNames_Click(object s, RoutedEventArgs e)      => _vm?.ToggleShowPartNamesCommand.Execute(null);
+    private void PageNumbers_Click(object s, RoutedEventArgs e)    => _vm?.ToggleShowPageNumbersCommand.Execute(null);
 
     // ── middle-mouse pan ─────────────────────────────────────────────────────
 
