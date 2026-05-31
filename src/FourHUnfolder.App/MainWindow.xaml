@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:helix="http://helix-toolkit.org/wpf"
         xmlns:ctrl="clr-namespace:FourHUnfolder.App.Controls"
-        Title="4H-Unfolder v0.0.4.C — Paper Model Unfolder"
+        Title="4H-Unfolder v0.0.4.H — Paper Model Unfolder"
         Icon="Assets/app.ico"
         Width="1400" Height="900"
         WindowStartupLocation="CenterScreen"
@@ -168,6 +168,18 @@
                 <Button Style="{StaticResource IconBtn}" Content="📂"
                         Command="{Binding LoadMeshCommand}"
                         ToolTip="Load Mesh (.obj, .pdo, .fbx, .stl, …)"/>
+                <Separator/>
+                <Button Style="{StaticResource IconBtn}" Content="📐"
+                        Command="{Binding UnfoldCommand}" IsEnabled="{Binding CanUnfold}"
+                        ToolTip="Unfold — open setup dialog"/>
+                <Separator/>
+                <Button Style="{StaticResource IconBtn}" Content="💾"
+                        Command="{Binding ExportSvgCommand}" IsEnabled="{Binding CanExport}"
+                        ToolTip="Export SVG pattern"/>
+                <Button Style="{StaticResource IconBtn}" Content="📑"
+                        Command="{Binding ExportPdfCommand}" IsEnabled="{Binding CanExport}"
+                        ToolTip="Export PDF pattern"/>
+                <Separator/>
                 <Button Style="{StaticResource IconBtn}" Content="📁"
                         Command="{Binding SaveProjectCommand}" IsEnabled="{Binding CanExport}"
                         ToolTip="Save project (.pmc)"/>
