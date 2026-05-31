@@ -50,6 +50,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
     // edge overrides: mesh edge ID → EdgeType (user's join/split operations)
     private readonly Dictionary<int, EdgeType> _edgeOverrides = new();
 
+    // flap overrides: mesh edge ID → FlapOverride (per-edge tab placement control)
+    private readonly Dictionary<int, FlapOverride> _flapOverrides = new();
+
     // cached result from last unfold — used by SVG export to retrieve UV coords
     private UnfoldResult? _lastUnfoldResult;
 
@@ -69,9 +72,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
     // Multi-material 3D hit-test map: geometry → list of global face IDs in draw order
     private readonly Dictionary<MeshGeometry3D, List<int>> _geoFaceIds = new();
 
-    // TD-9: undo/redo — snapshots of (_edgeOverrides, piece layouts)
+    // TD-9: undo/redo — snapshots of (_edgeOverrides, _flapOverrides, piece layouts)
     private readonly record struct EditSnapshot(
-        IReadOnlyDictionary<int, EdgeType> EdgeOverrides,
+        IReadOnlyDictionary<int, EdgeType>    EdgeOverrides,
+        IReadOnlyDictionary<int, FlapOverride> FlapOverrides,
         IReadOnlyDictionary<int, (double X, double Y, double Rot)> PieceLayouts);
 
     private readonly Stack<EditSnapshot> _undoStack = new();
@@ -87,6 +91,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [NotifyCanExecuteChangedFor(nameof(ExportSvgCommand))]
     [NotifyCanExecuteChangedFor(nameof(ExportPdfCommand))]
     [NotifyCanExecuteChangedFor(nameof(OpenAssemblyAnimationCommand))]
+    [NotifyCanExecuteChangedFor(nameof(OpenEditFlapsCommand))]
     private bool _canExport;
     [ObservableProperty] private bool          _isUnfolded;
     [ObservableProperty] private int           _selectedFaceId = -1;
@@ -384,6 +389,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private EditSnapshot TakeSnapshot() => new(
         new Dictionary<int, EdgeType>(_edgeOverrides),
+        new Dictionary<int, FlapOverride>(_flapOverrides),
         Pieces.ToDictionary(p => p.GroupId,
                             p => (p.PositionX, p.PositionY, p.Rotation)));
 
@@ -391,6 +397,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         _edgeOverrides.Clear();
         foreach (var (id, t) in snap.EdgeOverrides) _edgeOverrides[id] = t;
+        _flapOverrides.Clear();
+        foreach (var (id, ov) in snap.FlapOverrides) _flapOverrides[id] = ov;
         RerunUnfold(preservePositions: false);
         // Restore saved piece positions (best-effort: group IDs may differ after re-run)
         foreach (var piece in Pieces)
@@ -439,6 +447,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             _currentMeshPath   = dlg.FileName;
             _currentMesh       = _meshService.LoadFromFile(dlg.FileName);
             _edgeOverrides.Clear();
+            _flapOverrides.Clear();
             _undoStack.Clear();
             _redoStack.Clear();
             _embeddedBitmapCache.Clear(); // TD-PDO-4: stale bitmaps from previous mesh
@@ -744,6 +753,53 @@ public partial class MainViewModel : ObservableObject, IDisposable
         return _currentMesh.Edges[meshEdgeId].Type == EdgeType.Fold;
     }
 
+    // ── Flap override public API (called from EditFlapsDialog) ───────────────
+
+    /// Fired when the Edit Flaps dialog should be opened (MainWindow handles lifecycle).
+    public event Action? EditFlapsRequested;
+
+    public AppSettings.PrintSettings CurrentPrintSettings => _settingsService.Current.Print;
+
+    public void SetFlapOverride(int meshEdgeId, FlapOverride? ov)
+    {
+        if (_currentMesh == null) return;
+        PushUndoState();
+        if (ov == null || ov.Mode == FlapMode.Default)
+            _flapOverrides.Remove(meshEdgeId);
+        else
+            _flapOverrides[meshEdgeId] = ov;
+        MarkDirty();
+        RerunUnfold();
+    }
+
+    public void ResetAllFlapOverrides()
+    {
+        if (_flapOverrides.Count == 0) return;
+        PushUndoState();
+        _flapOverrides.Clear();
+        MarkDirty();
+        RerunUnfold();
+    }
+
+    public FlapOverride? GetFlapOverride(int meshEdgeId) =>
+        _flapOverrides.TryGetValue(meshEdgeId, out var ov) ? ov : null;
+
+    public void ApplyGlobalTabShape(double depthMm, double sideAngleDeg)
+    {
+        PatchSettings(s =>
+        {
+            s.Print.GlueTabDepthMm      = depthMm;
+            s.Print.GlueTabSideAngleDeg = sideAngleDeg;
+        });
+        MarkDirty();
+        RerunUnfold();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanExport))]
+    private void OpenEditFlaps() => EditFlapsRequested?.Invoke();
+
+    // ─────────────────────────────────────────────────────────────────────────
+
     public void ToggleEdge(int meshEdgeId)
     {
         if (_currentMesh == null) return;
@@ -1027,7 +1083,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (_currentMesh == null) return;
         var oldPos = Pieces.ToDictionary(p => p.GroupId,
                                          p => (p.PositionX, p.PositionY, p.Rotation));
-        var result = _unfoldService.Unfold(_currentMesh, _edgeOverrides, _settingsService.Current.Print);
+        var result = _unfoldService.Unfold(_currentMesh, _edgeOverrides, _settingsService.Current.Print, _flapOverrides);
         var groups = _unfoldService.ComputePieces(_currentMesh);
         RebuildPieces(result, groups, ScaleMmPerUnit);
 
@@ -1242,6 +1298,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         _undoStack.Push(new EditSnapshot(
             new Dictionary<int, EdgeType>(_edgeOverrides),
+            new Dictionary<int, FlapOverride>(_flapOverrides),
             preDrag));
         _redoStack.Clear();
         NotifyUndoRedo();
@@ -1279,6 +1336,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
         foreach (var (id, type) in _edgeOverrides)
             state.EdgeOverrides[id] = type.ToString();
 
+        foreach (var (id, ov) in _flapOverrides)
+            state.FlapOverrides[id] = ov.Serialize();
+
         foreach (var piece in Pieces)
             state.Layouts.Add(new ProjectState.PieceLayoutDto
             {
@@ -1308,6 +1368,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _currentMesh = _meshService.LoadFromFile(state.MeshPath);
         _currentMeshPath = state.MeshPath;
         _edgeOverrides.Clear();
+        _flapOverrides.Clear();
         RebuildMaterialSlots(_currentMesh);
 
         // Restore edge overrides
@@ -1315,11 +1376,18 @@ public partial class MainViewModel : ObservableObject, IDisposable
             if (Enum.TryParse<EdgeType>(typeName, out var t))
                 _edgeOverrides[id] = t;
 
+        // Restore flap overrides
+        foreach (var (id, encoded) in state.FlapOverrides)
+        {
+            var ov = FlapOverride.Deserialize(encoded);
+            if (ov != null) _flapOverrides[id] = ov;
+        }
+
         // Restore paper
         PaperSizeModel = new PaperSizeModel(state.Paper.Name, state.Paper.WidthMm, state.Paper.HeightMm);
 
         // Re-run unfold
-        var unfoldResult = _unfoldService.Unfold(_currentMesh, _edgeOverrides, _settingsService.Current.Print);
+        var unfoldResult = _unfoldService.Unfold(_currentMesh, _edgeOverrides, _settingsService.Current.Print, _flapOverrides);
         var pieces       = _unfoldService.ComputePieces(_currentMesh);
         var layoutMap    = state.Layouts.ToDictionary(l => l.GroupId);
 

@@ -1,4 +1,5 @@
 ﻿using System.Numerics;
+using FourHUnfolder.Domain.Models;
 
 namespace FourHUnfolder.Domain.Results;
 
@@ -17,12 +18,17 @@ public sealed class GlueTab
     public Vector2 P2 { get; }
     public Vector2 P3 { get; }
 
+    /// Non-null only for border-edge tabs; indicates the fold annotation style.
+    public FlapMode? BorderFoldStyle { get; }
+
     public GlueTab(int faceId, int localEdgeIdx,
-                   Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3)
+                   Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3,
+                   FlapMode? borderFoldStyle = null)
     {
-        FaceId       = faceId;
-        LocalEdgeIdx = localEdgeIdx;
+        FaceId          = faceId;
+        LocalEdgeIdx    = localEdgeIdx;
         P0 = p0; P1 = p1; P2 = p2; P3 = p3;
+        BorderFoldStyle = borderFoldStyle;
     }
 
     public Vector2[] Vertices => [P0, P1, P2, P3];

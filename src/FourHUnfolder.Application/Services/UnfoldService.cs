@@ -2,6 +2,7 @@
 using FourHUnfolder.Domain.Results;
 using FourHUnfolder.Domain.Settings;
 using FourHUnfolder.Geometry.Algorithms;
+using FlapOverrideDict = System.Collections.Generic.IReadOnlyDictionary<int, FourHUnfolder.Domain.Models.FlapOverride>;
 
 namespace FourHUnfolder.Application.Services;
 
@@ -29,7 +30,8 @@ public class UnfoldService
     public UnfoldResult Unfold(
         Mesh mesh,
         IReadOnlyDictionary<int, EdgeType>? edgeOverrides = null,
-        AppSettings.PrintSettings? printSettings = null)
+        AppSettings.PrintSettings? printSettings = null,
+        FlapOverrideDict? flapOverrides = null)
     {
         // 1. Build dual graph + MST
         var dualGraph    = _graphBuilder.Build(mesh);
@@ -59,7 +61,8 @@ public class UnfoldService
             (float)(printSettings?.GlueTabSideAngleDeg ?? 45.0),
             printSettings?.GlueTabShape   ?? "Trapezoid",
             printSettings?.AlternateFlaps ?? false,
-            mesh);
+            mesh,
+            flapOverrides);
 
         // Assign sequential 1-based IDs to every cut edge pair (both faces share the same ID)
         var cutEdgePairIds = new Dictionary<int, int>();
@@ -80,7 +83,8 @@ public class UnfoldService
     /// </summary>
     public UnfoldResult? TryBuildFromPdoLayout(
         Mesh mesh,
-        AppSettings.PrintSettings? printSettings = null)
+        AppSettings.PrintSettings? printSettings = null,
+        FlapOverrideDict? flapOverrides = null)
     {
         if (mesh.PdoLayout is null) return null;
 
@@ -94,7 +98,8 @@ public class UnfoldService
             (float)(printSettings?.GlueTabSideAngleDeg ?? 45.0),
             printSettings?.GlueTabShape   ?? "Trapezoid",
             printSettings?.AlternateFlaps ?? false,
-            mesh);
+            mesh,
+            flapOverrides);
 
         // Overlap detection (PDO layouts are always valid, but check anyway)
         var hasOverlaps = _overlapDetector.HasOverlaps(faces);

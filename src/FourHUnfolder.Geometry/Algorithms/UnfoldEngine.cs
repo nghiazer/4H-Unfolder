@@ -86,7 +86,8 @@ public class UnfoldEngine
             unfoldedFaces.Add(new UnfoldedFace(
                 faceId, pos[0], pos[1], pos[2],
                 edgeIsFold, edgeIsBound, uvCoords,
-                mesh.Faces[faceId].MaterialId));   // TD-22-3: propagate material ID
+                mesh.Faces[faceId].MaterialId,
+                face.EdgeIds.ToArray()));           // mesh edge IDs for per-edge flap overrides
         }
 
         return new UnfoldResult(unfoldedFaces, [], false);

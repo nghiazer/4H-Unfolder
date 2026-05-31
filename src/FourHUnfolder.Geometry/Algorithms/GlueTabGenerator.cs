@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 using FourHUnfolder.Domain.Models;
 using FourHUnfolder.Domain.Results;
 
@@ -8,7 +8,8 @@ using static FourHUnfolder.Geometry.GeometryConstants;
 
 /// <summary>
 /// Generates glue tabs on cut edges.
-/// Supports Trapezoid / Rectangle / Triangle shapes and alternate-flap placement.
+/// Supports Trapezoid / Rectangle / Triangle shapes, alternate-flap placement,
+/// and per-edge overrides (position + border-tab generation).
 /// </summary>
 public class GlueTabGenerator
 {
@@ -18,7 +19,8 @@ public class GlueTabGenerator
         float sideAngleDeg    = 45f,
         string tabShape       = "Trapezoid",
         bool alternateFlaps   = false,
-        Mesh? mesh            = null)
+        Mesh? mesh            = null,
+        IReadOnlyDictionary<int, FlapOverride>? flapOverrides = null)
     {
         var tabs = new List<GlueTab>();
 
@@ -28,7 +30,6 @@ public class GlueTabGenerator
         if (alternateFlaps && mesh != null)
         {
             alternateDeny = new HashSet<(int, int)>();
-            // For each face, check each edge. If the mesh edge's FaceA != this face → deny.
             foreach (var face in faces)
             {
                 var mf = mesh.Faces[face.FaceId];
@@ -37,7 +38,6 @@ public class GlueTabGenerator
                     if (face.EdgeIsFold[i] || face.EdgeIsBoundary[i]) continue;
                     int eId = mf.EdgeIds[i];
                     var me  = mesh.Edges[eId];
-                    // The face with the higher FaceId is denied the tab
                     if (me.FaceB >= 0 && face.FaceId != Math.Min(me.FaceA, me.FaceB))
                         alternateDeny.Add((face.FaceId, i));
                 }
@@ -51,12 +51,61 @@ public class GlueTabGenerator
 
             for (int i = 0; i < 3; i++)
             {
-                if (face.EdgeIsFold[i] || face.EdgeIsBoundary[i]) continue;
-                if (alternateDeny != null && alternateDeny.Contains((face.FaceId, i))) continue;
+                // Resolve mesh edge ID for override lookup
+                int meshEdgeId = face.MeshEdgeIds[i] >= 0
+                    ? face.MeshEdgeIds[i]
+                    : (mesh != null ? mesh.Faces[face.FaceId].EdgeIds[i] : -1);
+
+                FlapOverride? ov = (meshEdgeId >= 0 && flapOverrides != null)
+                    ? flapOverrides.GetValueOrDefault(meshEdgeId)
+                    : null;
+                FlapMode mode = ov?.Mode ?? FlapMode.Default;
 
                 var p0 = verts[i];
                 var p1 = verts[(i + 1) % 3];
-                tabs.Add(BuildTab(face.FaceId, i, p0, p1, centroid, tabDepthMm, sideAngleDeg, tabShape));
+
+                switch (mode)
+                {
+                    case FlapMode.Default:
+                        if (face.EdgeIsFold[i] || face.EdgeIsBoundary[i]) continue;
+                        if (alternateDeny != null && alternateDeny.Contains((face.FaceId, i))) continue;
+                        tabs.Add(BuildTab(face.FaceId, i, p0, p1, centroid, tabDepthMm, sideAngleDeg, tabShape));
+                        break;
+
+                    case FlapMode.OffOff_NoFlap:
+                    case FlapMode.Border_NoFlap:
+                        // Explicitly suppress tab — skip fold/boundary checks too
+                        continue;
+
+                    case FlapMode.OnOn_BothSides:
+                        // Force tab on both faces — skip fold/boundary and alternateDeny
+                        if (face.EdgeIsFold[i]) continue;  // fold edges never get tabs
+                        tabs.Add(BuildTab(face.FaceId, i, p0, p1, centroid, tabDepthMm, sideAngleDeg, tabShape));
+                        break;
+
+                    case FlapMode.OnOn_ThisSide:
+                        // Tab on PrimaryFaceId only; suppress on the partner
+                        if (face.EdgeIsFold[i] || face.EdgeIsBoundary[i]) continue;
+                        if (ov!.PrimaryFaceId >= 0 && face.FaceId != ov.PrimaryFaceId) continue;
+                        tabs.Add(BuildTab(face.FaceId, i, p0, p1, centroid, tabDepthMm, sideAngleDeg, tabShape));
+                        break;
+
+                    case FlapMode.OffOn_OtherSide:
+                    case FlapMode.SwitchPosition:
+                        // Tab on the partner face only (suppress this face if it's PrimaryFaceId)
+                        if (face.EdgeIsFold[i] || face.EdgeIsBoundary[i]) continue;
+                        if (ov!.PrimaryFaceId >= 0 && face.FaceId == ov.PrimaryFaceId) continue;
+                        tabs.Add(BuildTab(face.FaceId, i, p0, p1, centroid, tabDepthMm, sideAngleDeg, tabShape));
+                        break;
+
+                    case FlapMode.Border_MountainFold:
+                    case FlapMode.Border_ValleyFold:
+                    case FlapMode.Border_NoFold:
+                        // Generate a tab on this border edge (normally skipped)
+                        if (face.EdgeIsFold[i]) continue;
+                        tabs.Add(BuildTab(face.FaceId, i, p0, p1, centroid, tabDepthMm, sideAngleDeg, tabShape, mode));
+                        break;
+                }
             }
         }
 
@@ -65,11 +114,12 @@ public class GlueTabGenerator
 
     private static GlueTab BuildTab(int faceId, int edgeIdx,
                                     Vector2 p0, Vector2 p1, Vector2 centroid,
-                                    float depth, float sideAngleDeg, string shape)
+                                    float depth, float sideAngleDeg, string shape,
+                                    FlapMode? borderFoldStyle = null)
     {
         var edge  = p1 - p0;
         float len = edge.Length();
-        if (len < GeometryConstants.DegenerateTab) return new GlueTab(faceId, edgeIdx, p0, p1, p1, p0);
+        if (len < GeometryConstants.DegenerateTab) return new GlueTab(faceId, edgeIdx, p0, p1, p1, p0, borderFoldStyle);
 
         var dir  = edge / len;
         var perp = new Vector2(-dir.Y, dir.X);
@@ -80,40 +130,38 @@ public class GlueTabGenerator
 
         return shape switch
         {
-            "Rectangle" => BuildRect    (faceId, edgeIdx, p0, p1, perp, depth),
-            "Triangle"  => BuildTriangle(faceId, edgeIdx, p0, p1, perp, depth),
-            _           => BuildTrapezoid(faceId, edgeIdx, p0, p1, dir, perp, depth, sideAngleDeg)
+            "Rectangle" => BuildRect    (faceId, edgeIdx, p0, p1, perp, depth, borderFoldStyle),
+            "Triangle"  => BuildTriangle(faceId, edgeIdx, p0, p1, perp, depth, borderFoldStyle),
+            _           => BuildTrapezoid(faceId, edgeIdx, p0, p1, dir, perp, depth, sideAngleDeg, borderFoldStyle)
         };
     }
 
     private static GlueTab BuildTrapezoid(int faceId, int edgeIdx,
-        Vector2 p0, Vector2 p1, Vector2 dir, Vector2 perp, float depth, float sideAngleDeg)
+        Vector2 p0, Vector2 p1, Vector2 dir, Vector2 perp, float depth, float sideAngleDeg,
+        FlapMode? borderFoldStyle)
     {
         float len      = (p1 - p0).Length();
         float clampedAngle = Math.Clamp(sideAngleDeg, 1f, 90f);
         float angleRad = clampedAngle * MathF.PI / 180f;
-        // inset from each edge end: inset = depth / tan(angle).
-        // At 90° → inset = 0 (rectangle). At 45° → inset = depth.
         float inset = depth / MathF.Tan(angleRad);
-        inset = Math.Min(inset, len * 0.45f); // prevent over-inset
+        inset = Math.Min(inset, len * 0.45f);
         var q0 = p0 + inset * dir + depth * perp;
         var q1 = p1 - inset * dir + depth * perp;
-        return new GlueTab(faceId, edgeIdx, p0, p1, q1, q0);
+        return new GlueTab(faceId, edgeIdx, p0, p1, q1, q0, borderFoldStyle);
     }
 
     private static GlueTab BuildRect(int faceId, int edgeIdx,
-        Vector2 p0, Vector2 p1, Vector2 perp, float depth)
+        Vector2 p0, Vector2 p1, Vector2 perp, float depth, FlapMode? borderFoldStyle)
     {
         var q0 = p0 + depth * perp;
         var q1 = p1 + depth * perp;
-        return new GlueTab(faceId, edgeIdx, p0, p1, q1, q0);
+        return new GlueTab(faceId, edgeIdx, p0, p1, q1, q0, borderFoldStyle);
     }
 
     private static GlueTab BuildTriangle(int faceId, int edgeIdx,
-        Vector2 p0, Vector2 p1, Vector2 perp, float depth)
+        Vector2 p0, Vector2 p1, Vector2 perp, float depth, FlapMode? borderFoldStyle)
     {
         var tip = (p0 + p1) * 0.5f + depth * perp;
-        // Degenerate quad with p2 == p3 == tip renders as a triangle
-        return new GlueTab(faceId, edgeIdx, p0, p1, tip, tip);
+        return new GlueTab(faceId, edgeIdx, p0, p1, tip, tip, borderFoldStyle);
     }
 }

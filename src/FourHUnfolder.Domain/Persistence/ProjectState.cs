@@ -24,6 +24,9 @@ public sealed class ProjectState
     // ── User edge overrides (mesh edge id → "Fold" or "Cut") ─────────────────
     public Dictionary<int, string> EdgeOverrides { get; set; } = new();
 
+    // ── Per-edge flap overrides (mesh edge id → FlapMode name) ───────────────
+    public Dictionary<int, string> FlapOverrides { get; set; } = new();
+
     // ── Piece positions on the paper (one entry per connected component) ─────
     public List<PieceLayoutDto> Layouts { get; set; } = new();
 
