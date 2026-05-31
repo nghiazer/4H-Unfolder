@@ -4,7 +4,7 @@
 
 ```powershell
 dotnet restore
-dotnet build                          # 0 errors, 4 NuGet NU1603 warnings only
+dotnet build                          # 0 errors, 7 NuGet NU1603 warnings only
 dotnet run --project src/FourHUnfolder.App
 dotnet test tests/FourHUnfolder.Tests # 56/56 pass
 ```
@@ -19,11 +19,11 @@ No circular dependencies. Domain has **zero** external deps.
 
 | Layer | Project | Key classes |
 |-------|---------|-------------|
-| Domain | `FourHUnfolder.Domain` | `Mesh`, `Face`, `Edge`, `UnfoldResult`, `AppSettings`, `EmbeddedTextureData` |
+| Domain | `FourHUnfolder.Domain` | `Mesh`, `Face`, `Edge`, `UnfoldResult`, `AppSettings`, `EmbeddedTextureData`, `FlapMode`, `FlapOverride` |
 | Geometry | `FourHUnfolder.Geometry` | `UnfoldEngine`, `KruskalMstBuilder`, `DualGraphBuilder`, `GlueTabGenerator`, `PieceFoldTree` |
 | Application | `FourHUnfolder.Application` | `MeshService`, `UnfoldService`, `ProjectSerializer`, `SettingsService` |
 | Infrastructure | `FourHUnfolder.Infrastructure` | `ObjMeshLoader`, `PdoMeshLoader`, `AssimpMeshLoader`, `SvgExporter`, `PdfExporter` |
-| App (WPF) | `FourHUnfolder.App` | `MainViewModel`, `PatternCanvasControl`, `AssemblyViewModel` |
+| App (WPF) | `FourHUnfolder.App` | `MainViewModel`, `PatternCanvasControl`, `AssemblyViewModel`, `EditFlapsViewModel` |
 
 ## Code-Graph MCP Tools — Use These First
 
@@ -65,34 +65,38 @@ the exact line from `find_definition`.
 |------|------|-------------|
 | Main WPF entry | `src/FourHUnfolder.App/App.xaml.cs` | — |
 | Load mesh | `MainViewModel.cs` | ~120 |
-| Build 3-D model | `MainViewModel.cs` → `BuildWpfModel` | ~1 459 |
+| Build 3-D model | `MainViewModel.cs` → `BuildWpfModel` | ~1 500 |
 | Unfold pipeline | `UnfoldEngine.cs` | ~13 |
 | PDO parser | `PdoMeshLoader.cs` | ~52 |
 | SVG export | `SvgExporter.cs` | — |
 | Settings model | `AppSettings.cs` | — |
 | Project state | `ProjectState.cs` | — |
+| Flap override domain | `FlapMode.cs`, `FlapOverride.cs` | — |
+| Edit Flaps dialog | `EditFlapsDialog.xaml`, `EditFlapsViewModel.cs` | — |
+| Flap tab generation | `GlueTabGenerator.cs` | ~1 |
 
 > Line numbers shift as code is edited — always confirm with `find_definition`.
 
 ---
 
-## Tech debt & known issues (branch `feat/pdo-import`, as of v0.0.3.B)
+## Current branch: `feat/glue-tab-editor` (v0.0.5.A)
 
-### Fixed (session 30–35)
-| ID | Fixed in | Description |
+### Tech debt open (session 36)
+| ID | Priority | Description |
 |----|----------|-------------|
-| ~~CRITICAL-3D-TEX~~ | s32 | `EnterPreview`/`CommitPreview` now pass `_materialBitmaps` to `BuildWpfModel` |
-| ~~TD-PDO-1~~ | s32 | PDO `coord` 2-D paper layout extracted → `PdoLayout` / auto-unfold on load |
-| ~~TD-PDO-2~~ | s31 | Multi-texture PDO: per-face material via `unk11`; `RebuildMaterialSlots` uses embedded textures by index |
-| ~~BUG-PDO-1~~ | s33 | `ModelOrientationDialog` skipped for PDO with layout → prevented UV double-flip |
-| ~~BUG-PDO-2~~ | s33 | `texNote` now reflects embedded textures when no file-path texture is present |
-| ~~TD-PDO-3~~ | s34 | Pre-geo seek: `Seek(120, Current)` → `Seek(154+localeLen+commentLen, Begin)` — absolute formula |
-| ~~TD-PDO-4~~ | s34 | `BitmapFromEmbedded` split into cached wrapper + core; `_embeddedBitmapCache` cleared on mesh load |
-| ~~TD-25-1~~ | s34 | `ModelOrientationDialog` — "Don't ask again" checkbox added; persisted to `AppSettings.General` |
-| ~~BUG-PDO-3~~ | s35 | `RunAutoArrange` rot=90 formula: `localX - (-minY)` → `localX + minY + hNat`; PDO pieces no longer placed off-screen |
+| TD-36-1 | 🟡 Med | No unit tests for `FlapOverride` serialization + `GlueTabGenerator` border modes |
+| TD-36-2 | 🟢 Low | `EditFlapsViewModel` hardcodes defaults (5mm/45°) — not wired to `AppSettings` fallback |
+| TD-36-3 | 🟢 Low | `FlapOverride.Deserialize`: silent-ignore on corrupt data — add warning |
+| Performance | 🟢 Low | O(n²) AABB+SAT overlap; spatial grid needed for meshes > 2000 faces |
 
-### Open
-*(no open tech debt as of s35)*
+### Key additions in session 36
+- `FlapMode` enum + `FlapOverride` record (Domain)
+- `UnfoldedFace.MeshEdgeIds`, `GlueTab.BorderFoldStyle` (optional last ctor params — all call sites unchanged)
+- `GlueTabGenerator` rewritten with per-edge override dict + border-edge tab generation
+- `EditSnapshot` expanded to 3 fields (EdgeOverrides + **FlapOverrides** + PieceLayouts)
+- `EditFlapsViewModel` + `EditFlapsDialog` (modeless ✂ toolbar button)
+- `PatternCanvasControl.SetFlapEditMode()` + `Edge_LeftClick` intercept
+- `ProjectState.FlapOverrides` serialized in `.4hu` bundle
 
 ---
 
@@ -102,30 +106,26 @@ the exact line from `find_definition`.
 - **Targeted reads**: use `offset` + `limit` once line number is known
 - Tests live in `tests/FourHUnfolder.Tests/` — run after every change
 - Settings persisted to `%AppData%\4H-Unfolder\settings.json`
-- Project bundle format: `.4hu` = ZIP(mesh + textures + state JSON)
+- Project bundle: `.4hu` = ZIP(mesh + textures + state JSON incl. FlapOverrides)
+- MVVM: use generated property names (`HeightMm`, not `_heightMm`) — MVVMTK0034
 
 ## Publish & Archive — WPF native DLL rule
 
 WPF self-contained single-file apps do **NOT** bundle native DLLs into the exe.
-The following files must exist in the **same directory** as the exe or the app will crash with
-`DllNotFoundException` before showing any window:
+Required DLLs alongside exe:
 
 ```
-wpfgfx_cor3.dll           ← WPF graphics backend (required)
-PresentationNative_cor3.dll
-D3DCompiler_47_cor3.dll
-PenImc_cor3.dll
-vcruntime140_cor3.dll
-assimp.dll                ← AssimpNet native (required for multi-format load)
+wpfgfx_cor3.dll  PresentationNative_cor3.dll  D3DCompiler_47_cor3.dll
+PenImc_cor3.dll  vcruntime140_cor3.dll  assimp.dll
 ```
 
-**Archive command (correct):**
-```bash
-cp publish/4H-Unfolder.exe publish/vX.X.X.Y/
-cp publish/*.dll           publish/vX.X.X.Y/
+**Archive command:**
+```powershell
+New-Item -ItemType Directory -Path "publish\vX.X.X.Y" -Force
+Copy-Item "publish\4H-Unfolder.exe" "publish\vX.X.X.Y\"
+Copy-Item "publish\*.dll"           "publish\vX.X.X.Y\"
 ```
 
-Never copy only the exe — the archive folder will appear to "suspend" immediately when launched.
+**Installer:** `.\scripts\prepare-installer.ps1` → then `iscc installer\4H-Unfolder.iss` (Inno Setup 6)
 
-**Symptom of missing DLLs:** process appears in Task Manager → Background processes → Suspended,
-no window ever shown. Event Log shows `DllNotFoundException` in `HwndSubclass.SubclassWndProc`.
+**Symptom of missing DLLs:** process shows as Suspended in Task Manager; no window; Event Log `DllNotFoundException`.
