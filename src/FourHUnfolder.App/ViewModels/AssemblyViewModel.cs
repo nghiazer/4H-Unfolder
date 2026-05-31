@@ -94,7 +94,8 @@ public sealed partial class AssemblyViewModel : ObservableObject, IDisposable
     private readonly record struct SceneBounds(
         float BaseY, float ModelMinY, float ModelMaxY,
         float ModelCx, float ModelCz, float CanvasXZRadius,
-        float StageScale, float StageY, float RawModelCenterY, float StageModelTop);
+        float StageScale, float StageY, float RawModelCenterY, float StageModelTop,
+        float LayoutCx, float LayoutCz);
 
     // ── constants ─────────────────────────────────────────────────────────────
     private const double AnimDurationMs     = 1800;       // 600ms per phase × 3
@@ -170,14 +171,23 @@ public sealed partial class AssemblyViewModel : ObservableObject, IDisposable
         {
             float sceneH  = _bounds.StageModelTop - _bounds.BaseY;
             float midY    = (_bounds.BaseY + _bounds.StageModelTop) * 0.5f;
-            float radius  = MathF.Max(sceneH, 2f * _bounds.CanvasXZRadius);
+
+            // XZ scene centre: midpoint between canvas layout (right side) and model ghost (model centre)
+            float sceneCx = (_bounds.ModelCx + _bounds.LayoutCx) * 0.5f;
+            float sceneCz = (_bounds.ModelCz + _bounds.LayoutCz) * 0.5f;
+
+            // Radius covers canvas extent plus half the model-to-layout separation
+            float layoutToModel = MathF.Sqrt(
+                MathF.Pow(_bounds.LayoutCx - _bounds.ModelCx, 2) +
+                MathF.Pow(_bounds.LayoutCz - _bounds.ModelCz, 2));
+            float radius  = MathF.Max(sceneH, 2f * _bounds.CanvasXZRadius + layoutToModel);
             float camDist = radius * 1.6f;
             // 30° elevation, 45° azimuth — classic 3/4 view framing both stages
-            float camX = _bounds.ModelCx + camDist * 0.612f;  // cos(30°)*cos(45°)
-            float camY = midY            + camDist * 0.500f;  // sin(30°)
-            float camZ = _bounds.ModelCz + camDist * 0.612f;
+            float camX = sceneCx + camDist * 0.612f;  // cos(30°)*cos(45°)
+            float camY = midY    + camDist * 0.500f;  // sin(30°)
+            float camZ = sceneCz + camDist * 0.612f;
             var pos  = new Point3D(camX, camY, camZ);
-            var look = new Vector3D(_bounds.ModelCx - camX, midY - camY, _bounds.ModelCz - camZ);
+            var look = new Vector3D(sceneCx - camX, midY - camY, sceneCz - camZ);
             return (pos, look);
         }
     }
@@ -721,6 +731,15 @@ public sealed partial class AssemblyViewModel : ObservableObject, IDisposable
         float modelH    = Math.Max(modelMaxY - modelMinY, 0.001f);
         float baseY     = modelMinY - modelH * 1.5f;  // flat plane below model — wider gap for clear bottom-top staging
 
+        // Shift the canvas plane into the open right side of the viewport.
+        // Camera sits at (+X,+Y,+Z) → viewport-right ≈ (+X,−Z) in world space.
+        // A 1.0 × modelH offset along that direction keeps pieces clear of the model-ghost silhouette.
+        float layoutOffset = modelH * 1.0f;
+        float layoutOffX   =  layoutOffset * 0.7071f;   // +X component (cos 45°)
+        float layoutOffZ   = -layoutOffset * 0.7071f;   // −Z component (sin 45°)
+        float layoutCx     = modelCx + layoutOffX;
+        float layoutCz     = modelCz + layoutOffZ;
+
         double sumX = 0, sumZ = 0; int vtxN = 0;
         foreach (var uf in unfoldResult.Faces)
         {
@@ -732,11 +751,11 @@ public sealed partial class AssemblyViewModel : ObservableObject, IDisposable
         double patCz = vtxN > 0 ? sumZ / vtxN : 0;
 
         // u, v are in raw model units (edge-length-preserving unfold space).
-        // Centres the layout under the 3-D model at (modelCx, baseY, modelCz) without scaling.
+        // Places the layout at (layoutCx, baseY, layoutCz) — right side of viewport.
         Vector3 ToFlatV(float u, float v) => new(
-            (float)(u - patCx + modelCx),
+            (float)(u - patCx + layoutCx),
             baseY,
-            (float)(v - patCz + modelCz));
+            (float)(v - patCz + layoutCz));
 
         // Canvas mm position → same 3D flat-plane space as ToFlatV.
         // FaceData vertices are piece-local mm; PositionX/Y is the centroid in mm.
@@ -865,14 +884,15 @@ public sealed partial class AssemblyViewModel : ObservableObject, IDisposable
             });
         }
 
-        // Compute XZ radius of canvas layout for camera framing
+        // Compute XZ radius of canvas layout from layout centre (not model centre)
+        // so that stageScale and camera distance are not inflated by the right-side offset.
         float canvasXZR = 0f;
         foreach (var pd in pieceDataList)
             foreach (var tri in pd.Tris)
             {
-                canvasXZR = MathF.Max(canvasXZR, MathF.Sqrt(MathF.Pow(tri.CanvasA.X - modelCx, 2) + MathF.Pow(tri.CanvasA.Z - modelCz, 2)));
-                canvasXZR = MathF.Max(canvasXZR, MathF.Sqrt(MathF.Pow(tri.CanvasB.X - modelCx, 2) + MathF.Pow(tri.CanvasB.Z - modelCz, 2)));
-                canvasXZR = MathF.Max(canvasXZR, MathF.Sqrt(MathF.Pow(tri.CanvasC.X - modelCx, 2) + MathF.Pow(tri.CanvasC.Z - modelCz, 2)));
+                canvasXZR = MathF.Max(canvasXZR, MathF.Sqrt(MathF.Pow(tri.CanvasA.X - layoutCx, 2) + MathF.Pow(tri.CanvasA.Z - layoutCz, 2)));
+                canvasXZR = MathF.Max(canvasXZR, MathF.Sqrt(MathF.Pow(tri.CanvasB.X - layoutCx, 2) + MathF.Pow(tri.CanvasB.Z - layoutCz, 2)));
+                canvasXZR = MathF.Max(canvasXZR, MathF.Sqrt(MathF.Pow(tri.CanvasC.X - layoutCx, 2) + MathF.Pow(tri.CanvasC.Z - layoutCz, 2)));
             }
 
         // Compute raw model XZ radius (for stage scale so ghost matches canvas visually)
@@ -893,7 +913,8 @@ public sealed partial class AssemblyViewModel : ObservableObject, IDisposable
 
         float      liftHeight  = modelH * LiftHeightFraction;
         SceneBounds sceneBounds = new(baseY, modelMinY, modelMaxY, modelCx, modelCz, canvasXZR,
-                                      stageScale, stageY, rawModelCenterY, stageModelTop);
+                                      stageScale, stageY, rawModelCenterY, stageModelTop,
+                                      layoutCx, layoutCz);
         return ([.. pieceDataList], [.. stepInfoList], liftHeight, sceneBounds);
     }
 
