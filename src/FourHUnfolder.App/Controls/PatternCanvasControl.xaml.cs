@@ -1139,6 +1139,10 @@ public partial class PatternCanvasControl : UserControl
     private void HighlightFold_Click(object s, RoutedEventArgs e)  => _vm?.ToggleHighlightFoldLinesCommand.Execute(null);
     private void PartNames_Click(object s, RoutedEventArgs e)      => _vm?.ToggleShowPartNamesCommand.Execute(null);
     private void PageNumbers_Click(object s, RoutedEventArgs e)    => _vm?.ToggleShowPageNumbersCommand.Execute(null);
+    private void PrintTrans_Click(object s, RoutedEventArgs e)    => _vm?.ToggleApplyPrintTransparencyCommand.Execute(null);
+    private void Find_Click(object s, RoutedEventArgs e)          => _vm?.OpenFindCommand.Execute(null);
+    private void InsertImage_Click(object s, RoutedEventArgs e)   => _vm?.InsertImageCommand.Execute(null);
+    private void RemoveImage_Click(object s, RoutedEventArgs e)   => _vm?.RemoveInsertedImageCommand.Execute(null);
 
     // ── middle-mouse pan ─────────────────────────────────────────────────────
 

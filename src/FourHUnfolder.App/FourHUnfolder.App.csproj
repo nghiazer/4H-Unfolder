@@ -12,10 +12,10 @@
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
 
     <!-- Version — bump suffix letter for patch releases within a minor version -->
-    <Version>0.0.7.1</Version>
-    <AssemblyVersion>0.0.7.1</AssemblyVersion>
-    <FileVersion>0.0.7.1</FileVersion>
-    <InformationalVersion>0.0.7.A — Remaining Pepakura features: Texture On/Off, Highlight Fold Lines, Show Part Name, Show Page Number, Separate All Faces, Apply Transparency, Dimension Lines, Find Text, Insert Image</InformationalVersion>
+    <Version>0.0.7.2</Version>
+    <AssemblyVersion>0.0.7.2</AssemblyVersion>
+    <FileVersion>0.0.7.2</FileVersion>
+    <InformationalVersion>0.0.7.B — Toolbar deduplication &amp; reorganization: remove duplicate buttons, fix icon conflicts (📂→📥 ✂→✄ ⊞→⤢), move 2D-canvas controls to 2D toolbar</InformationalVersion>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\FourHUnfolder.Application\FourHUnfolder.Application.csproj" />

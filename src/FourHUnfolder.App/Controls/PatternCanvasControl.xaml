@@ -178,6 +178,26 @@
                               IsChecked="{Binding ShowPageNumbers, Mode=OneWay}"
                               Click="PageNumbers_Click"
                               ToolTip="Show Page Number — large page numbers on each page"/>
+                <Separator Margin="4,0"/>
+                <ToggleButton Style="{StaticResource Toggle2D}" x:Name="PrintTransBtn"
+                              Content="⬛"
+                              IsChecked="{Binding ApplyPrintTransparency, Mode=OneWay}"
+                              Click="PrintTrans_Click"
+                              IsEnabled="{Binding CanExport}"
+                              ToolTip="Apply Print Transparency — preview canvas at 85% opacity"/>
+                <Button Style="{StaticResource Icon2D}" Content="🔍"
+                        Click="Find_Click"
+                        IsEnabled="{Binding CanExport}"
+                        ToolTip="Find Part (Ctrl+Shift+F) — search piece by number"/>
+                <Separator Margin="4,0"/>
+                <Button Style="{StaticResource Icon2D}" Content="🗺"
+                        Click="InsertImage_Click"
+                        IsEnabled="{Binding CanExport}"
+                        ToolTip="Insert Image — background reference on 2D canvas"/>
+                <Button Style="{StaticResource Icon2D}" Content="✕🗺"
+                        Click="RemoveImage_Click"
+                        IsEnabled="{Binding CanExport}"
+                        ToolTip="Remove Inserted Image"/>
             </StackPanel>
         </Border>
     </Grid>

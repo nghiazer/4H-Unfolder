@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:helix="http://helix-toolkit.org/wpf"
         xmlns:ctrl="clr-namespace:FourHUnfolder.App.Controls"
-        Title="4H-Unfolder v0.0.7.A — Paper Model Unfolder"
+        Title="4H-Unfolder v0.0.7.B — Paper Model Unfolder"
         Icon="Assets/app.ico"
         Width="1400" Height="900"
         WindowStartupLocation="CenterScreen"
@@ -203,17 +203,14 @@
                 <Button Style="{StaticResource IconBtn}" Content="📁"
                         Command="{Binding SaveProjectCommand}" IsEnabled="{Binding CanExport}"
                         ToolTip="Save project (.pmc)"/>
-                <Button Style="{StaticResource IconBtn}" Content="📂"
+                <Button Style="{StaticResource IconBtn}" Content="📥"
                         Command="{Binding LoadProjectCommand}"
                         ToolTip="Load project (.pmc)"/>
                 <Button Style="{StaticResource IconBtn}" Content="⚙"
                         Command="{Binding OpenSettingsCommand}"
                         ToolTip="Settings (3D / 2D / Print / General)"/>
                 <Separator/>
-                <!-- Cluster 2: Workflow -->
-                <Button Style="{StaticResource IconBtn}" Content="📐"
-                        Command="{Binding UnfoldCommand}" IsEnabled="{Binding CanUnfold}"
-                        ToolTip="Unfold — open setup dialog"/>
+                <!-- Cluster 2: Undo / Redo -->
                 <Button Style="{StaticResource IconBtn}" Content="↩"
                         Command="{Binding UndoCommand}" IsEnabled="{Binding CanUndo}"
                         ToolTip="Undo  (Ctrl+Z)"/>
@@ -221,15 +218,7 @@
                         Command="{Binding RedoCommand}" IsEnabled="{Binding CanRedo}"
                         ToolTip="Redo  (Ctrl+Y)"/>
                 <Separator/>
-                <!-- Cluster 3: Export -->
-                <Button Style="{StaticResource IconBtn}" Content="💾"
-                        Command="{Binding ExportSvgCommand}" IsEnabled="{Binding CanExport}"
-                        ToolTip="Export SVG pattern"/>
-                <Button Style="{StaticResource IconBtn}" Content="📑"
-                        Command="{Binding ExportPdfCommand}" IsEnabled="{Binding CanExport}"
-                        ToolTip="Export PDF pattern"/>
-                <Separator/>
-                <!-- Cluster 4: View / Tools -->
+                <!-- Cluster 3: View / Tools -->
                 <Button Style="{StaticResource IconBtn}" Content="🎨"
                         Click="TextureButton_Click"
                         Visibility="{Binding TexturePanelVisible}"
@@ -238,7 +227,7 @@
                         Command="{Binding OpenAssemblyAnimationCommand}"
                         IsEnabled="{Binding CanExport}"
                         ToolTip="Assembly animation — step-by-step fold guide"/>
-                <Button Style="{StaticResource IconBtn}" Content="✂"
+                <Button Style="{StaticResource IconBtn}" Content="✄"
                         Click="EditFlapsButton_Click"
                         IsEnabled="{Binding CanExport}"
                         ToolTip="Edit Flaps — control glue tab placement per edge"/>
@@ -252,7 +241,7 @@
                         Command="{Binding ToggleMirrorInversionCommand}"
                         IsEnabled="{Binding CanUnfold}"
                         ToolTip="Mirror Inversion — flip model along X axis (both 3D and 2D)"/>
-                <Button Style="{StaticResource IconBtn}" Content="⊞"
+                <Button Style="{StaticResource IconBtn}" Content="⤢"
                         Command="{Binding FitPageCommand}"
                         IsEnabled="{Binding CanExport}"
                         ToolTip="Fit Page to Window  (F3)"/>
@@ -289,31 +278,15 @@
                         IsEnabled="{Binding CanExport}"
                         ToolTip="Show 2D Layout Only (hide 3D viewport)"/>
                 <Separator/>
-                <!-- Cluster 6: New Pepakura features (s38) -->
+                <!-- Cluster 6: Pepakura model tools (s38) -->
                 <Button Style="{StaticResource IconBtn}" Content="⬚"
                         Command="{Binding SeparateAllFacesCommand}"
                         IsEnabled="{Binding CanUnfold}"
                         ToolTip="Separate All Faces — set every edge to cut (each face = own piece)"/>
-                <Button Style="{StaticResource IconBtn}" Content="⬛"
-                        Command="{Binding ToggleApplyPrintTransparencyCommand}"
-                        IsEnabled="{Binding CanExport}"
-                        ToolTip="Apply Transparency of Print Setting — preview canvas at 85% opacity"/>
                 <Button Style="{StaticResource IconBtn}" Content="⟷"
                         Command="{Binding ToggleShowDimensionLinesCommand}"
                         IsEnabled="{Binding CanUnfold}"
                         ToolTip="Show Dimension Lines — overlay W/H/D labels in 3D viewport"/>
-                <Button Style="{StaticResource IconBtn}" Content="🔍"
-                        Command="{Binding OpenFindCommand}"
-                        IsEnabled="{Binding CanExport}"
-                        ToolTip="Find Part (Ctrl+Shift+F) — search piece by number"/>
-                <Button Style="{StaticResource IconBtn}" Content="🗺"
-                        Command="{Binding InsertImageCommand}"
-                        IsEnabled="{Binding CanExport}"
-                        ToolTip="Insert Image — add background reference image to 2D canvas"/>
-                <Button Style="{StaticResource IconBtn}" Content="✕🗺"
-                        Command="{Binding RemoveInsertedImageCommand}"
-                        IsEnabled="{Binding CanExport}"
-                        ToolTip="Remove Inserted Image"/>
             </StackPanel>
         </Border>
 
