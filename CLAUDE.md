@@ -79,7 +79,7 @@ the exact line from `find_definition`.
 
 ---
 
-## Current branch: `feat/toolbar-cleanup` (v0.0.7.B)
+## Current branch: `feat/toolbar-cleanup` (v0.1.0.A)
 
 ### Tech debt open (session 38)
 | ID | Priority | Description |

@@ -1,7 +1,7 @@
 # 4H-Unfolder — Session Progress Log
 
-> **Last updated:** 2026-06-01 (session 39 — Toolbar cleanup; branch `feat/toolbar-cleanup`)
-> **Branch:** `feat/toolbar-cleanup`  (base: `feat/pepakura-features` @ v0.0.7.A → current: v0.0.7.B)
+> **Last updated:** 2026-06-01 (session 40 — Segoe Fluent Icons toolbar modernization; branch `feat/toolbar-cleanup`)
+> **Branch:** `feat/toolbar-cleanup`  (base: `feat/pepakura-features` @ v0.0.7.A → current: v0.1.0.A)
 > **Target framework:** .NET 8 / WPF
 > **SDK required:** `winget install Microsoft.DotNet.SDK.8`
 > **History archive:** see [`BUGS_HISTORY.md`](BUGS_HISTORY.md) for all prior bug/tech-debt records
@@ -93,7 +93,33 @@ No circular dependencies. Domain has zero external dependencies.
 | `dotnet build 4H-Unfolder.sln` | ✅ 0 errors, 7 warnings (NuGet NU1603 only) |
 | `dotnet test` | ✅ 56 / 56 passed |
 | `dotnet run --project src/FourHUnfolder.App` | ✅ App opens; all features accessible |
-| Published `4H-Unfolder.exe` **v0.0.7.B** (win-x64, self-contained) + installer | ✅ Session 39 |
+| Published `4H-Unfolder.exe` **v0.1.0.A** (win-x64, self-contained) + installer | ✅ Session 40 |
+
+---
+
+## Session 40 — Changes (v0.1.0.A)
+
+### Branch `feat/toolbar-cleanup` (continued from s39)
+
+Full toolbar modernization to Windows 11 Fluent Design. **47 unique Segoe Fluent Icons glyphs** replace all emoji/Unicode symbols across both toolbars. No logic or domain changes — UI-only.
+
+#### What changed
+
+| Scope | Detail |
+|-------|--------|
+| `IconBtn` style | Added `FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"`, FontSize 20→16 |
+| `Icon2D` style | Added `FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"`, FontSize 19→16 |
+| `Toggle2D` style | Added `FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"`, FontSize 19→16 |
+| Main toolbar (25 buttons) | All emoji/symbols → `&#xNNNN;` Segoe Fluent glyph references |
+| 2D toolbar (22 buttons) | All emoji/symbols → `&#xNNNN;` Segoe Fluent glyph references |
+| FindBar close button | `✕` (U+2715, not a Fluent glyph) → `&#xE711;` (Cancel) — cross-review fix |
+| Version | 0.0.7.2 → 0.1.0.1 (minor bump: visual modernization milestone) |
+
+#### Icon mapping reference (main toolbar)
+`E838`=Folder `E9B4`=Ruler `E74E`=Save `E8A5`=Document `E792`=SaveLocal `E8E0`=Import `E713`=Settings `E7A7`=Undo `E7A6`=Redo `E2B1`=Color `E8B2`=Video `E74B`=Cut `E9A9`=Resize `E7B8`=Flip `E8A4`=ZoomFit `E71E`=Zoom `E8B3`=SelectAll `F168`=Group `F169`=Ungroup `E72C`=Refresh `E8CC`=Snip `E8C8`=Copy `E8D5`=ViewAll `E8C4`=Tiles `E81C`=Ruler2
+
+#### Icon mapping reference (2D toolbar)
+`E7AD`=RotateCCW `E7AC`=RotateCW `E8C0`=AlignLeft `E8C1`=AlignCenterV `E8C2`=AlignRight `E8C3`=AlignTop `E8C6`=AlignBottom `E8C5`=AlignCenterH `E9B5`=LayoutGrid `E813`=Pin `E70F`=Edit `E80A`=GridView `E8CF`=Magnet `E81B`=Triangle `E8B9`=Photo `E8F3`=Strikethrough `E8D6`=Tag `E9D9`=NumberField `E749`=Print `E721`=Search `EB9F`=AddPhoto `E894`=Remove
 
 ---
 

@@ -8,7 +8,13 @@
 A Pepakura-style paper model unfolder built with **WPF / .NET 8**.  
 Load a 3-D mesh, unfold it into a printable 2-D pattern, customise the layout, and export to SVG or PDF.
 
-> Current version: **v0.0.7.B** (win-x64 self-contained EXE) — Toolbar cleanup + full Pepakura feature parity
+> Current version: **v0.1.0.A** (win-x64 self-contained EXE) — Windows 11 Fluent Design: 47 Segoe Fluent Icons glyphs across both toolbars
+
+---
+
+## Screenshot
+
+![4H-Unfolder v0.1.0.A](docs/screenshot-v0.1.0.A.png)
 
 ---
 
@@ -16,8 +22,8 @@ Load a 3-D mesh, unfold it into a printable 2-D pattern, customise the layout, a
 
 | Package | Link |
 |---------|------|
-| **Installer** (recommended) | [4H-Unfolder-v0.0.7.B-setup.exe](https://github.com/NghiaZer/4H-Unfolder/releases/download/v0.0.7.B/4H-Unfolder-v0.0.7.B-setup.exe) |
-| **Portable ZIP** | [4H-Unfolder-v0.0.7.B-portable.zip](https://github.com/NghiaZer/4H-Unfolder/releases/download/v0.0.7.B/4H-Unfolder-v0.0.7.B-portable.zip) |
+| **Installer** (recommended) | [4H-Unfolder-v0.1.0.A-setup.exe](https://github.com/NghiaZer/4H-Unfolder/releases/download/v0.1.0.A/4H-Unfolder-v0.1.0.A-setup.exe) |
+| **Portable ZIP** | [4H-Unfolder-v0.1.0.A-portable.zip](https://github.com/NghiaZer/4H-Unfolder/releases/download/v0.1.0.A/4H-Unfolder-v0.1.0.A-portable.zip) |
 
 > **No runtime required** — fully self-contained win-x64 binary.  
 > Requires Windows 10 / 11 (x64).

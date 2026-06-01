@@ -2,13 +2,14 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <UserControl.Resources>
-        <!-- Compact icon-only button for 2D toolbar — icons enlarged ×1.4, rounded corners -->
+        <!-- Compact icon-only button for 2D toolbar — Segoe Fluent Icons, Windows 11 Fluent Design -->
         <Style x:Key="Icon2D" TargetType="Button">
-            <Setter Property="Padding"   Value="6,4"/>
-            <Setter Property="Margin"    Value="1"/>
-            <Setter Property="MinWidth"  Value="32"/>
-            <Setter Property="FontSize"  Value="19"/>
-            <Setter Property="Cursor"    Value="Hand"/>
+            <Setter Property="Padding"    Value="6,4"/>
+            <Setter Property="Margin"     Value="1"/>
+            <Setter Property="MinWidth"   Value="32"/>
+            <Setter Property="FontSize"   Value="16"/>
+            <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets"/>
+            <Setter Property="Cursor"     Value="Hand"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Template">
@@ -39,11 +40,12 @@
             </Setter>
         </Style>
         <Style x:Key="Toggle2D" TargetType="ToggleButton">
-            <Setter Property="Padding"   Value="6,4"/>
-            <Setter Property="Margin"    Value="1"/>
-            <Setter Property="MinWidth"  Value="32"/>
-            <Setter Property="FontSize"  Value="19"/>
-            <Setter Property="Cursor"    Value="Hand"/>
+            <Setter Property="Padding"    Value="6,4"/>
+            <Setter Property="Margin"     Value="1"/>
+            <Setter Property="MinWidth"   Value="32"/>
+            <Setter Property="FontSize"   Value="16"/>
+            <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets"/>
+            <Setter Property="Cursor"     Value="Hand"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Template">
@@ -111,90 +113,106 @@
             </Border>
         </Grid>
 
-        <!-- Bottom toolbar — icon-only compact buttons -->
+        <!-- Bottom toolbar (Segoe Fluent Icons) -->
+        <!--
+             Icon map:  E7AD=RotateCCW  E7AC=RotateCW
+             E8C0=AlignLeft  E8C1=AlignCenterV  E8C2=AlignRight
+             E8C3=AlignTop   E8C6=AlignBottom   E8C5=AlignCenterH
+             E9B5=LayoutGrid  E813=Pin(pivot)  E70F=Edit
+             E80A=GridView  E8CF=Magnet(snap)  E81B=Triangle(angles)
+             E8B9=Photo(texture)  E8F3=Strikethrough(bold fold)
+             E8D6=Tag(names)  E9D9=NumberField(pages)
+             E749=Print(transparency)  E721=Search(find)
+             EB9F=AddPhoto(insert)  E894=Remove(delete image)
+        -->
         <Border Grid.Row="1" Background="{DynamicResource Toolbar2DBg}" Padding="6,3">
             <StackPanel Orientation="Horizontal">
-                <Button Style="{StaticResource Icon2D}" Content="⟲" Click="RotateCCW_Click"
+                <!-- Rotate -->
+                <Button Style="{StaticResource Icon2D}" Content="&#xE7AD;" Click="RotateCCW_Click"
                         ToolTip="Rotate –90°"/>
-                <Button Style="{StaticResource Icon2D}" Content="⟳" Click="RotateCW_Click"
+                <Button Style="{StaticResource Icon2D}" Content="&#xE7AC;" Click="RotateCW_Click"
                         ToolTip="Rotate +90°"/>
                 <Separator Margin="4,0"/>
-                <!-- F5: Alignment buttons (visible only when 2+ pieces selected) -->
-                <Button Style="{StaticResource Icon2D}" Content="◧" Click="AlignLeft_Click"
+                <!-- Alignment -->
+                <Button Style="{StaticResource Icon2D}" Content="&#xE8C0;" Click="AlignLeft_Click"
                         ToolTip="Align selected pieces — Left edges"/>
-                <Button Style="{StaticResource Icon2D}" Content="◫" Click="AlignCenterV_Click"
+                <Button Style="{StaticResource Icon2D}" Content="&#xE8C1;" Click="AlignCenterV_Click"
                         ToolTip="Align selected pieces — Center vertically"/>
-                <Button Style="{StaticResource Icon2D}" Content="◨" Click="AlignRight_Click"
+                <Button Style="{StaticResource Icon2D}" Content="&#xE8C2;" Click="AlignRight_Click"
                         ToolTip="Align selected pieces — Right edges"/>
-                <Button Style="{StaticResource Icon2D}" Content="⊤" Click="AlignTop_Click"
+                <Button Style="{StaticResource Icon2D}" Content="&#xE8C3;" Click="AlignTop_Click"
                         ToolTip="Align selected pieces — Top edges"/>
-                <Button Style="{StaticResource Icon2D}" Content="⊥" Click="AlignBottom_Click"
+                <Button Style="{StaticResource Icon2D}" Content="&#xE8C6;" Click="AlignBottom_Click"
                         ToolTip="Align selected pieces — Bottom edges"/>
-                <Button Style="{StaticResource Icon2D}" Content="↔" Click="AlignCenterH_Click"
+                <Button Style="{StaticResource Icon2D}" Content="&#xE8C5;" Click="AlignCenterH_Click"
                         ToolTip="Align selected pieces — Center horizontally"/>
                 <Separator Margin="4,0"/>
-                <Button Style="{StaticResource Icon2D}" Content="✦" Click="AutoArrange_Click"
+                <!-- Auto-arrange -->
+                <Button Style="{StaticResource Icon2D}" Content="&#xE9B5;" Click="AutoArrange_Click"
                         ToolTip="Auto-arrange pieces"/>
                 <Separator Margin="4,0"/>
+                <!-- Edit modes -->
                 <ToggleButton Style="{StaticResource Toggle2D}" x:Name="RotatePointBtn"
-                              Content="⊙" Click="RotatePoint_Click"
+                              Content="&#xE813;" Click="RotatePoint_Click"
                               ToolTip="Rotate by Point — click vertex=pivot, click another=handle, mouse to rotate"/>
                 <ToggleButton Style="{StaticResource Toggle2D}" x:Name="EditEdgesBtn"
-                              Content="✏" Click="EditEdges_Click"
+                              Content="&#xE70F;" Click="EditEdges_Click"
                               ToolTip="Edit Edges — hover to highlight, left-click to attach/detach"/>
                 <Separator Margin="4,0"/>
+                <!-- View toggles -->
                 <ToggleButton Style="{StaticResource Toggle2D}" x:Name="GridToggleBtn"
-                              Content="⊞"
+                              Content="&#xE80A;"
                               IsChecked="{Binding GridVisible, Mode=OneWay}"
                               Click="GridToggle_Click"
                               ToolTip="Toggle grid"/>
                 <ToggleButton Style="{StaticResource Toggle2D}" x:Name="SnapToggleBtn"
-                              Content="⊟"
+                              Content="&#xE8CF;"
                               IsChecked="{Binding SnapToGrid, Mode=OneWay}"
                               Click="SnapToggle_Click"
                               ToolTip="Snap to grid when dragging"/>
                 <ToggleButton Style="{StaticResource Toggle2D}" x:Name="FoldAnglesBtn"
-                              Content="∠"
+                              Content="&#xE81B;"
                               IsChecked="{Binding ShowFoldAngles, Mode=OneWay}"
                               Click="FoldAngles_Click"
                               ToolTip="Show fold angle labels on fold edges"/>
                 <ToggleButton Style="{StaticResource Toggle2D}" x:Name="ShowTextureBtn"
-                              Content="🖼"
+                              Content="&#xE8B9;"
                               IsChecked="{Binding ShowTexture, Mode=OneWay}"
                               Click="ShowTexture_Click"
                               ToolTip="Texture On/Off — toggle texture rendering on 2D canvas"/>
                 <ToggleButton Style="{StaticResource Toggle2D}" x:Name="HighlightFoldBtn"
-                              Content="━"
+                              Content="&#xE8F3;"
                               IsChecked="{Binding HighlightFoldLines, Mode=OneWay}"
                               Click="HighlightFold_Click"
                               ToolTip="Highlight Fold Lines — thicker/blue fold lines"/>
                 <ToggleButton Style="{StaticResource Toggle2D}" x:Name="PartNamesBtn"
-                              Content="🏷"
+                              Content="&#xE8D6;"
                               IsChecked="{Binding ShowPartNames, Mode=OneWay}"
                               Click="PartNames_Click"
                               ToolTip="Show Part Name — display P1, P2… at piece centroid"/>
                 <ToggleButton Style="{StaticResource Toggle2D}" x:Name="PageNumbersBtn"
-                              Content="#"
+                              Content="&#xE9D9;"
                               IsChecked="{Binding ShowPageNumbers, Mode=OneWay}"
                               Click="PageNumbers_Click"
                               ToolTip="Show Page Number — large page numbers on each page"/>
                 <Separator Margin="4,0"/>
+                <!-- Pepakura 2D tools -->
                 <ToggleButton Style="{StaticResource Toggle2D}" x:Name="PrintTransBtn"
-                              Content="⬛"
+                              Content="&#xE749;"
                               IsChecked="{Binding ApplyPrintTransparency, Mode=OneWay}"
                               Click="PrintTrans_Click"
                               IsEnabled="{Binding CanExport}"
                               ToolTip="Apply Print Transparency — preview canvas at 85% opacity"/>
-                <Button Style="{StaticResource Icon2D}" Content="🔍"
+                <Button Style="{StaticResource Icon2D}" Content="&#xE721;"
                         Click="Find_Click"
                         IsEnabled="{Binding CanExport}"
                         ToolTip="Find Part (Ctrl+Shift+F) — search piece by number"/>
                 <Separator Margin="4,0"/>
-                <Button Style="{StaticResource Icon2D}" Content="🗺"
+                <Button Style="{StaticResource Icon2D}" Content="&#xEB9F;"
                         Click="InsertImage_Click"
                         IsEnabled="{Binding CanExport}"
                         ToolTip="Insert Image — background reference on 2D canvas"/>
-                <Button Style="{StaticResource Icon2D}" Content="✕🗺"
+                <Button Style="{StaticResource Icon2D}" Content="&#xE894;"
                         Click="RemoveImage_Click"
                         IsEnabled="{Binding CanExport}"
                         ToolTip="Remove Inserted Image"/>
