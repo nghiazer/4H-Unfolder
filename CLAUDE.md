@@ -79,7 +79,7 @@ the exact line from `find_definition`.
 
 ---
 
-## Current branch: `feat/pepakura-features` (v0.0.7.A)
+## Current branch: `feat/toolbar-cleanup` (v0.0.7.B)
 
 ### Tech debt open (session 38)
 | ID | Priority | Description |

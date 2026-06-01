@@ -1,7 +1,7 @@
 # 4H-Unfolder — Session Progress Log
 
-> **Last updated:** 2026-06-01 (session 38 — Remaining Pepakura features; branch `feat/pepakura-features`)
-> **Branch:** `feat/pepakura-features`  (base: `feat/glue-tab-editor` @ v0.0.5.A → current: v0.0.7.A)
+> **Last updated:** 2026-06-01 (session 39 — Toolbar cleanup; branch `feat/toolbar-cleanup`)
+> **Branch:** `feat/toolbar-cleanup`  (base: `feat/pepakura-features` @ v0.0.7.A → current: v0.0.7.B)
 > **Target framework:** .NET 8 / WPF
 > **SDK required:** `winget install Microsoft.DotNet.SDK.8`
 > **History archive:** see [`BUGS_HISTORY.md`](BUGS_HISTORY.md) for all prior bug/tech-debt records
@@ -93,7 +93,36 @@ No circular dependencies. Domain has zero external dependencies.
 | `dotnet build 4H-Unfolder.sln` | ✅ 0 errors, 7 warnings (NuGet NU1603 only) |
 | `dotnet test` | ✅ 56 / 56 passed |
 | `dotnet run --project src/FourHUnfolder.App` | ✅ App opens; all features accessible |
-| Published `4H-Unfolder.exe` **v0.0.7.A** (win-x64, self-contained) | ✅ Session 38 |
+| Published `4H-Unfolder.exe` **v0.0.7.B** (win-x64, self-contained) + installer | ✅ Session 39 |
+
+---
+
+## Session 39 — Changes (v0.0.7.B)
+
+### Branch `feat/toolbar-cleanup` (off `feat/pepakura-features` @ v0.0.7.A)
+
+Toolbar deduplication and reorganization. No logic/domain changes — UI-only.
+
+#### Problems fixed
+
+| Category | Problem | Fix |
+|----------|---------|-----|
+| Exact duplicate | 📐 Unfold appeared twice in main toolbar | Removed second occurrence |
+| Exact duplicate | 💾 Export SVG appeared twice in main toolbar | Removed second occurrence |
+| Exact duplicate | 📑 Export PDF appeared twice in main toolbar | Removed second occurrence |
+| Same icon conflict | 📂 = both Load Mesh and Load Project | Load Project → 📥 |
+| Same icon conflict | ✂ = both Edit Flaps and Reset Cutline Edges | Edit Flaps → ✄ (U+2704) |
+| Same icon conflict | ⊞ = both Fit Page (main) and Grid Toggle (2D) | Fit Page → ⤢ (U+2922) |
+| Misplaced in main | ⬛ Apply Print Transparency | Moved to 2D toolbar as ToggleButton |
+| Misplaced in main | 🔍 Find Part | Moved to 2D toolbar |
+| Misplaced in main | 🗺 Insert Image | Moved to 2D toolbar |
+| Misplaced in main | ✕🗺 Remove Inserted Image | Moved to 2D toolbar |
+
+#### Files changed
+- `MainWindow.xaml`: 3 duplicates removed, 3 icon conflicts fixed, 4 misplaced buttons removed, Title → v0.0.7.B
+- `PatternCanvasControl.xaml`: 4 buttons added at end of 2D toolbar (⬛🔍🗺✕🗺)
+- `PatternCanvasControl.xaml.cs`: 4 click handlers added (`PrintTrans_Click`, `Find_Click`, `InsertImage_Click`, `RemoveImage_Click`)
+- `FourHUnfolder.App.csproj`: Version → 0.0.7.2
 
 ---
 

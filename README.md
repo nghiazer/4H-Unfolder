@@ -8,7 +8,7 @@
 A Pepakura-style paper model unfolder built with **WPF / .NET 8**.  
 Load a 3-D mesh, unfold it into a printable 2-D pattern, customise the layout, and export to SVG or PDF.
 
-> Current version: **v0.0.4.F** (win-x64 self-contained EXE) — Assembly Animation: 3-phase lift-off + fold + fly-toward-camera
+> Current version: **v0.0.7.B** (win-x64 self-contained EXE) — Toolbar cleanup + full Pepakura feature parity
 
 ---
 
@@ -16,8 +16,8 @@ Load a 3-D mesh, unfold it into a printable 2-D pattern, customise the layout, a
 
 | Package | Link |
 |---------|------|
-| **Installer** (recommended) | [4H-Unfolder-v0.0.4.F-setup.exe](https://github.com/NghiaZer/4H-Unfolder/releases/download/v0.0.4.F/4H-Unfolder-v0.0.4.F-setup.exe) |
-| **Portable ZIP** | [4H-Unfolder-v0.0.4.F-portable.zip](https://github.com/NghiaZer/4H-Unfolder/releases/download/v0.0.4.F/4H-Unfolder-v0.0.4.F-portable.zip) |
+| **Installer** (recommended) | [4H-Unfolder-v0.0.7.B-setup.exe](https://github.com/NghiaZer/4H-Unfolder/releases/download/v0.0.7.B/4H-Unfolder-v0.0.7.B-setup.exe) |
+| **Portable ZIP** | [4H-Unfolder-v0.0.7.B-portable.zip](https://github.com/NghiaZer/4H-Unfolder/releases/download/v0.0.7.B/4H-Unfolder-v0.0.7.B-portable.zip) |
 
 > **No runtime required** — fully self-contained win-x64 binary.  
 > Requires Windows 10 / 11 (x64).
