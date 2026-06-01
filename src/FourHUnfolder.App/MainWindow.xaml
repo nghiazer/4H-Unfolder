@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:helix="http://helix-toolkit.org/wpf"
         xmlns:ctrl="clr-namespace:FourHUnfolder.App.Controls"
-        Title="4H-Unfolder v0.0.7.B — Paper Model Unfolder"
+        Title="4H-Unfolder v0.1.0.A — Paper Model Unfolder"
         Icon="Assets/app.ico"
         Width="1400" Height="900"
         WindowStartupLocation="CenterScreen"
@@ -12,12 +12,13 @@
 
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
-        <!-- Compact icon-only style for main toolbar — icons enlarged ×1.5 with rounded corners -->
+        <!-- Compact icon-only style for main toolbar — Segoe Fluent Icons, Windows 11 Fluent Design -->
         <Style x:Key="IconBtn" TargetType="Button">
-            <Setter Property="Margin"    Value="2,1"/>
-            <Setter Property="Padding"   Value="8,6"/>
-            <Setter Property="FontSize"  Value="20"/>
-            <Setter Property="Cursor"    Value="Hand"/>
+            <Setter Property="Margin"      Value="2,1"/>
+            <Setter Property="Padding"     Value="8,6"/>
+            <Setter Property="FontSize"    Value="16"/>
+            <Setter Property="FontFamily"  Value="Segoe Fluent Icons, Segoe MDL2 Assets"/>
+            <Setter Property="Cursor"      Value="Hand"/>
             <Setter Property="MinWidth"  Value="36"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -161,7 +162,7 @@
                            Foreground="{DynamicResource TextSecondary}" Margin="0,0,6,0"/>
                 <TextBox x:Name="FindTextBox" Width="100" VerticalAlignment="Center"
                          KeyDown="FindTextBox_KeyDown"/>
-                <Button Content="✕" Click="FindClose_Click" Margin="4,0,0,0"
+                <Button Content="&#xE711;" Click="FindClose_Click" Margin="4,0,0,0"
                         Style="{StaticResource IconBtn}" FontSize="13" Padding="4,2"/>
             </StackPanel>
         </Border>
@@ -181,109 +182,117 @@
             </StatusBarItem>
         </StatusBar>
 
-        <!-- ═══ Row 2 — main toolbar (icon-only) ════════════════════════════ -->
+        <!-- ═══ Row 2 — main toolbar (Segoe Fluent Icons) ═══════════════════ -->
+        <!--
+             Icon map (Segoe Fluent Icons / Segoe MDL2 Assets Unicode):
+             E838=Folder  E9B4=Ruler  E74E=Save  E8A5=Documents  E792=SaveLocal
+             E8E0=Import  E713=Settings  E7A7=Undo  E7A6=Redo  E2B1=Color
+             E8B2=Video  E74B=Cut  E9A9=Resize  E7B8=Flip  E8A4=ZoomFit
+             E71E=Zoom  E8B3=SelectAll  F168=Group  F169=Ungroup  E72C=Refresh
+             E8CC=SnipRetract  E8C8=Copy  E8D5=ViewAll  E8C4=Tiles  E81C=Ruler2
+        -->
         <Border Grid.Row="2" Background="{DynamicResource ToolbarBg}" Padding="4,3">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <!-- Cluster 1: File / System -->
-                <Button Style="{StaticResource IconBtn}" Content="📂"
+                <Button Style="{StaticResource IconBtn}" Content="&#xE838;"
                         Command="{Binding LoadMeshCommand}"
                         ToolTip="Load Mesh (.obj, .pdo, .fbx, .stl, …)"/>
                 <Separator/>
-                <Button Style="{StaticResource IconBtn}" Content="📐"
+                <Button Style="{StaticResource IconBtn}" Content="&#xE9B4;"
                         Command="{Binding UnfoldCommand}" IsEnabled="{Binding CanUnfold}"
                         ToolTip="Unfold — open setup dialog"/>
                 <Separator/>
-                <Button Style="{StaticResource IconBtn}" Content="💾"
+                <Button Style="{StaticResource IconBtn}" Content="&#xE74E;"
                         Command="{Binding ExportSvgCommand}" IsEnabled="{Binding CanExport}"
                         ToolTip="Export SVG pattern"/>
-                <Button Style="{StaticResource IconBtn}" Content="📑"
+                <Button Style="{StaticResource IconBtn}" Content="&#xE8A5;"
                         Command="{Binding ExportPdfCommand}" IsEnabled="{Binding CanExport}"
                         ToolTip="Export PDF pattern"/>
                 <Separator/>
-                <Button Style="{StaticResource IconBtn}" Content="📁"
+                <Button Style="{StaticResource IconBtn}" Content="&#xE792;"
                         Command="{Binding SaveProjectCommand}" IsEnabled="{Binding CanExport}"
                         ToolTip="Save project (.pmc)"/>
-                <Button Style="{StaticResource IconBtn}" Content="📥"
+                <Button Style="{StaticResource IconBtn}" Content="&#xE8E0;"
                         Command="{Binding LoadProjectCommand}"
                         ToolTip="Load project (.pmc)"/>
-                <Button Style="{StaticResource IconBtn}" Content="⚙"
+                <Button Style="{StaticResource IconBtn}" Content="&#xE713;"
                         Command="{Binding OpenSettingsCommand}"
                         ToolTip="Settings (3D / 2D / Print / General)"/>
                 <Separator/>
                 <!-- Cluster 2: Undo / Redo -->
-                <Button Style="{StaticResource IconBtn}" Content="↩"
+                <Button Style="{StaticResource IconBtn}" Content="&#xE7A7;"
                         Command="{Binding UndoCommand}" IsEnabled="{Binding CanUndo}"
                         ToolTip="Undo  (Ctrl+Z)"/>
-                <Button Style="{StaticResource IconBtn}" Content="↪"
+                <Button Style="{StaticResource IconBtn}" Content="&#xE7A6;"
                         Command="{Binding RedoCommand}" IsEnabled="{Binding CanRedo}"
                         ToolTip="Redo  (Ctrl+Y)"/>
                 <Separator/>
                 <!-- Cluster 3: View / Tools -->
-                <Button Style="{StaticResource IconBtn}" Content="🎨"
+                <Button Style="{StaticResource IconBtn}" Content="&#xE2B1;"
                         Click="TextureButton_Click"
                         Visibility="{Binding TexturePanelVisible}"
                         ToolTip="Texture manager"/>
-                <Button Style="{StaticResource IconBtn}" Content="🎬"
+                <Button Style="{StaticResource IconBtn}" Content="&#xE8B2;"
                         Command="{Binding OpenAssemblyAnimationCommand}"
                         IsEnabled="{Binding CanExport}"
                         ToolTip="Assembly animation — step-by-step fold guide"/>
-                <Button Style="{StaticResource IconBtn}" Content="✄"
+                <Button Style="{StaticResource IconBtn}" Content="&#xE74B;"
                         Click="EditFlapsButton_Click"
                         IsEnabled="{Binding CanExport}"
                         ToolTip="Edit Flaps — control glue tab placement per edge"/>
                 <Separator/>
-                <!-- Cluster 5: 2D Layout tools -->
-                <Button Style="{StaticResource IconBtn}" Content="⇔"
+                <!-- Cluster 4: 2D Layout tools -->
+                <Button Style="{StaticResource IconBtn}" Content="&#xE9A9;"
                         Command="{Binding OpenScaleDialogCommand}"
                         IsEnabled="{Binding CanExport}"
                         ToolTip="Rescale model (change physical output size)"/>
-                <Button Style="{StaticResource IconBtn}" Content="⇅"
+                <Button Style="{StaticResource IconBtn}" Content="&#xE7B8;"
                         Command="{Binding ToggleMirrorInversionCommand}"
                         IsEnabled="{Binding CanUnfold}"
                         ToolTip="Mirror Inversion — flip model along X axis (both 3D and 2D)"/>
-                <Button Style="{StaticResource IconBtn}" Content="⤢"
+                <Button Style="{StaticResource IconBtn}" Content="&#xE8A4;"
                         Command="{Binding FitPageCommand}"
                         IsEnabled="{Binding CanExport}"
                         ToolTip="Fit Page to Window  (F3)"/>
-                <Button Style="{StaticResource IconBtn}" Content="⊡"
+                <Button Style="{StaticResource IconBtn}" Content="&#xE71E;"
                         Command="{Binding ZoomToSelectedCommand}"
                         IsEnabled="{Binding CanExport}"
                         ToolTip="Zoom to Selected pieces  (F4)"/>
-                <Button Style="{StaticResource IconBtn}" Content="⬜"
+                <Button Style="{StaticResource IconBtn}" Content="&#xE8B3;"
                         Command="{Binding SelectAllCommand}"
                         IsEnabled="{Binding CanExport}"
                         ToolTip="Select All pieces  (Ctrl+A)"/>
-                <Button Style="{StaticResource IconBtn}" Content="⊕"
+                <Button Style="{StaticResource IconBtn}" Content="&#xF168;"
                         Command="{Binding GroupCommand}"
                         IsEnabled="{Binding CanExport}"
                         ToolTip="Group selected pieces  (Ctrl+G)"/>
-                <Button Style="{StaticResource IconBtn}" Content="⊖"
+                <Button Style="{StaticResource IconBtn}" Content="&#xF169;"
                         Command="{Binding UngroupCommand}"
                         IsEnabled="{Binding CanExport}"
                         ToolTip="Ungroup selected pieces  (Ctrl+Shift+G)"/>
-                <Button Style="{StaticResource IconBtn}" Content="↺"
+                <Button Style="{StaticResource IconBtn}" Content="&#xE72C;"
                         Command="{Binding UndoUnfoldCommand}"
                         IsEnabled="{Binding CanExport}"
                         ToolTip="Undo Unfold — clear all edge/flap overrides and reset layout"/>
-                <Button Style="{StaticResource IconBtn}" Content="✂"
+                <Button Style="{StaticResource IconBtn}" Content="&#xE8CC;"
                         Command="{Binding ResetCutlineEdgesCommand}"
                         IsEnabled="{Binding CanExport}"
                         ToolTip="Reset all cut edges → fold (Undo-able)"/>
-                <Button Style="{StaticResource IconBtn}" Content="📋"
+                <Button Style="{StaticResource IconBtn}" Content="&#xE8C8;"
                         Click="CopyToClipboard_Click"
                         IsEnabled="{Binding CanExport}"
                         ToolTip="Copy 2D layout to clipboard (bitmap)"/>
-                <Button Style="{StaticResource IconBtn}" Content="□"
+                <Button Style="{StaticResource IconBtn}" Content="&#xE8D5;"
                         Command="{Binding ToggleShow2DOnlyCommand}"
                         IsEnabled="{Binding CanExport}"
                         ToolTip="Show 2D Layout Only (hide 3D viewport)"/>
                 <Separator/>
-                <!-- Cluster 6: Pepakura model tools (s38) -->
-                <Button Style="{StaticResource IconBtn}" Content="⬚"
+                <!-- Cluster 5: Pepakura model tools -->
+                <Button Style="{StaticResource IconBtn}" Content="&#xE8C4;"
                         Command="{Binding SeparateAllFacesCommand}"
                         IsEnabled="{Binding CanUnfold}"
                         ToolTip="Separate All Faces — set every edge to cut (each face = own piece)"/>
-                <Button Style="{StaticResource IconBtn}" Content="⟷"
+                <Button Style="{StaticResource IconBtn}" Content="&#xE81C;"
                         Command="{Binding ToggleShowDimensionLinesCommand}"
                         IsEnabled="{Binding CanUnfold}"
                         ToolTip="Show Dimension Lines — overlay W/H/D labels in 3D viewport"/>
