@@ -66,6 +66,36 @@ pub async fn get_mesh_info(mesh: Mesh) -> Result<MeshInfoDto, String> {
     })
 }
 
+/// Scale and/or mirror-X all vertices of a mesh, then recompute bounds + edges.
+/// `scale_factor` multiplies every vertex coordinate (converts mesh units → mm).
+/// `mirror_x` flips the X axis and fixes face winding so normals stay outward.
+#[command]
+pub async fn transform_mesh(
+    mut mesh: Mesh,
+    scale_factor: f64,
+    mirror_x: bool,
+) -> Result<Mesh, String> {
+    for v in &mut mesh.vertices {
+        v.x *= scale_factor;
+        v.y *= scale_factor;
+        v.z *= scale_factor;
+        if mirror_x { v.x = -v.x; }
+    }
+
+    if mirror_x {
+        // Flip winding to maintain outward normals after X mirror.
+        for face in &mut mesh.faces {
+            face.vertices.swap(1, 2);
+            if let Some(ref mut uvs) = face.uvs { uvs.swap(1, 2); }
+        }
+        // Re-stamp edge adjacency after winding change.
+        mesh.edges = build_edges(&mut mesh.faces);
+    }
+
+    mesh.recompute_bounds();
+    Ok(mesh)
+}
+
 /// Read an image file from disk and return it as a base64-encoded data URI.
 /// Used by the 3D viewport to load textures via `convertFileSrc` alternative.
 #[command]

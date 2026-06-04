@@ -1,11 +1,13 @@
 export type Theme     = 'light' | 'dark' | 'system';
 export type ScaleUnit = 'mm' | 'cm' | 'inch';
+export type TabShape  = 'Trapezoid' | 'Rectangle' | 'Triangle';
+export type PaperPreset = 'A4' | 'A3' | 'A2' | 'A1' | 'Letter' | 'Legal' | 'Custom';
 
 export interface AppSettings {
   // Glue tab
   tabWidthMm:       number;
   tabAngleDeg:      number;
-  tabShape:         string;    // "Trapezoid" | "Rectangle" | "Triangle"
+  tabShape:         TabShape;
   alternateFlaps:   boolean;
 
   // Paper / layout
@@ -24,7 +26,12 @@ export interface AppSettings {
   showPageNumbers:  boolean;
   showFoldAngles:   boolean;
 
-  // Export
+  // View 3D
+  viewport3dBg:          string;
+  viewport3dWireframe:   boolean;
+  viewport3dFaceOpacity: number;
+
+  // Export / print
   foldLineColor:    string;
   cutLineColor:     string;
   foldLineWidth:    number;
@@ -41,6 +48,15 @@ export interface AppSettings {
   scaleUnit:        ScaleUnit;
   outlinePaddingMm: number;
 }
+
+export const PAPER_PRESETS: Record<Exclude<PaperPreset, 'Custom'>, [number, number]> = {
+  A4:     [210,   297],
+  A3:     [297,   420],
+  A2:     [420,   594],
+  A1:     [594,   841],
+  Letter: [215.9, 279.4],
+  Legal:  [215.9, 355.6],
+};
 
 export const DEFAULT_SETTINGS: AppSettings = {
   tabWidthMm:       5,
@@ -61,6 +77,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   showGlueTabs:     true,
   showPageNumbers:  false,
   showFoldAngles:   false,
+
+  viewport3dBg:          '#1a1a2e',
+  viewport3dWireframe:   false,
+  viewport3dFaceOpacity: 1.0,
 
   foldLineColor:    '#4169e1',
   cutLineColor:     '#ff0000',

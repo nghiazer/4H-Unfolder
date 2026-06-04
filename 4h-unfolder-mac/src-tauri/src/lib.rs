@@ -27,6 +27,7 @@ pub fn run() {
             commands::mesh::load_obj_from_bytes,
             commands::mesh::get_mesh_info,
             commands::mesh::get_texture_as_base64,
+            commands::mesh::transform_mesh,
             // Unfolding
             commands::unfold::unfold_mesh,
             commands::unfold::get_face_adjacency,

@@ -47,6 +47,7 @@ rayon        = "1.10"
 # Base64 encoding (texture export)
 base64       = "0.22"
 
+
 # Platform dirs (settings path)
 dirs         = "5.0"
 

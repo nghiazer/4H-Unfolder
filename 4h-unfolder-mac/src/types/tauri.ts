@@ -20,6 +20,9 @@ export const tauriCommands = {
   getTextureAsBase64: (path: string) =>
     invoke<string>('get_texture_as_base64', { path }),
 
+  transformMesh: (mesh: Mesh, scaleFactor: number, mirrorX: boolean) =>
+    invoke<Mesh>('transform_mesh', { mesh, scaleFactor, mirrorX }),
+
   // -------------------------------------------------------------------------
   // Unfolding
   // -------------------------------------------------------------------------

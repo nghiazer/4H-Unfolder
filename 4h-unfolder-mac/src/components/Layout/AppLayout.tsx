@@ -4,6 +4,8 @@ import { PatternCanvas } from '@/components/Canvas/PatternCanvas';
 import { PropertiesPanel } from '@/components/Sidebar/PropertiesPanel';
 import { SettingsDialog } from '@/components/Dialogs/SettingsDialog';
 import { MeshViewer } from '@/components/Viewport3D/MeshViewer';
+import { ScaleDialog } from '@/components/Dialogs/ScaleDialog';
+import { ModelOrientationDialog } from '@/components/Dialogs/ModelOrientationDialog';
 import { useSettingsStore } from '@/state/settingsStore';
 import { useUIStore } from '@/state/uiStore';
 import { useGlobalKeyboard } from '@/hooks/useKeyboard';
@@ -98,6 +100,8 @@ export function AppLayout() {
 
       {/* Dialogs */}
       <SettingsDialog />
+      <ScaleDialog />
+      <ModelOrientationDialog />
     </div>
   );
 }

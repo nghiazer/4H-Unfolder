@@ -39,6 +39,8 @@ interface UIState {
     settings:  boolean;
     export:    boolean;
     editFlaps: boolean;
+    scale:     boolean;
+    orient:    boolean;
   };
 
   setMode:             (mode: EditorMode) => void;
@@ -71,7 +73,7 @@ export const useUIStore = create<UIState>()(
     lasso:           { active: false, points: [] },
     showViewport3D:  false,
     viewport:  { scale: 1, tx: 0, ty: 0 },
-    dialogs:   { settings: false, export: false, editFlaps: false },
+    dialogs:   { settings: false, export: false, editFlaps: false, scale: false, orient: false },
 
     setMode: (mode) => set((s) => { s.mode = mode; }),
 

@@ -20,6 +20,11 @@ pub struct AppSettings {
     pub pages_tall:      u32,
     pub auto_arrange:    bool,
 
+    // View 3D display settings
+    pub viewport3d_bg:           String,
+    pub viewport3d_wireframe:    bool,
+    pub viewport3d_face_opacity: f64,
+
     // View 2D display toggles
     pub show_fold_lines:   bool,
     pub show_cut_lines:    bool,
@@ -62,6 +67,10 @@ impl Default for AppSettings {
             pages_wide:       1,
             pages_tall:       1,
             auto_arrange:     true,
+
+            viewport3d_bg:           "#1a1a2e".to_string(),
+            viewport3d_wireframe:    false,
+            viewport3d_face_opacity: 1.0,
 
             show_fold_lines:   true,
             show_cut_lines:    true,

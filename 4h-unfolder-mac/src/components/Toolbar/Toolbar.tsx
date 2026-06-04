@@ -1,4 +1,4 @@
-import { MousePointer2, Hand, Scissors, LayoutGrid, Download, Settings, FolderOpen, Zap, Box } from 'lucide-react';
+import { MousePointer2, Hand, Scissors, LayoutGrid, Download, Settings, FolderOpen, Zap, Box, Ruler, FlipHorizontal } from 'lucide-react';
 import { useUIStore, type EditorMode } from '@/state/uiStore';
 import { useUnfoldStore } from '@/state/unfoldStore';
 import { useMeshStore } from '@/state/meshStore';
@@ -56,6 +56,22 @@ export function Toolbar() {
         disabled={!hasMesh || unfolding}
         loading={unfolding}
         onClick={unfold}
+      />
+
+      <Separator />
+
+      {/* Model transforms */}
+      <ToolbarButton
+        icon={<Ruler size={16} />}
+        label="Scale model"
+        disabled={!hasMesh}
+        onClick={() => openDialog('scale')}
+      />
+      <ToolbarButton
+        icon={<FlipHorizontal size={16} />}
+        label="Orientation"
+        disabled={!hasMesh}
+        onClick={() => openDialog('orient')}
       />
 
       <Separator />
