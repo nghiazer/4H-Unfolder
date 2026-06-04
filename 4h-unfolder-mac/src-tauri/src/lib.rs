@@ -1,5 +1,6 @@
 mod algorithms;
 mod commands;
+mod loaders;
 mod models;
 
 use tauri::Manager;
@@ -28,6 +29,9 @@ pub fn run() {
             commands::mesh::get_mesh_info,
             commands::mesh::get_texture_as_base64,
             commands::mesh::transform_mesh,
+            commands::mesh::load_mesh,
+            // Assembly
+            commands::assembly::get_assembly_steps,
             // Unfolding
             commands::unfold::unfold_mesh,
             commands::unfold::get_face_adjacency,

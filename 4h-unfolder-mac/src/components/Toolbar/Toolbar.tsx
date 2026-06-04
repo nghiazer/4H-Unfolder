@@ -1,4 +1,4 @@
-import { MousePointer2, Hand, Scissors, LayoutGrid, Download, Settings, FolderOpen, Zap, Box, Ruler, FlipHorizontal } from 'lucide-react';
+import { MousePointer2, Hand, Scissors, LayoutGrid, Download, Settings, FolderOpen, Zap, Box, Ruler, FlipHorizontal, PackageOpen } from 'lucide-react';
 import { useUIStore, type EditorMode } from '@/state/uiStore';
 import { useUnfoldStore } from '@/state/unfoldStore';
 import { useMeshStore } from '@/state/meshStore';
@@ -7,7 +7,12 @@ import { exportSvgDialog } from '@/services/exportService';
 import { ToolbarButton } from './ToolbarButton';
 import { Separator } from './Separator';
 
-export function Toolbar() {
+interface Props {
+  showAssembly:      boolean;
+  onToggleAssembly:  () => void;
+}
+
+export function Toolbar({ showAssembly, onToggleAssembly }: Props) {
   const mode             = useUIStore((s) => s.mode);
   const setMode          = useUIStore((s) => s.setMode);
   const openDialog       = useUIStore((s) => s.openDialog);
@@ -88,6 +93,17 @@ export function Toolbar() {
         label="Export SVG (⌘S)"
         disabled={!hasResult}
         onClick={exportSvgDialog}
+      />
+
+      <Separator />
+
+      {/* Assembly */}
+      <ToolbarButton
+        icon={<PackageOpen size={16} />}
+        label="Assembly"
+        active={showAssembly}
+        disabled={!hasResult}
+        onClick={onToggleAssembly}
       />
 
       <div className="flex-1" />

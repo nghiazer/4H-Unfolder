@@ -1,8 +1,10 @@
 /** Typed wrappers around the Tauri `invoke` API. */
 import { invoke } from '@tauri-apps/api/core';
 import type { Mesh, MeshInfoDto } from './mesh';
-import type { UnfoldOptions, UnfoldResponse } from './unfold';
+import type { UnfoldOptions, UnfoldResponse, AssemblyStep } from './unfold';
 import type { AppSettings } from './settings';
+
+export type { AssemblyStep };
 
 export const tauriCommands = {
   // -------------------------------------------------------------------------
@@ -22,6 +24,12 @@ export const tauriCommands = {
 
   transformMesh: (mesh: Mesh, scaleFactor: number, mirrorX: boolean) =>
     invoke<Mesh>('transform_mesh', { mesh, scaleFactor, mirrorX }),
+
+  loadMesh: (path: string) =>
+    invoke<Mesh>('load_mesh', { path }),
+
+  getAssemblySteps: (mesh: Mesh) =>
+    invoke<AssemblyStep[]>('get_assembly_steps', { mesh }),
 
   // -------------------------------------------------------------------------
   // Unfolding

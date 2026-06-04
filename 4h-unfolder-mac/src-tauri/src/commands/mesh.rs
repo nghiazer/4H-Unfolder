@@ -44,6 +44,39 @@ pub async fn load_obj_from_bytes(bytes: Vec<u8>) -> Result<Mesh, String> {
     parse_obj_bytes(&bytes, None)
 }
 
+/// Universal mesh loader — dispatches on file extension.
+/// Supports: .obj (tobj), .pdo (Pepakura v3).
+/// Returns an error with a clear message for unsupported formats.
+#[command]
+pub async fn load_mesh(path: String) -> Result<Mesh, String> {
+    let ext = std::path::Path::new(&path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
+    match ext.as_str() {
+        "obj" => {
+            let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+            let dir   = std::path::Path::new(&path)
+                .parent()
+                .map(|p| p.to_string_lossy().into_owned());
+            parse_obj_bytes(&bytes, dir.as_deref())
+        }
+        "pdo" => {
+            let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+            crate::loaders::pdo_loader::load_pdo(&bytes)
+        }
+        "fbx" | "glb" | "gltf" | "dae" | "stl" | "ply" | "3ds" => {
+            Err(format!(
+                "Format '.{}' requires Assimp. Run `brew install assimp` and rebuild.",
+                ext
+            ))
+        }
+        _ => Err(format!("Unsupported mesh format: .{}", ext)),
+    }
+}
+
 /// Return metadata about an already-loaded mesh without re-sending the full payload.
 #[command]
 pub async fn get_mesh_info(mesh: Mesh) -> Result<MeshInfoDto, String> {

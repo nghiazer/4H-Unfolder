@@ -25,6 +25,8 @@ interface UIState {
   hoveredEdgeId:     number | null;
   /** Edge being edited in the EditFlaps dialog */
   editingEdgeId:     number | null;
+  /** Face that was clicked when opening the EditFlaps dialog (for OnOnThisSide) */
+  editingFaceId:     number | null;
   lasso:             LassoState;
   /** Canvas viewport: scale and translation. */
   viewport: {
@@ -51,6 +53,7 @@ interface UIState {
   setHoveredEdge:      (id: number | null) => void;
   setSelectedPiece:    (id: number | null) => void;
   setEditingEdge:      (id: number | null) => void;
+  openEditFlaps:       (edgeId: number, faceId: number) => void;
   toggleViewport3D:    () => void;
   setViewport:         (vp: Partial<UIState['viewport']>) => void;
   openDialog:          (d: keyof UIState['dialogs']) => void;
@@ -70,6 +73,7 @@ export const useUIStore = create<UIState>()(
     hoveredFaceId:   null,
     hoveredEdgeId:   null,
     editingEdgeId:   null,
+    editingFaceId:   null,
     lasso:           { active: false, points: [] },
     showViewport3D:  false,
     viewport:  { scale: 1, tx: 0, ty: 0 },
@@ -99,6 +103,13 @@ export const useUIStore = create<UIState>()(
     setHoveredEdge:   (id) => set((s) => { s.hoveredEdgeId = id; }),
     setSelectedPiece: (id) => set((s) => { s.selectedPieceId = id; }),
     setEditingEdge:   (id) => set((s) => { s.editingEdgeId = id; }),
+
+    openEditFlaps: (edgeId, faceId) =>
+      set((s) => {
+        s.editingEdgeId  = edgeId;
+        s.editingFaceId  = faceId;
+        s.dialogs.editFlaps = true;
+      }),
 
     toggleViewport3D: () => set((s) => { s.showViewport3D = !s.showViewport3D; }),
 

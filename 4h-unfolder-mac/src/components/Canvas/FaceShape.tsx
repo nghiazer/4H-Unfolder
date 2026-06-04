@@ -27,9 +27,9 @@ export function FaceShape({ face, scale, cutPairIds }: Props) {
   const isHovered    = useUIStore((s) => s.hoveredFaceId === face.faceId);
   const mode         = useUIStore((s) => s.mode);
   const toggle       = useUIStore((s) => s.toggleFaceSelect);
-  const setHovered   = useUIStore((s) => s.setHoveredFace);
-  const setEditEdge  = useUIStore((s) => s.setEditingEdge);
-  const hoveredEdge  = useUIStore((s) => s.hoveredEdgeId);
+  const setHovered     = useUIStore((s) => s.setHoveredFace);
+  const openEditFlaps  = useUIStore((s) => s.openEditFlaps);
+  const hoveredEdge    = useUIStore((s) => s.hoveredEdgeId);
   const multiKey     = useMultiSelectKey();
 
   const setEdgeOverride  = useUnfoldStore((s) => s.setEdgeOverride);
@@ -66,8 +66,7 @@ export function FaceShape({ face, scale, cutPairIds }: Props) {
         }
         unfold();
       } else if (mode === 'editFlaps') {
-        setEditEdge(meshEdgeId);
-        useUIStore.getState().openDialog('editFlaps');
+        openEditFlaps(meshEdgeId, face.faceId);
       } else {
         // select mode: clicking edge = noop (handled by face click)
         handleFaceClick(e as unknown as KonvaEventObject<MouseEvent>);

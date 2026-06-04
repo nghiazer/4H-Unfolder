@@ -5,7 +5,9 @@ import { PropertiesPanel } from '@/components/Sidebar/PropertiesPanel';
 import { SettingsDialog } from '@/components/Dialogs/SettingsDialog';
 import { MeshViewer } from '@/components/Viewport3D/MeshViewer';
 import { ScaleDialog } from '@/components/Dialogs/ScaleDialog';
+import { EditFlapsDialog } from '@/components/Dialogs/EditFlapsDialog';
 import { ModelOrientationDialog } from '@/components/Dialogs/ModelOrientationDialog';
+import { AssemblyPanel } from '@/components/Assembly/AssemblyPanel';
 import { useSettingsStore } from '@/state/settingsStore';
 import { useUIStore } from '@/state/uiStore';
 import { useGlobalKeyboard } from '@/hooks/useKeyboard';
@@ -15,6 +17,7 @@ const MIN_PANE_PX = 180;
 export function AppLayout() {
   const loadSettings     = useSettingsStore((s) => s.loadSettings);
   const showViewport3D   = useUIStore((s) => s.showViewport3D);
+  const [showAssembly, setShowAssembly] = useState(false);
 
   const canvasRef   = useRef<HTMLDivElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
@@ -66,7 +69,7 @@ export function AppLayout() {
 
   return (
     <div className="flex flex-col h-screen bg-background text-foreground font-sans overflow-hidden">
-      <Toolbar />
+      <Toolbar showAssembly={showAssembly} onToggleAssembly={() => setShowAssembly((v) => !v)} />
 
       <div ref={splitContainerRef} className="flex flex-1 overflow-hidden">
         {/* 3D Viewport — conditionally visible */}
@@ -92,9 +95,13 @@ export function AppLayout() {
           <PatternCanvas width={canvasSize.width} height={canvasSize.height} />
         </div>
 
-        {/* Right sidebar */}
-        <aside className="w-56 border-l border-border bg-sidebar overflow-y-auto flex-shrink-0">
-          <PropertiesPanel />
+        {/* Right sidebar — Properties or Assembly */}
+        <aside className="w-56 border-l border-border bg-sidebar overflow-y-auto flex-shrink-0 flex flex-col">
+          {showAssembly ? (
+            <AssemblyPanel onClose={() => setShowAssembly(false)} />
+          ) : (
+            <PropertiesPanel />
+          )}
         </aside>
       </div>
 
@@ -102,6 +109,7 @@ export function AppLayout() {
       <SettingsDialog />
       <ScaleDialog />
       <ModelOrientationDialog />
+      <EditFlapsDialog />
     </div>
   );
 }
