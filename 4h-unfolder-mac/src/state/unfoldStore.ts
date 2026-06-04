@@ -21,6 +21,7 @@ interface UnfoldState {
   removeFlapOverride:  (edgeId: number) => void;
   setEdgeOverride:     (edgeId: number, type: 'Fold' | 'Cut') => void;
   clearEdgeOverride:   (edgeId: number) => void;
+  getEdgeOverride:     (edgeId: number) => 'Fold' | 'Cut' | undefined;
   setPieceOffset:      (pieceId: number, x: number, y: number) => void;
   setPieceRotation:    (pieceId: number, deg: number) => void;
   clearResult:         () => void;
@@ -82,6 +83,8 @@ export const useUnfoldStore = create<UnfoldState>()(
 
     clearEdgeOverride: (edgeId) =>
       set((s) => { s.edgeOverrides.delete(edgeId); }),
+
+    getEdgeOverride: (edgeId) => get().edgeOverrides.get(edgeId),
 
     setPieceOffset: (pieceId, x, y) =>
       set((s) => {

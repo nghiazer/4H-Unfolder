@@ -51,6 +51,9 @@ dirs         = "5.0"
 default          = ["custom-protocol"]
 custom-protocol  = ["tauri/custom-protocol"]
 
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "macros"] }
+
 [profile.release]
 opt-level     = 3
 lto           = "thin"

@@ -63,3 +63,17 @@ export interface Mesh {
   embeddedTextures:      EmbeddedTexture[];
   bounds:                BoundingBox;
 }
+
+/** Lightweight metadata returned by `get_mesh_info` — avoids sending the full Mesh payload. */
+export interface MeshInfoDto {
+  faceCount:              number;
+  vertexCount:            number;
+  edgeCount:              number;
+  materialCount:          number;
+  hasUvs:                 boolean;
+  bounds:                 BoundingBox;
+  suggestedTexturePath?:  string;
+  materialNames:          string[];
+  /** True when `build_edges()` has stamped face.edgeIds correctly. */
+  edgesStamped:           boolean;
+}

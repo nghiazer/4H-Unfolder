@@ -1,6 +1,6 @@
 /** Typed wrappers around the Tauri `invoke` API. */
 import { invoke } from '@tauri-apps/api/core';
-import type { Mesh } from './mesh';
+import type { Mesh, MeshInfoDto } from './mesh';
 import type { UnfoldOptions, UnfoldResponse } from './unfold';
 import type { AppSettings } from './settings';
 
@@ -13,6 +13,9 @@ export const tauriCommands = {
 
   loadObjFromBytes: (bytes: number[]) =>
     invoke<Mesh>('load_obj_from_bytes', { bytes }),
+
+  getMeshInfo: (mesh: Mesh) =>
+    invoke<MeshInfoDto>('get_mesh_info', { mesh }),
 
   // -------------------------------------------------------------------------
   // Unfolding
