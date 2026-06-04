@@ -1,6 +1,28 @@
 use crate::models::mesh::{BoundingBox, EdgeType, Face, Mesh, MeshEdge, Vertex};
+use serde::Serialize;
 use std::collections::HashMap;
 use tauri::command;
+
+// ---------------------------------------------------------------------------
+// DTOs
+// ---------------------------------------------------------------------------
+
+/// Summary of a loaded mesh — returned by `get_mesh_info` without the full
+/// vertex/edge/face payload.  Mirrors the `MeshInfoDto` TypeScript interface.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MeshInfoDto {
+    pub face_count:             usize,
+    pub vertex_count:           usize,
+    pub edge_count:             usize,
+    pub material_count:         usize,
+    pub has_uvs:                bool,
+    pub bounds:                 BoundingBox,
+    pub suggested_texture_path: Option<String>,
+    pub material_names:         Vec<String>,
+    /// True when every face has `edge_ids` stamped (i.e. build_edges ran).
+    pub edges_stamped:          bool,
+}
 
 // ---------------------------------------------------------------------------
 // Public Tauri commands
@@ -20,6 +42,28 @@ pub async fn load_obj(path: String) -> Result<Mesh, String> {
 #[command]
 pub async fn load_obj_from_bytes(bytes: Vec<u8>) -> Result<Mesh, String> {
     parse_obj_bytes(&bytes, None)
+}
+
+/// Return metadata about an already-loaded mesh without re-sending the full payload.
+#[command]
+pub async fn get_mesh_info(mesh: Mesh) -> Result<MeshInfoDto, String> {
+    let edges_stamped = mesh.faces.iter().all(|f| {
+        // After build_edges(), at least one edge_id must be non-zero
+        // (for any mesh with more than 0 edges).
+        mesh.edges.len() == 0 || f.edge_ids.iter().any(|&e| e < mesh.edges.len())
+    });
+
+    Ok(MeshInfoDto {
+        face_count:             mesh.faces.len(),
+        vertex_count:           mesh.vertices.len(),
+        edge_count:             mesh.edges.len(),
+        material_count:         mesh.material_names.len(),
+        has_uvs:                !mesh.uvs.is_empty(),
+        bounds:                 mesh.bounds.clone(),
+        suggested_texture_path: mesh.suggested_texture_path.clone(),
+        material_names:         mesh.material_names.clone(),
+        edges_stamped,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -233,14 +277,106 @@ mod tests {
         let mut faces = vec![
             Face { id: 0, vertices: [0, 1, 2], edge_ids: [0;3], material_id: -1, uvs: None },
             Face { id: 1, vertices: [1, 3, 2], edge_ids: [0;3], material_id: -1, uvs: None },
-            Face { id: 2, vertices: [1, 4, 2], edge_ids: [0;3], material_id: -1, uvs: None }, // 3rd face on same edge
+            Face { id: 2, vertices: [1, 4, 2], edge_ids: [0;3], material_id: -1, uvs: None },
         ];
         let edges = build_edges(&mut faces);
         let shared = edges.iter().find(|e| {
             (e.vert_a == 1 && e.vert_b == 2) || (e.vert_a == 2 && e.vert_b == 1)
         }).unwrap();
-        // face_b should be face 1 (not face 2, which was silently ignored).
         assert!(shared.face_b == Some(1) || shared.face_b == Some(0),
             "non-manifold 3rd face should not overwrite face_b");
+    }
+
+    // -----------------------------------------------------------------------
+    // Integration tests — use fixture OBJ files
+    // -----------------------------------------------------------------------
+
+    fn fixture_path(name: &str) -> String {
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures")
+            .join(name)
+            .to_string_lossy()
+            .into_owned()
+    }
+
+    #[tokio::test]
+    async fn tetrahedron_has_correct_topology() {
+        let mesh = load_obj(fixture_path("tetrahedron.obj"))
+            .await
+            .expect("failed to load tetrahedron.obj");
+
+        assert_eq!(mesh.faces.len(),    4, "tetrahedron: 4 faces");
+        assert_eq!(mesh.vertices.len(), 4, "tetrahedron: 4 vertices");
+        assert_eq!(mesh.edges.len(),    6, "tetrahedron: 6 edges");
+    }
+
+    #[tokio::test]
+    async fn tetrahedron_edge_ids_stamped() {
+        let mesh = load_obj(fixture_path("tetrahedron.obj"))
+            .await
+            .expect("failed to load tetrahedron.obj");
+
+        // Every face must have all 3 edge_ids pointing to valid edges.
+        for face in &mesh.faces {
+            for &eid in &face.edge_ids {
+                assert!(eid < mesh.edges.len(),
+                    "face {} edge_id {} out of range (edge count {})",
+                    face.id, eid, mesh.edges.len());
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn cube_has_correct_topology() {
+        let mesh = load_obj(fixture_path("cube.obj"))
+            .await
+            .expect("failed to load cube.obj");
+
+        assert_eq!(mesh.faces.len(),    12, "cube: 12 triangular faces");
+        assert_eq!(mesh.vertices.len(),  8, "cube: 8 vertices");
+        // A triangulated cube has 18 edges (12 boundary + 6 internal diagonals).
+        assert_eq!(mesh.edges.len(),    18, "cube: 18 edges");
+    }
+
+    #[tokio::test]
+    async fn cube_interior_edges_have_two_faces() {
+        let mesh = load_obj(fixture_path("cube.obj"))
+            .await
+            .expect("failed to load cube.obj");
+
+        // All 18 edges should have face_b (closed manifold cube).
+        for edge in &mesh.edges {
+            assert!(edge.face_b.is_some(),
+                "cube edge {} (v{}-v{}) should be interior", edge.id, edge.vert_a, edge.vert_b);
+        }
+    }
+
+    #[tokio::test]
+    async fn get_mesh_info_returns_correct_counts() {
+        let mesh = load_obj(fixture_path("tetrahedron.obj"))
+            .await
+            .expect("failed to load tetrahedron.obj");
+
+        let info = get_mesh_info(mesh).await.unwrap();
+        assert_eq!(info.face_count,   4);
+        assert_eq!(info.vertex_count, 4);
+        assert_eq!(info.edge_count,   6);
+        assert!(info.edges_stamped,  "edge_ids should be stamped after load");
+        assert!(!info.has_uvs,       "tetrahedron.obj has no UVs");
+    }
+
+    #[tokio::test]
+    async fn mesh_bounds_computed() {
+        let mesh = load_obj(fixture_path("cube.obj"))
+            .await
+            .expect("failed to load cube.obj");
+
+        // Unit cube centred at origin: min ≈ -0.5, max ≈ 0.5.
+        for i in 0..3 {
+            assert!((mesh.bounds.min[i] + 0.5).abs() < 1e-6,
+                "cube min[{i}] should be -0.5, got {}", mesh.bounds.min[i]);
+            assert!((mesh.bounds.max[i] - 0.5).abs() < 1e-6,
+                "cube max[{i}] should be +0.5, got {}", mesh.bounds.max[i]);
+        }
     }
 }
