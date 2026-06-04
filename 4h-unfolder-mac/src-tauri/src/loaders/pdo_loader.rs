@@ -97,6 +97,71 @@ impl<'a> Reader<'a> {
 }
 
 // ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn invalid_signature_returns_err() {
+        assert!(load_pdo(b"not a pdo file at all").is_err());
+    }
+
+    #[test]
+    fn empty_bytes_returns_err() {
+        assert!(load_pdo(b"").is_err());
+    }
+
+    #[test]
+    fn truncated_signature_returns_err() {
+        assert!(load_pdo(b"versi").is_err());
+    }
+
+    #[test]
+    fn locked_pdo_returns_descriptive_err() {
+        // Build a minimal PDO-like header: signature + 4 empty wstrings + lock_flag=1
+        let mut data: Vec<u8> = Vec::new();
+        data.extend_from_slice(b"version 3\n");
+        // 4 empty wstrings (each = u32(0))
+        for _ in 0..4 { data.extend_from_slice(&0u32.to_le_bytes()); }
+        // lock_flag = 1
+        data.extend_from_slice(&1u32.to_le_bytes());
+
+        let result = load_pdo(&data);
+        assert!(result.is_err(), "locked PDO should return an error");
+        let msg = result.unwrap_err();
+        assert!(
+            msg.contains("locked") || msg.contains("password"),
+            "error message should mention lock/password, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn signature_check_is_case_sensitive() {
+        // "Version 3\n" (capital V) must fail.
+        assert!(load_pdo(b"Version 3\n").is_err());
+    }
+
+    #[test]
+    fn reader_skip_does_not_panic_on_large_skip() {
+        // Reader should not panic when skipping past end of data.
+        let data = b"hello";
+        let mut r = Reader::new(data);
+        r.skip(1000); // way past end
+        assert_eq!(r.pos, data.len());
+    }
+
+    #[test]
+    fn reader_read_u32_returns_none_on_short_data() {
+        let data = &[0u8, 1u8, 2u8]; // only 3 bytes, need 4 for u32
+        let mut r = Reader::new(data);
+        assert!(r.read_u32().is_none());
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Public entry point
 // ---------------------------------------------------------------------------
 

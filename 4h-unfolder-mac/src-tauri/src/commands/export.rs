@@ -445,6 +445,111 @@ fn build_minimal_pdf(pw_mm: f64, ph_mm: f64, content: &[u8]) -> Vec<u8> {
     buf
 }
 
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // edge_key ----------------------------------------------------------------
+
+    #[test]
+    fn edge_key_is_symmetric() {
+        let k1 = edge_key(1.5, 2.0, 3.0, 4.5);
+        let k2 = edge_key(3.0, 4.5, 1.5, 2.0);
+        assert_eq!(k1, k2, "edge_key must be symmetric");
+    }
+
+    #[test]
+    fn edge_key_dedup_with_hashset() {
+        let mut set = EdgeSet::new();
+        set.insert(edge_key(0.0, 0.0, 1.0, 0.0));
+        let inserted = set.insert(edge_key(1.0, 0.0, 0.0, 0.0));
+        assert!(!inserted, "reverse endpoint should be deduplicated");
+        assert_eq!(set.len(), 1);
+    }
+
+    #[test]
+    fn edge_key_rounds_to_1_micrometer() {
+        // Difference of 0.0000001 mm (0.1 μm) should round to same key
+        let k1 = edge_key(1.0000001, 0.0, 2.0, 0.0);
+        let k2 = edge_key(1.0,       0.0, 2.0, 0.0);
+        assert_eq!(k1, k2, "sub-micrometer difference should be rounded away");
+    }
+
+    // page_path ---------------------------------------------------------------
+
+    #[test]
+    fn page_path_single_page_returns_base() {
+        let p = page_path("/out/pattern.svg", 0, 0, 1, 1);
+        assert_eq!(p, "/out/pattern.svg");
+    }
+
+    #[test]
+    fn page_path_multipage_adds_row_col_suffix() {
+        let p = page_path("/out/pattern.svg", 1, 2, 3, 4);
+        assert_eq!(p, "/out/pattern_p1_2.svg");
+    }
+
+    #[test]
+    fn page_path_pdf_extension_preserved() {
+        let p = page_path("/tmp/export.pdf", 0, 1, 2, 2);
+        assert_eq!(p, "/tmp/export_p0_1.pdf");
+    }
+
+    #[test]
+    fn page_path_row_zero_col_zero_no_suffix_for_1x1() {
+        // 1×1 grid → no suffix regardless of r,c
+        assert_eq!(page_path("/a/b.svg", 0, 0, 1, 1), "/a/b.svg");
+    }
+
+    // pdf_dash_op -------------------------------------------------------------
+
+    #[test]
+    fn pdf_dash_op_two_values() {
+        let op = pdf_dash_op("4,2");
+        assert!(op.starts_with('['), "should start with '['");
+        assert!(op.ends_with("] 0 d\n"), "should end with '] 0 d\\n'");
+    }
+
+    #[test]
+    fn pdf_dash_op_empty_produces_solid() {
+        let op = pdf_dash_op("");
+        assert_eq!(op, "[] 0 d\n", "empty dash string → solid");
+    }
+
+    #[test]
+    fn pdf_dash_op_single_value() {
+        let op = pdf_dash_op("5");
+        assert!(op.contains('[') && op.ends_with("] 0 d\n"));
+    }
+
+    // hex_to_rgb01 ------------------------------------------------------------
+
+    #[test]
+    fn hex_white_is_all_ones() {
+        let (r, g, b) = hex_to_rgb01("#ffffff");
+        assert!((r - 1.0).abs() < 1e-6);
+        assert!((g - 1.0).abs() < 1e-6);
+        assert!((b - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn hex_black_is_all_zeros() {
+        let (r, g, b) = hex_to_rgb01("#000000");
+        assert_eq!((r, g, b), (0.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn hex_red_channel_only() {
+        let (r, g, b) = hex_to_rgb01("#ff0000");
+        assert!((r - 1.0).abs() < 1e-6);
+        assert_eq!((g, b), (0.0, 0.0));
+    }
+}
+
 fn render_pdf_multipage(resp: &UnfoldResponse, opts: &ExportOptions) -> Result<(), String> {
     let sf      = opts.scale_factor;
     let total_w = resp.sheet_width_mm  * sf;

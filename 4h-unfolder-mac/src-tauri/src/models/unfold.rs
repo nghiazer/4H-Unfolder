@@ -274,3 +274,85 @@ pub struct AssemblyStep {
     pub parent_group_id: usize,
     pub face_ids:      Vec<usize>,
 }
+
+// ---------------------------------------------------------------------------
+// Tests — FlapMode / FlapOverride serialization round-trips
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const ALL_VARIANTS: &[(FlapMode, &str)] = &[
+        (FlapMode::Default,           "Default"),
+        (FlapMode::SwitchPosition,    "SwitchPosition"),
+        (FlapMode::OnOnThisSide,      "OnOn_ThisSide"),
+        (FlapMode::OffOnOtherSide,    "OffOn_OtherSide"),
+        (FlapMode::OffOffNoFlap,      "OffOff_NoFlap"),
+        (FlapMode::OnOnBothSides,     "OnOn_BothSides"),
+        (FlapMode::BorderMountainFold,"Border_MountainFold"),
+        (FlapMode::BorderValleyFold,  "Border_ValleyFold"),
+        (FlapMode::BorderNoFold,      "Border_NoFold"),
+        (FlapMode::BorderNoFlap,      "Border_NoFlap"),
+    ];
+
+    #[test]
+    fn flap_mode_to_str_matches_c_sharp() {
+        for (mode, expected) in ALL_VARIANTS {
+            assert_eq!(mode.to_str(), *expected, "to_str mismatch for {mode:?}");
+        }
+    }
+
+    #[test]
+    fn flap_mode_from_str_roundtrip() {
+        for (expected_mode, s) in ALL_VARIANTS {
+            let got = FlapMode::from_str(s);
+            assert_eq!(got, Some(*expected_mode), "from_str({s:?}) failed");
+        }
+    }
+
+    #[test]
+    fn flap_mode_from_str_unknown_returns_none() {
+        assert!(FlapMode::from_str("garbage").is_none());
+        assert!(FlapMode::from_str("").is_none());
+    }
+
+    #[test]
+    fn flap_override_serialize_roundtrip() {
+        let ov = FlapOverride { mode: FlapMode::OnOnThisSide, primary_face_id: 42 };
+        let s  = ov.serialize();
+        assert_eq!(s, "OnOn_ThisSide,42");
+        let back = FlapOverride::deserialize(&s).expect("deserialize failed");
+        assert_eq!(back.mode,            FlapMode::OnOnThisSide);
+        assert_eq!(back.primary_face_id, 42);
+    }
+
+    #[test]
+    fn flap_override_deserialize_default_face_id_minus_1() {
+        let ov = FlapOverride::deserialize("Default").unwrap();
+        assert_eq!(ov.mode,            FlapMode::Default);
+        assert_eq!(ov.primary_face_id, -1);
+    }
+
+    #[test]
+    fn flap_override_deserialize_all_modes() {
+        for (mode, s) in ALL_VARIANTS {
+            let serialized = format!("{s},-1");
+            let ov = FlapOverride::deserialize(&serialized)
+                .unwrap_or_else(|| panic!("deserialize failed for {serialized:?}"));
+            assert_eq!(ov.mode, *mode);
+        }
+    }
+
+    #[test]
+    fn flap_override_serialize_default_produces_correct_string() {
+        let ov = FlapOverride { mode: FlapMode::Default, primary_face_id: -1 };
+        assert_eq!(ov.serialize(), "Default,-1");
+    }
+
+    #[test]
+    fn flap_override_deserialize_corrupt_returns_none() {
+        // Unknown mode → None
+        assert!(FlapOverride::deserialize("BadMode,0").is_none());
+    }
+}

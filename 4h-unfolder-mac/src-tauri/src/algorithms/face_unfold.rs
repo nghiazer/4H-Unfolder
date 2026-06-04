@@ -421,4 +421,121 @@ mod tests {
         // All faces in the same piece (fold edge connects them).
         assert_eq!(faces[0].piece_id, faces[1].piece_id);
     }
+
+    // -----------------------------------------------------------------------
+    // Phase 6B additional unfold tests
+    // -----------------------------------------------------------------------
+
+    fn regular_tetrahedron() -> Mesh {
+        use crate::models::mesh::{BoundingBox, Face, MeshEdge, Vertex};
+        let s3 = (3.0_f64).sqrt();
+        let s6 = (6.0_f64).sqrt();
+        Mesh {
+            name: "tet".into(),
+            vertices: vec![
+                Vertex { x: 0.0, y: 0.0,      z: 0.0      },
+                Vertex { x: 1.0, y: 0.0,      z: 0.0      },
+                Vertex { x: 0.5, y: s3 / 2.0, z: 0.0      },
+                Vertex { x: 0.5, y: s3 / 6.0, z: s6 / 3.0 },
+            ],
+            faces: vec![
+                Face { id: 0, vertices: [0, 1, 2], edge_ids: [0, 1, 2], material_id: -1, uvs: None },
+                Face { id: 1, vertices: [0, 1, 3], edge_ids: [0, 4, 3], material_id: -1, uvs: None },
+                Face { id: 2, vertices: [1, 2, 3], edge_ids: [1, 5, 4], material_id: -1, uvs: None },
+                Face { id: 3, vertices: [0, 2, 3], edge_ids: [2, 5, 3], material_id: -1, uvs: None },
+            ],
+            edges: vec![
+                MeshEdge { id: 0, face_a: 0, face_b: Some(1), vert_a: 0, vert_b: 1, edge_type: EdgeType::Unknown },
+                MeshEdge { id: 1, face_a: 0, face_b: Some(2), vert_a: 1, vert_b: 2, edge_type: EdgeType::Unknown },
+                MeshEdge { id: 2, face_a: 0, face_b: Some(3), vert_a: 0, vert_b: 2, edge_type: EdgeType::Unknown },
+                MeshEdge { id: 3, face_a: 1, face_b: Some(3), vert_a: 0, vert_b: 3, edge_type: EdgeType::Unknown },
+                MeshEdge { id: 4, face_a: 1, face_b: Some(2), vert_a: 1, vert_b: 3, edge_type: EdgeType::Unknown },
+                MeshEdge { id: 5, face_a: 2, face_b: Some(3), vert_a: 2, vert_b: 3, edge_type: EdgeType::Unknown },
+            ],
+            uvs: vec![], material_names: vec![], material_texture_paths: vec![],
+            suggested_texture_path: None, pdo_layout: None, embedded_textures: vec![],
+            bounds: BoundingBox::default(),
+        }
+    }
+
+    #[test]
+    fn tetrahedron_unfolds_to_4_faces() {
+        let mut mesh = regular_tetrahedron();
+        let faces    = run_unfold(&mut mesh);
+        assert_eq!(faces.len(), 4, "tetrahedron should unfold to exactly 4 faces");
+    }
+
+    #[test]
+    fn tetrahedron_all_faces_in_same_piece() {
+        let mut mesh = regular_tetrahedron();
+        let faces    = run_unfold(&mut mesh);
+        // MST spans all 4 faces → all in same piece (one connected component).
+        let piece0 = faces[0].piece_id;
+        for f in &faces {
+            assert_eq!(f.piece_id, piece0, "all tetrahedron faces should be in piece {piece0}");
+        }
+    }
+
+    #[test]
+    fn tetrahedron_edge_lengths_preserved() {
+        let mut mesh = regular_tetrahedron();
+        let faces    = run_unfold(&mut mesh);
+        for face in &faces {
+            let v = &mesh.faces[face.face_id].vertices;
+            let d3 = |i: usize, j: usize| -> f64 {
+                let a = &mesh.vertices[v[i]]; let b = &mesh.vertices[v[j]];
+                ((a.x-b.x).powi(2) + (a.y-b.y).powi(2) + (a.z-b.z).powi(2)).sqrt()
+            };
+            let tol = 1e-6;
+            assert!((face.v0.dist(face.v1) - d3(0,1)).abs() < tol);
+            assert!((face.v1.dist(face.v2) - d3(1,2)).abs() < tol);
+            assert!((face.v2.dist(face.v0) - d3(2,0)).abs() < tol);
+        }
+    }
+
+    #[test]
+    fn unfolded_faces_have_correct_fold_boundary_flags() {
+        let mut mesh = two_flat_triangles();
+        let faces    = run_unfold(&mut mesh);
+        // The shared edge (eid=1) is the fold → edge_is_fold must be true on that edge.
+        let f0 = faces.iter().find(|f| f.face_id == 0).unwrap();
+        let f1 = faces.iter().find(|f| f.face_id == 1).unwrap();
+        // Exactly one fold edge per face (the shared interior edge).
+        let folds0 = f0.edge_is_fold.iter().filter(|&&b| b).count();
+        let folds1 = f1.edge_is_fold.iter().filter(|&&b| b).count();
+        assert_eq!(folds0, 1, "face 0 should have exactly 1 fold edge");
+        assert_eq!(folds1, 1, "face 1 should have exactly 1 fold edge");
+        // All other edges are boundary.
+        let bounds0 = f0.edge_is_boundary.iter().filter(|&&b| b).count();
+        let bounds1 = f1.edge_is_boundary.iter().filter(|&&b| b).count();
+        assert_eq!(bounds0, 2, "face 0 should have 2 boundary edges");
+        assert_eq!(bounds1, 2, "face 1 should have 2 boundary edges");
+    }
+
+    #[test]
+    fn root_face_has_no_overlapping_vertices() {
+        let mut mesh = two_flat_triangles();
+        let faces    = run_unfold(&mut mesh);
+        let root     = &faces[0];
+        // All three vertices must be distinct.
+        assert!(root.v0.dist(root.v1) > 1e-6, "v0 and v1 must not coincide");
+        assert!(root.v1.dist(root.v2) > 1e-6, "v1 and v2 must not coincide");
+        assert!(root.v0.dist(root.v2) > 1e-6, "v0 and v2 must not coincide");
+    }
+
+    #[test]
+    fn mesh_edge_ids_stamped_on_unfolded_faces() {
+        let mut mesh = two_flat_triangles();
+        let faces    = run_unfold(&mut mesh);
+        for face in &faces {
+            for i in 0..3 {
+                // mesh_edge_ids must be valid edge indices (not -1 for a fully connected mesh).
+                assert!(
+                    face.mesh_edge_ids[i] >= 0,
+                    "face {} edge slot {} has mesh_edge_id=-1 (not stamped)",
+                    face.face_id, i
+                );
+            }
+        }
+    }
 }

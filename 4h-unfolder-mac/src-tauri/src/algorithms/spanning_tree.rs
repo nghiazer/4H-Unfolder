@@ -234,4 +234,155 @@ mod tests {
         assert_eq!(mesh.edges[0].edge_type, EdgeType::Fold);
         assert_eq!(mesh.edges[1].edge_type, EdgeType::Boundary);
     }
+
+    // -----------------------------------------------------------------------
+    // Phase 6B additional tests
+    // -----------------------------------------------------------------------
+
+    /// Regular tetrahedron: 4 faces, 6 interior edges → MST picks 3 fold edges.
+    fn regular_tetrahedron() -> Mesh {
+        use crate::models::mesh::{BoundingBox, Face, Mesh, MeshEdge, Vertex};
+        let s3 = (3.0_f64).sqrt();
+        let s6 = (6.0_f64).sqrt();
+        Mesh {
+            name: "tet".into(),
+            vertices: vec![
+                Vertex { x: 0.0,       y: 0.0,         z: 0.0        }, // 0
+                Vertex { x: 1.0,       y: 0.0,         z: 0.0        }, // 1
+                Vertex { x: 0.5,       y: s3 / 2.0,    z: 0.0        }, // 2
+                Vertex { x: 0.5,       y: s3 / 6.0,    z: s6 / 3.0   }, // 3 (apex)
+            ],
+            faces: vec![
+                Face { id: 0, vertices: [0, 1, 2], edge_ids: [0, 1, 2], material_id: -1, uvs: None },
+                Face { id: 1, vertices: [0, 1, 3], edge_ids: [0, 4, 3], material_id: -1, uvs: None },
+                Face { id: 2, vertices: [1, 2, 3], edge_ids: [1, 5, 4], material_id: -1, uvs: None },
+                Face { id: 3, vertices: [0, 2, 3], edge_ids: [2, 5, 3], material_id: -1, uvs: None },
+            ],
+            edges: vec![
+                MeshEdge { id: 0, face_a: 0, face_b: Some(1), vert_a: 0, vert_b: 1, edge_type: EdgeType::Unknown },
+                MeshEdge { id: 1, face_a: 0, face_b: Some(2), vert_a: 1, vert_b: 2, edge_type: EdgeType::Unknown },
+                MeshEdge { id: 2, face_a: 0, face_b: Some(3), vert_a: 0, vert_b: 2, edge_type: EdgeType::Unknown },
+                MeshEdge { id: 3, face_a: 1, face_b: Some(3), vert_a: 0, vert_b: 3, edge_type: EdgeType::Unknown },
+                MeshEdge { id: 4, face_a: 1, face_b: Some(2), vert_a: 1, vert_b: 3, edge_type: EdgeType::Unknown },
+                MeshEdge { id: 5, face_a: 2, face_b: Some(3), vert_a: 2, vert_b: 3, edge_type: EdgeType::Unknown },
+            ],
+            uvs: vec![], material_names: vec![], material_texture_paths: vec![],
+            suggested_texture_path: None, pdo_layout: None, embedded_textures: vec![],
+            bounds: BoundingBox::default(),
+        }
+    }
+
+    #[test]
+    fn tetrahedron_mst_has_exactly_3_fold_edges() {
+        let mesh = regular_tetrahedron();
+        let tree = build_spanning_tree(&mesh, |e| compute_dihedral_angle(&mesh, e));
+        // A spanning tree on 4 nodes has exactly 3 edges.
+        assert_eq!(tree.fold_edge_ids.len(), 3);
+    }
+
+    #[test]
+    fn dihedral_angle_for_right_angle_fold_is_pi_over_2() {
+        // Two triangles sharing an edge at exactly 90°:
+        //   F0 = [V0(0,0,0), V1(1,0,0), V2(0,1,0)]  — XY plane
+        //   F1 = [V0(0,0,0), V1(1,0,0), V3(0,0,1)]  — XZ plane
+        use crate::models::mesh::{BoundingBox, Face, Mesh, MeshEdge, Vertex};
+        let mesh = Mesh {
+            name: "right_angle".into(),
+            vertices: vec![
+                Vertex { x: 0.0, y: 0.0, z: 0.0 }, // 0
+                Vertex { x: 1.0, y: 0.0, z: 0.0 }, // 1
+                Vertex { x: 0.0, y: 1.0, z: 0.0 }, // 2
+                Vertex { x: 0.0, y: 0.0, z: 1.0 }, // 3
+            ],
+            faces: vec![
+                Face { id: 0, vertices: [0, 1, 2], edge_ids: [0, 1, 2], material_id: -1, uvs: None },
+                Face { id: 1, vertices: [0, 1, 3], edge_ids: [0, 3, 4], material_id: -1, uvs: None },
+            ],
+            edges: vec![
+                MeshEdge { id: 0, face_a: 0, face_b: Some(1), vert_a: 0, vert_b: 1, edge_type: EdgeType::Unknown },
+                MeshEdge { id: 1, face_a: 0, face_b: None,    vert_a: 1, vert_b: 2, edge_type: EdgeType::Unknown },
+                MeshEdge { id: 2, face_a: 0, face_b: None,    vert_a: 0, vert_b: 2, edge_type: EdgeType::Unknown },
+                MeshEdge { id: 3, face_a: 1, face_b: None,    vert_a: 1, vert_b: 3, edge_type: EdgeType::Unknown },
+                MeshEdge { id: 4, face_a: 1, face_b: None,    vert_a: 0, vert_b: 3, edge_type: EdgeType::Unknown },
+            ],
+            uvs: vec![], material_names: vec![], material_texture_paths: vec![],
+            suggested_texture_path: None, pdo_layout: None, embedded_textures: vec![],
+            bounds: BoundingBox::default(),
+        };
+        let angle = compute_dihedral_angle(&mesh, &mesh.edges[0]);
+        let expected = std::f64::consts::PI / 2.0;
+        assert!((angle - expected).abs() < 1e-9, "Expected π/2, got {angle}");
+    }
+
+    #[test]
+    fn mst_prefers_flat_edges_over_steep() {
+        // Three faces: F0-F1 flat (dihedral ≈ 0), F0-F2 at 90°.
+        // MST should include the flat edge.
+        let mesh = {
+            use crate::models::mesh::{BoundingBox, Face, Mesh, MeshEdge, Vertex};
+            Mesh {
+                name: "flat_vs_steep".into(),
+                vertices: vec![
+                    Vertex { x: 0.0, y: 0.0, z: 0.0 }, // 0
+                    Vertex { x: 2.0, y: 0.0, z: 0.0 }, // 1
+                    Vertex { x: 1.0, y: 1.0, z: 0.0 }, // 2  (flat neighbor)
+                    Vertex { x: 3.0, y: 1.0, z: 0.0 }, // 3
+                    Vertex { x: 1.0, y: 0.0, z: 1.0 }, // 4  (steep neighbor)
+                ],
+                faces: vec![
+                    Face { id: 0, vertices: [0, 1, 2], edge_ids: [0, 1, 2], material_id: -1, uvs: None },
+                    Face { id: 1, vertices: [1, 3, 2], edge_ids: [3, 4, 1], material_id: -1, uvs: None }, // flat
+                    Face { id: 2, vertices: [0, 1, 4], edge_ids: [0, 5, 6], material_id: -1, uvs: None }, // steep
+                ],
+                edges: vec![
+                    MeshEdge { id: 0, face_a: 0, face_b: Some(2), vert_a: 0, vert_b: 1, edge_type: EdgeType::Unknown },
+                    MeshEdge { id: 1, face_a: 0, face_b: Some(1), vert_a: 1, vert_b: 2, edge_type: EdgeType::Unknown },
+                    MeshEdge { id: 2, face_a: 0, face_b: None,    vert_a: 0, vert_b: 2, edge_type: EdgeType::Unknown },
+                    MeshEdge { id: 3, face_a: 1, face_b: None,    vert_a: 1, vert_b: 3, edge_type: EdgeType::Unknown },
+                    MeshEdge { id: 4, face_a: 1, face_b: None,    vert_a: 2, vert_b: 3, edge_type: EdgeType::Unknown },
+                    MeshEdge { id: 5, face_a: 2, face_b: None,    vert_a: 1, vert_b: 4, edge_type: EdgeType::Unknown },
+                    MeshEdge { id: 6, face_a: 2, face_b: None,    vert_a: 0, vert_b: 4, edge_type: EdgeType::Unknown },
+                ],
+                uvs: vec![], material_names: vec![], material_texture_paths: vec![],
+                suggested_texture_path: None, pdo_layout: None, embedded_textures: vec![],
+                bounds: BoundingBox::default(),
+            }
+        };
+        let tree = build_spanning_tree(&mesh, |e| compute_dihedral_angle(&mesh, e));
+        // E1 (flat, dihedral≈0) and E0 (steep, dihedral≈π/2) compete.
+        // MST must include E1 (smaller dihedral = lower weight = preferred).
+        assert!(tree.fold_edge_ids.contains(&1), "Flat edge 1 should be in MST");
+    }
+
+    #[test]
+    fn mark_edges_boundary_edges_have_boundary_type() {
+        let mut mesh = two_flat_triangles();
+        let tree = build_spanning_tree(&mesh, |e| compute_dihedral_angle(&mesh, e));
+        let fold_set: std::collections::HashSet<usize> = tree.fold_edge_ids.iter().cloned().collect();
+        mark_edges(&mut mesh, &fold_set);
+        for edge in &mesh.edges {
+            if edge.face_b.is_none() {
+                assert_eq!(
+                    edge.edge_type, EdgeType::Boundary,
+                    "boundary edge {} should have type Boundary", edge.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn tetrahedron_has_no_boundary_edges_after_marking() {
+        let mut mesh = regular_tetrahedron();
+        let tree = build_spanning_tree(&mesh, |e| compute_dihedral_angle(&mesh, e));
+        let fold_set: std::collections::HashSet<usize> = tree.fold_edge_ids.iter().cloned().collect();
+        mark_edges(&mut mesh, &fold_set);
+        for edge in &mesh.edges {
+            assert_ne!(edge.edge_type, EdgeType::Boundary, "tetrahedron has no boundary edges");
+        }
+        // 3 fold + 3 cut
+        let folds = mesh.edges.iter().filter(|e| e.edge_type == EdgeType::Fold).count();
+        let cuts  = mesh.edges.iter().filter(|e| e.edge_type == EdgeType::Cut).count();
+        assert_eq!(folds, 3);
+        assert_eq!(cuts,  3);
+    }
 }
