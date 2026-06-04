@@ -46,10 +46,14 @@ public class ObjMeshLoader : IMeshLoader
                     break;
 
                 case "mtllib" when line.Length > 7:
-                    // Use rest of line (after "mtllib ") to preserve filenames with spaces
-                    pendingMtlFile = line[7..].Trim();
+                {
+                    // Use rest of line (after "mtllib ") to preserve filenames with spaces.
+                    // Strip any directory component — MTL must be in the same folder as the OBJ.
+                    var mtlRaw = line[7..].Trim();
+                    pendingMtlFile = Path.GetFileName(mtlRaw);
                     TryLoadMtl(mesh, objDir, pendingMtlFile, materialNameToId);
                     break;
+                }
 
                 case "usemtl" when parts.Length >= 2:
                     var matName = string.Join(" ", parts.Skip(1));
@@ -115,7 +119,9 @@ public class ObjMeshLoader : IMeshLoader
     {
         var segs = token.Split('/');
         if (slot >= segs.Length || string.IsNullOrEmpty(segs[slot])) return -1;
-        int idx = int.Parse(segs[slot], CultureInfo.InvariantCulture);
+        if (!int.TryParse(segs[slot], NumberStyles.Integer, CultureInfo.InvariantCulture, out int idx))
+            return -1;
+        // OBJ spec: positive = 1-based absolute, negative = relative from end (not supported → skip)
         return idx > 0 ? idx - 1 : -1;
     }
 

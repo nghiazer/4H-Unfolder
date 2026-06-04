@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+﻿using System.Diagnostics;
+using System.Text.Json;
 using FourHUnfolder.Domain.Settings;
 
 namespace FourHUnfolder.Application.Services;
@@ -22,17 +23,23 @@ public class SettingsService
 
     // ── lifecycle ─────────────────────────────────────────────────────────────
 
-    /// Called once on startup.  Silently falls back to defaults on any error.
+    /// Called once on startup. Falls back to defaults on error and logs the reason.
     public void Load()
     {
+        if (!File.Exists(SettingsPath)) return;
         try
         {
-            if (!File.Exists(SettingsPath)) return;
             var json = File.ReadAllText(SettingsPath);
             Current = JsonSerializer.Deserialize<AppSettings>(json, JsonOpts) ?? new();
         }
-        catch
+        catch (JsonException ex)
         {
+            Debug.WriteLine($"[SettingsService] Corrupt settings file, reverting to defaults: {ex.Message}");
+            Current = new();
+        }
+        catch (IOException ex)
+        {
+            Debug.WriteLine($"[SettingsService] Could not read settings file: {ex.Message}");
             Current = new();
         }
     }
@@ -61,6 +68,9 @@ public class SettingsService
             Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
             File.WriteAllText(SettingsPath, JsonSerializer.Serialize(Current, JsonOpts));
         }
-        catch { /* non-fatal */ }
+        catch (IOException ex)
+        {
+            Debug.WriteLine($"[SettingsService] Could not persist settings: {ex.Message}");
+        }
     }
 }

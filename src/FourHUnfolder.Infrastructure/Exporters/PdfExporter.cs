@@ -129,13 +129,8 @@ public class PdfExporter
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
-    /// TD-22-4: canonical edge key using 3-dp rounded coordinates, order-independent.
-    private static (float, float, float, float) EdgeKey(Vector2 a, Vector2 b)
-    {
-        float ax = MathF.Round(a.X, 3), ay = MathF.Round(a.Y, 3);
-        float bx = MathF.Round(b.X, 3), by = MathF.Round(b.Y, 3);
-        return (ax < bx || (ax == bx && ay <= by)) ? (ax, ay, bx, by) : (bx, by, ax, ay);
-    }
+    private static (float, float, float, float) EdgeKey(Vector2 a, Vector2 b) =>
+        EdgeKeyHelper.Compute(a, b);
 
     private static XPoint[] ToPoints(IReadOnlyList<Vector2> verts,
                                      Func<double, double> toX,

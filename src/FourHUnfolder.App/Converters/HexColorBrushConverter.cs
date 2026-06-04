@@ -1,4 +1,5 @@
-﻿using System.Globalization;
+﻿using System.Diagnostics;
+using System.Globalization;
 using System.Windows.Data;
 using System.Windows.Media;
 
@@ -25,7 +26,10 @@ public class HexColorBrushConverter : IValueConverter
                 brush.Freeze();
                 return brush;
             }
-            catch { /* fall through */ }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[HexColorBrushConverter] Invalid color string '{hex}': {ex.Message}");
+            }
         }
         return Brushes.Transparent;
     }

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO.Compression;
 using System.Numerics;
 using System.Text;
@@ -198,8 +199,11 @@ public sealed class PdoMeshLoader : IMeshLoader
                 var compressed = reader.ReadBytes((int)csize);
                 var rgb = DecompressZlib(compressed);
 
-                if (rgb.Length == (int)(w * h * 3))
+                int expected = (int)(w * h * 3);
+                if (rgb.Length == expected)
                     mesh.EmbeddedTextures.Add(new EmbeddedTextureData(texName, (int)w, (int)h, rgb));
+                else
+                    Debug.WriteLine($"[PdoMeshLoader] Texture '{texName}' decompressed to {rgb.Length} bytes, expected {expected} ({w}×{h}×3). Skipping.");
             }
         }
         catch

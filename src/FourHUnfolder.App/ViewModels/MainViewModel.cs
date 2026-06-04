@@ -39,7 +39,17 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private string? _tempBundleDir; // temp extract dir for .4hu bundles; deleted on next load or Dispose
     private string? _pendingTexturePath;
     private bool    _previewActive;
-    private double ScaleMmPerUnit { get; set; } = 1.0;
+    private double _scaleMmPerUnit = 1.0;
+    private double ScaleMmPerUnit
+    {
+        get => _scaleMmPerUnit;
+        set
+        {
+            if (_scaleMmPerUnit == value) return;
+            _scaleMmPerUnit = value;
+            OnPropertyChanged(nameof(CurrentScaleMmPerUnit));
+        }
+    }
 
     // dirty tracking — true when there are unsaved changes
     private bool _isDirty;
@@ -63,7 +73,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     internal bool BatchingPieces;
 
     // O(1) face→piece lookup built in RebuildPieces (faceId → GroupId)
-    private readonly Dictionary<int, int> _faceToGroup = new();
+    private readonly Dictionary<int, int> _faceToGroupMap = new();
 
     // bumped after each RebuildPieces() to trigger a single canvas rebuild
     [ObservableProperty] private int _piecesVersion;
@@ -73,7 +83,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private Model3DGroup? _cachedOverlayModel;
 
     // Multi-material 3D hit-test map: geometry → list of global face IDs in draw order
-    private readonly Dictionary<MeshGeometry3D, List<int>> _geoFaceIds = new();
+    private readonly Dictionary<MeshGeometry3D, List<int>> _geoFaceIdsMap = new();
 
     // TD-9: undo/redo — snapshots of (_edgeOverrides, _flapOverrides, piece layouts)
     private readonly record struct EditSnapshot(
@@ -1045,7 +1055,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         // O(1) lookup via pre-built dict; fall back to linear scan if dict is stale
         PieceViewModel? piece = null;
-        if (_faceToGroup.TryGetValue(faceId, out var gid))
+        if (_faceToGroupMap.TryGetValue(faceId, out var gid))
             piece = Pieces.FirstOrDefault(p => p.GroupId == gid);
         piece ??= Pieces.FirstOrDefault(p => p.Faces.Any(f => f.FaceId == faceId));
 
@@ -1393,10 +1403,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
         PiecesVersion++;   // triggers exactly one RebuildAll in the canvas
 
         // Rebuild O(1) face→group lookup
-        _faceToGroup.Clear();
+        _faceToGroupMap.Clear();
         foreach (var p in Pieces)
             foreach (var fd in p.Faces)
-                _faceToGroup[fd.FaceId] = p.GroupId;
+                _faceToGroupMap[fd.FaceId] = p.GroupId;
     }
 
     // ── SVG export layout builder ─────────────────────────────────────────────
@@ -1925,7 +1935,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private Model3DGroup BuildWpfModel(Mesh mesh, BitmapImage? singleTexture,
         IReadOnlyDictionary<int, BitmapImage?>? perMaterial = null)
     {
-        _geoFaceIds.Clear();
+        _geoFaceIdsMap.Clear();
         var group = new Model3DGroup();
         var s3d   = S.View3D;
 
@@ -1982,7 +1992,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             if (uvCoords != null) geometry.TextureCoordinates = uvCoords;
 
             // Track face IDs for this geometry so hit-testing can map back to global face ID
-            _geoFaceIds[geometry] = faceIdList;
+            _geoFaceIdsMap[geometry] = faceIdList;
 
             Brush fb = (tex != null && uvCoords != null)
                 ? (Brush)new ImageBrush(tex)
@@ -2014,7 +2024,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     public int ResolveHitFaceId(object? geoObj, int v1, int v2, int v3)
     {
         int minVert = Math.Min(v1, Math.Min(v2, v3));
-        if (geoObj is MeshGeometry3D geo && _geoFaceIds.TryGetValue(geo, out var faceIds))
+        if (geoObj is MeshGeometry3D geo && _geoFaceIdsMap.TryGetValue(geo, out var faceIds))
         {
             int localIdx = minVert / 3;
             return localIdx < faceIds.Count ? faceIds[localIdx] : -1;

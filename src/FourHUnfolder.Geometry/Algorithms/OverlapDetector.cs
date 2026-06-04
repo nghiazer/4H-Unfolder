@@ -117,10 +117,11 @@ public class OverlapDetector
     {
         var ta = a.Vertices;
         var tb = b.Vertices;
-        return !HasSeparatingAxis(ta, tb) && !HasSeparatingAxis(tb, ta);
+        return !IsSeparated(ta, tb) && !IsSeparated(tb, ta);
     }
 
-    private static bool HasSeparatingAxis(Vector2[] a, Vector2[] b)
+    // Returns true when a separating axis exists, meaning the triangles do NOT overlap.
+    private static bool IsSeparated(Vector2[] a, Vector2[] b)
     {
         for (int i = 0; i < 3; i++)
         {

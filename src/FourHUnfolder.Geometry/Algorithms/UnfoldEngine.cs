@@ -1,4 +1,5 @@
-﻿using System.Numerics;
+﻿using System.Diagnostics;
+using System.Numerics;
 using FourHUnfolder.Domain.Models;
 using FourHUnfolder.Domain.Results;
 
@@ -50,9 +51,11 @@ public class UnfoldEngine
                         placed[parentId],
                         mesh.Edges[sharedEdgeId]);
                 }
-                catch (InvalidOperationException)
+                catch (InvalidOperationException ex)
                 {
-                    // Malformed topology: skip this face, place it at origin as fallback
+                    // Malformed mesh topology: edge does not share 2 vertices with adjacent face.
+                    // Place face at origin as a safe fallback so the rest of the unfold proceeds.
+                    Debug.WriteLine($"[UnfoldEngine] topology error face {faceId} (parent {parentId}): {ex.Message}");
                     placed[faceId] = [Vector2.Zero, Vector2.One, new Vector2(0f, 1f)];
                 }
 
@@ -122,9 +125,9 @@ public class UnfoldEngine
         var fv  = face.VertexIds;
         var pv  = parentFace.VertexIds;
 
-        int[] ls  = FindSharedLocalIndices(fv, sharedEdge);
+        int[] ls  = GetSharedVertexLocalIndices(fv, sharedEdge);
         int   la  = 3 - ls[0] - ls[1];
-        int[] lsp = FindSharedLocalIndices(pv, sharedEdge);
+        int[] lsp = GetSharedVertexLocalIndices(pv, sharedEdge);
 
         Vector2 sv1_2d, sv2_2d;
         if (pv[lsp[0]] == fv[ls[0]])
@@ -185,7 +188,7 @@ public class UnfoldEngine
         return Math.Sign(CrossSign(parentCentroid)) == Math.Sign(CrossSign(c1)) ? c2 : c1;
     }
 
-    private static int[] FindSharedLocalIndices(int[] vids, Edge edge)
+    private static int[] GetSharedVertexLocalIndices(int[] vids, Edge edge)
     {
         var r = new int[2]; int n = 0;
         for (int i = 0; i < 3 && n < 2; i++)

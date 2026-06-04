@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace FourHUnfolder.Domain.Models;
 
 /// <summary>
@@ -15,8 +17,11 @@ public sealed record FlapOverride(FlapMode Mode, int PrimaryFaceId = -1)
     public static FlapOverride? Deserialize(string s)
     {
         var parts = s.Split(',');
-        if (parts.Length < 1) return null;
-        if (!Enum.TryParse<FlapMode>(parts[0], out var mode)) return null;
+        if (parts.Length < 1 || !Enum.TryParse<FlapMode>(parts[0], out var mode))
+        {
+            Debug.WriteLine($"[FlapOverride] Unrecognised override value, skipping: '{s}'");
+            return null;
+        }
         int primaryFaceId = parts.Length >= 2 && int.TryParse(parts[1], out int pid) ? pid : -1;
         return new FlapOverride(mode, primaryFaceId);
     }

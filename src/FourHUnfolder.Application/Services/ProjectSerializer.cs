@@ -163,14 +163,13 @@ public class ProjectSerializer
         var dir  = Path.GetDirectoryName(filePath) ?? string.Empty;
         var copy = Clone(state);
 
-        // Relativize paths
-        copy.MeshPath    = Relativize(state.MeshPath,    dir);
-        copy.TexturePath = Relativize(state.TexturePath, dir);
+        copy.MeshPath    = ToRelativePath(state.MeshPath,    dir);
+        copy.TexturePath = ToRelativePath(state.TexturePath, dir);
 
         // TD-22-2: relativize per-material texture paths
         copy.MaterialTexturePaths = new();
         foreach (var (matId, path) in state.MaterialTexturePaths)
-            copy.MaterialTexturePaths[matId] = Relativize(path, dir);
+            copy.MaterialTexturePaths[matId] = ToRelativePath(path, dir);
 
         var json = JsonSerializer.Serialize(copy, JsonOpts);
         File.WriteAllText(filePath, json);
@@ -194,8 +193,8 @@ public class ProjectSerializer
         // Resolve paths — record a warning if a saved path can no longer be found
         string? rawMesh    = state.MeshPath;
         string? rawTexture = state.TexturePath;
-        state.MeshPath    = Resolve(state.MeshPath,    dir);
-        state.TexturePath = Resolve(state.TexturePath, dir);
+        state.MeshPath    = FromRelativePath(state.MeshPath,    dir);
+        state.TexturePath = FromRelativePath(state.TexturePath, dir);
 
         if (!string.IsNullOrEmpty(rawMesh)    && state.MeshPath    == null)
             state.Warnings.Add($"Mesh file not found: {rawMesh}");
@@ -205,7 +204,7 @@ public class ProjectSerializer
         // TD-22-2: resolve per-material texture paths
         var resolvedMat = new Dictionary<int, string?>();
         foreach (var (matId, encoded) in state.MaterialTexturePaths)
-            resolvedMat[matId] = Resolve(encoded, dir);
+            resolvedMat[matId] = FromRelativePath(encoded, dir);
         state.MaterialTexturePaths = resolvedMat;
 
         return state;
@@ -214,7 +213,7 @@ public class ProjectSerializer
     // ── path helpers ─────────────────────────────────────────────────────────
 
     /// Stores "relative|absolute" so either can be used when the folder moves.
-    private static string? Relativize(string? path, string baseDir)
+    private static string? ToRelativePath(string? path, string baseDir)
     {
         if (string.IsNullOrEmpty(path)) return null;
         try
@@ -225,7 +224,14 @@ public class ProjectSerializer
         catch { return $"|{path}"; }
     }
 
-    private static string? Resolve(string? encoded, string baseDir)
+    // Allowed extensions for asset files referenced in project files.
+    private static readonly HashSet<string> AllowedAssetExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".obj", ".pdo", ".fbx", ".stl", ".ply", ".dae", ".3ds", ".glb", ".gltf",
+        ".png", ".jpg", ".jpeg", ".bmp", ".tga", ".tiff", ".webp"
+    };
+
+    private static string? FromRelativePath(string? encoded, string baseDir)
     {
         if (string.IsNullOrEmpty(encoded)) return null;
 
@@ -238,21 +244,61 @@ public class ProjectSerializer
         if (!string.IsNullOrEmpty(rel))
         {
             var full = Path.GetFullPath(Path.Combine(baseDir, rel));
-            if (File.Exists(full)) return full;
+            if (IsAllowedAssetPath(full) && File.Exists(full)) return full;
         }
-        return File.Exists(abs) ? abs : null;
+
+        // Only fall back to absolute path if it has a recognised asset extension
+        // — prevents a crafted project file from pointing at arbitrary system files.
+        return IsAllowedAssetPath(abs) && File.Exists(abs) ? abs : null;
     }
 
     private static string? TryExist(string path, string baseDir)
     {
-        if (File.Exists(path)) return path;
+        if (IsAllowedAssetPath(path) && File.Exists(path)) return path;
         var full = Path.GetFullPath(Path.Combine(baseDir, path));
-        return File.Exists(full) ? full : null;
+        return IsAllowedAssetPath(full) && File.Exists(full) ? full : null;
+    }
+
+    private static bool IsAllowedAssetPath(string? path)
+    {
+        if (string.IsNullOrEmpty(path)) return false;
+        var ext = Path.GetExtension(path);
+        return AllowedAssetExtensions.Contains(ext);
     }
 
     private static ProjectState Clone(ProjectState s)
     {
-        var json = JsonSerializer.Serialize(s, JsonOpts);
-        return JsonSerializer.Deserialize<ProjectState>(json, JsonOpts)!;
+        var copy = new ProjectState
+        {
+            Version           = s.Version,
+            MeshPath          = s.MeshPath,
+            TexturePath       = s.TexturePath,
+            ScaleMmPerUnit    = s.ScaleMmPerUnit,
+            MirrorX           = s.MirrorX,
+            PagesWide         = s.PagesWide,
+            PagesTall         = s.PagesTall,
+            BundledTextureExt = s.BundledTextureExt,
+            InsertedImagePath = s.InsertedImagePath,
+            Paper = new ProjectState.PaperDto
+            {
+                Name     = s.Paper.Name,
+                WidthMm  = s.Paper.WidthMm,
+                HeightMm = s.Paper.HeightMm,
+            },
+        };
+        foreach (var kv in s.EdgeOverrides)              copy.EdgeOverrides[kv.Key]              = kv.Value;
+        foreach (var kv in s.FlapOverrides)              copy.FlapOverrides[kv.Key]              = kv.Value;
+        foreach (var kv in s.MaterialTexturePaths)       copy.MaterialTexturePaths[kv.Key]       = kv.Value;
+        foreach (var kv in s.BundledMaterialTextureExts) copy.BundledMaterialTextureExts[kv.Key] = kv.Value;
+        foreach (var l in s.Layouts)
+            copy.Layouts.Add(new ProjectState.PieceLayoutDto
+            {
+                GroupId     = l.GroupId,
+                PositionX   = l.PositionX,
+                PositionY   = l.PositionY,
+                Rotation    = l.Rotation,
+                UserGroupId = l.UserGroupId,
+            });
+        return copy;
     }
 }
