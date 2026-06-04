@@ -51,8 +51,6 @@
     }
   },
   "plugins": {
-    "dialog": {},
-    "fs": {},
     "shell": {
       "open": true
     }
