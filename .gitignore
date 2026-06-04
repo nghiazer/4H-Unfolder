@@ -1,9 +1,14 @@
-# Build outputs
+# Build outputs (Windows)
 bin/
 obj/
 *.user
 *.suo
 .vs/
+
+# Build outputs (macOS / Rust)
+4h-unfolder-mac/src-tauri/target/
+4h-unfolder-mac/dist/
+4h-unfolder-mac/node_modules/
 
 # NuGet
 packages/
