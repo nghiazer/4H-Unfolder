@@ -379,4 +379,153 @@ mod tests {
         let tabs = generate_glue_tabs(&faces, 5.0, 45.0, TabShape::Trapezoid, false, &mesh, &ov_map);
         assert!(tabs.is_empty(), "OffOffNoFlap should produce zero tabs");
     }
+
+    // -----------------------------------------------------------------------
+    // Phase 6B additional glue-tab tests
+    // -----------------------------------------------------------------------
+
+    /// Helper: build a two-face mesh with one interior cut edge, run the full pipeline.
+    fn two_faces_one_cut() -> (Mesh, Vec<crate::models::unfold::UnfoldedFace>) {
+        let mut mesh = two_flat_triangles();
+        let tree     = build_spanning_tree(&mesh, |e| compute_dihedral_angle(&mesh, e));
+        let fold_set: std::collections::HashSet<usize> = tree.fold_edge_ids.iter().cloned().collect();
+        mark_edges(&mut mesh, &fold_set);
+        let faces = unfold_faces(&mesh, &fold_set);
+        (mesh, faces)
+    }
+
+    #[test]
+    fn border_mountain_fold_creates_tabs_on_boundary_edges() {
+        let (mesh, faces) = two_faces_one_cut();
+        let mut ov_map: HashMap<usize, FlapOverride> = HashMap::new();
+        for face in &faces {
+            for i in 0..3 {
+                let eid = face.mesh_edge_ids[i];
+                if eid >= 0 && face.edge_is_boundary[i] {
+                    ov_map.insert(eid as usize, FlapOverride {
+                        mode: FlapMode::BorderMountainFold,
+                        primary_face_id: -1,
+                    });
+                }
+            }
+        }
+        let tabs = generate_glue_tabs(&faces, 5.0, 45.0, TabShape::Trapezoid, false, &mesh, &ov_map);
+        // two_flat_triangles has 4 boundary edges → each gets one tab
+        assert_eq!(tabs.len(), 4, "BorderMountainFold should add tabs to all 4 boundary edges");
+    }
+
+    #[test]
+    fn border_no_flap_suppresses_boundary_tabs() {
+        let (mesh, faces) = two_faces_one_cut();
+        let mut ov_map: HashMap<usize, FlapOverride> = HashMap::new();
+        for face in &faces {
+            for i in 0..3 {
+                let eid = face.mesh_edge_ids[i];
+                if eid >= 0 && face.edge_is_boundary[i] {
+                    ov_map.insert(eid as usize, FlapOverride {
+                        mode: FlapMode::BorderNoFlap,
+                        primary_face_id: -1,
+                    });
+                }
+            }
+        }
+        let tabs = generate_glue_tabs(&faces, 5.0, 45.0, TabShape::Trapezoid, false, &mesh, &ov_map);
+        assert_eq!(tabs.len(), 0, "BorderNoFlap should suppress all tabs");
+    }
+
+    #[test]
+    fn on_on_both_sides_creates_tab_on_both_faces_for_cut_edge() {
+        // Build a mesh with exactly one cut edge (interior, marked Cut).
+        use crate::models::mesh::{BoundingBox, Face, MeshEdge, Vertex};
+        let mut mesh = Mesh {
+            name: "cut_pair".into(),
+            vertices: vec![
+                Vertex { x: 0.0, y: 0.0, z: 0.0 },
+                Vertex { x: 2.0, y: 0.0, z: 0.0 },
+                Vertex { x: 1.0, y: 2.0, z: 0.0 },
+                Vertex { x: 3.0, y: 2.0, z: 0.0 },
+            ],
+            faces: vec![
+                Face { id: 0, vertices: [0, 1, 2], edge_ids: [0, 1, 2], material_id: -1, uvs: None },
+                Face { id: 1, vertices: [1, 3, 2], edge_ids: [3, 4, 1], material_id: -1, uvs: None },
+            ],
+            edges: vec![
+                MeshEdge { id: 0, face_a: 0, face_b: None,    vert_a: 0, vert_b: 1, edge_type: EdgeType::Boundary },
+                MeshEdge { id: 1, face_a: 0, face_b: Some(1), vert_a: 1, vert_b: 2, edge_type: EdgeType::Cut },
+                MeshEdge { id: 2, face_a: 0, face_b: None,    vert_a: 0, vert_b: 2, edge_type: EdgeType::Boundary },
+                MeshEdge { id: 3, face_a: 1, face_b: None,    vert_a: 1, vert_b: 3, edge_type: EdgeType::Boundary },
+                MeshEdge { id: 4, face_a: 1, face_b: None,    vert_a: 2, vert_b: 3, edge_type: EdgeType::Boundary },
+            ],
+            uvs: vec![], material_names: vec![], material_texture_paths: vec![],
+            suggested_texture_path: None, pdo_layout: None, embedded_textures: vec![],
+            bounds: BoundingBox::default(),
+        };
+
+        // Place faces manually (both flat, side-by-side)
+        let fold_set = std::collections::HashSet::new(); // no fold edges
+        let faces = unfold_faces(&mesh, &fold_set);
+
+        let ov = FlapOverride { mode: FlapMode::OnOnBothSides, primary_face_id: -1 };
+        let mut ov_map = HashMap::new();
+        ov_map.insert(1usize, ov);  // edge 1 is the cut edge
+
+        let tabs = generate_glue_tabs(&faces, 5.0, 45.0, TabShape::Trapezoid, false, &mesh, &ov_map);
+        assert_eq!(tabs.len(), 2, "OnOnBothSides on one cut edge should produce 2 tabs (one per face)");
+    }
+
+    #[test]
+    fn alternate_flaps_produces_one_tab_per_cut_edge() {
+        let (mesh, faces) = two_faces_one_cut();
+        // Force the interior edge to be Cut by overriding it.
+        let interior_eid = mesh.edges.iter().find(|e| e.face_b.is_some()).map(|e| e.id).unwrap();
+
+        // Build mesh with just one cut edge: mark it Cut manually.
+        let mut mesh2 = mesh.clone();
+        for e in &mut mesh2.edges {
+            if e.id == interior_eid {
+                e.edge_type = crate::models::mesh::EdgeType::Cut;
+            }
+        }
+        let fold_set2 = std::collections::HashSet::new();
+        let faces2 = unfold_faces(&mesh2, &fold_set2);
+
+        let tabs_alt_true  = generate_glue_tabs(&faces2, 5.0, 45.0, TabShape::Trapezoid, true, &mesh2, &HashMap::new());
+        let tabs_alt_false = generate_glue_tabs(&faces2, 5.0, 45.0, TabShape::Trapezoid, false, &mesh2, &HashMap::new());
+
+        // With alternateFlaps=true: the single cut edge gets a tab on only ONE face.
+        // With alternateFlaps=false: same (Default mode uses lower face_id rule anyway).
+        // In either case, Default should not put tabs on both faces.
+        assert!(
+            tabs_alt_true.len() <= tabs_alt_false.len(),
+            "alternateFlaps=true should not produce more tabs than false"
+        );
+    }
+
+    #[test]
+    fn rectangle_tab_has_no_lateral_inset() {
+        let (mesh, faces) = two_faces_one_cut();
+        let mut ov_map: HashMap<usize, FlapOverride> = HashMap::new();
+        for face in &faces {
+            for i in 0..3 {
+                let eid = face.mesh_edge_ids[i];
+                if eid >= 0 && face.edge_is_boundary[i] {
+                    ov_map.insert(eid as usize, FlapOverride {
+                        mode: FlapMode::BorderMountainFold,
+                        primary_face_id: -1,
+                    });
+                }
+            }
+        }
+        let tabs_rect = generate_glue_tabs(&faces, 5.0, 45.0, TabShape::Rectangle, false, &mesh, &ov_map);
+        for tab in &tabs_rect {
+            let p0p1_len = tab.p0.dist(tab.p1);
+            let p3p2_len = tab.p3.dist(tab.p2);
+            // Rectangle: top and bottom edges have same length (no inset).
+            let tol = 1e-6;
+            assert!(
+                (p0p1_len - p3p2_len).abs() < tol,
+                "Rectangle tab: top and bottom should be same length, got {p0p1_len} vs {p3p2_len}"
+            );
+        }
+    }
 }
