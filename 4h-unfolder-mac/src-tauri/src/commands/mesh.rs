@@ -66,6 +66,40 @@ pub async fn get_mesh_info(mesh: Mesh) -> Result<MeshInfoDto, String> {
     })
 }
 
+/// Read an image file from disk and return it as a base64-encoded data URI.
+/// Used by the 3D viewport to load textures via `convertFileSrc` alternative.
+#[command]
+pub async fn get_texture_as_base64(path: String) -> Result<String, String> {
+    use std::path::Path;
+
+    // Security: only allow known image extensions
+    let ext = Path::new(&path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .unwrap_or_default();
+    let allowed = ["png", "jpg", "jpeg", "bmp", "tga", "tiff", "webp", "gif"];
+    if !allowed.contains(&ext.as_str()) {
+        return Err(format!("Extension '{}' not allowed", ext));
+    }
+
+    let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+    use base64::Engine;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+
+    let mime = match ext.as_str() {
+        "jpg" | "jpeg" => "image/jpeg",
+        "png"          => "image/png",
+        "bmp"          => "image/bmp",
+        "tiff"         => "image/tiff",
+        "webp"         => "image/webp",
+        "gif"          => "image/gif",
+        _              => "application/octet-stream",
+    };
+
+    Ok(format!("data:{};base64,{}", mime, b64))
+}
+
 // ---------------------------------------------------------------------------
 // OBJ parsing
 // ---------------------------------------------------------------------------

@@ -17,6 +17,9 @@ export const tauriCommands = {
   getMeshInfo: (mesh: Mesh) =>
     invoke<MeshInfoDto>('get_mesh_info', { mesh }),
 
+  getTextureAsBase64: (path: string) =>
+    invoke<string>('get_texture_as_base64', { path }),
+
   // -------------------------------------------------------------------------
   // Unfolding
   // -------------------------------------------------------------------------

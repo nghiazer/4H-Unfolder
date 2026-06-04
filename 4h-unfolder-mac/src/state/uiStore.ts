@@ -32,6 +32,8 @@ interface UIState {
     tx:    number;
     ty:    number;
   };
+  /** Whether the 3D viewport panel is visible. */
+  showViewport3D: boolean;
   /** Open dialogs. */
   dialogs: {
     settings:  boolean;
@@ -47,6 +49,7 @@ interface UIState {
   setHoveredEdge:      (id: number | null) => void;
   setSelectedPiece:    (id: number | null) => void;
   setEditingEdge:      (id: number | null) => void;
+  toggleViewport3D:    () => void;
   setViewport:         (vp: Partial<UIState['viewport']>) => void;
   openDialog:          (d: keyof UIState['dialogs']) => void;
   closeDialog:         (d: keyof UIState['dialogs']) => void;
@@ -66,6 +69,7 @@ export const useUIStore = create<UIState>()(
     hoveredEdgeId:   null,
     editingEdgeId:   null,
     lasso:           { active: false, points: [] },
+    showViewport3D:  false,
     viewport:  { scale: 1, tx: 0, ty: 0 },
     dialogs:   { settings: false, export: false, editFlaps: false },
 
@@ -93,6 +97,8 @@ export const useUIStore = create<UIState>()(
     setHoveredEdge:   (id) => set((s) => { s.hoveredEdgeId = id; }),
     setSelectedPiece: (id) => set((s) => { s.selectedPieceId = id; }),
     setEditingEdge:   (id) => set((s) => { s.editingEdgeId = id; }),
+
+    toggleViewport3D: () => set((s) => { s.showViewport3D = !s.showViewport3D; }),
 
     setViewport: (vp) =>
       set((s) => { Object.assign(s.viewport, vp); }),

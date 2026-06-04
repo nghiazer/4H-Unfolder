@@ -1,4 +1,4 @@
-import { MousePointer2, Hand, Scissors, LayoutGrid, Download, Settings, FolderOpen, Zap } from 'lucide-react';
+import { MousePointer2, Hand, Scissors, LayoutGrid, Download, Settings, FolderOpen, Zap, Box } from 'lucide-react';
 import { useUIStore, type EditorMode } from '@/state/uiStore';
 import { useUnfoldStore } from '@/state/unfoldStore';
 import { useMeshStore } from '@/state/meshStore';
@@ -8,9 +8,11 @@ import { ToolbarButton } from './ToolbarButton';
 import { Separator } from './Separator';
 
 export function Toolbar() {
-  const mode       = useUIStore((s) => s.mode);
-  const setMode    = useUIStore((s) => s.setMode);
-  const openDialog = useUIStore((s) => s.openDialog);
+  const mode             = useUIStore((s) => s.mode);
+  const setMode          = useUIStore((s) => s.setMode);
+  const openDialog       = useUIStore((s) => s.openDialog);
+  const showViewport3D   = useUIStore((s) => s.showViewport3D);
+  const toggleViewport3D = useUIStore((s) => s.toggleViewport3D);
   const unfold     = useUnfoldStore((s) => s.unfold);
   const unfolding  = useUnfoldStore((s) => s.unfolding);
   const hasMesh    = useMeshStore((s) => s.mesh !== null);
@@ -29,6 +31,14 @@ export function Toolbar() {
     <div className="flex items-center gap-1 px-2 py-1.5 bg-toolbar border-b border-border select-none">
       {/* File */}
       <ToolbarButton icon={<FolderOpen size={16} />} label="Open (⌘O)" onClick={openMeshFileDialog} />
+
+      {/* 3D Viewport toggle */}
+      <ToolbarButton
+        icon={<Box size={16} />}
+        label="3D Viewport"
+        active={showViewport3D}
+        onClick={toggleViewport3D}
+      />
 
       <Separator />
 
