@@ -1,309 +1,49 @@
 # 4H-Unfolder
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![.NET 8](https://img.shields.io/badge/.NET-8.0-blueviolet)](https://dotnet.microsoft.com/download/dotnet/8.0)
-[![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%2F11-blue)]()
-[![Tests](https://img.shields.io/badge/Tests-56%2F56%20pass-brightgreen)]()
-
-A Pepakura-style paper model unfolder built with **WPF / .NET 8**.  
-Load a 3-D mesh, unfold it into a printable 2-D pattern, customise the layout, and export to SVG or PDF.
-
-> Current version: **v0.1.0.A** (win-x64 self-contained EXE) — Windows 11 Fluent Design: 47 Segoe Fluent Icons glyphs across both toolbars
+Papercraft / pepakura unfolder — unfolds 3D meshes to flat paper patterns with glue tabs, cut-edge labels, and SVG/PDF export.
 
 ---
 
-## Screenshot
+## Repository layout
 
-![4H-Unfolder v0.1.0.A](docs/screenshot-v0.1.0.A.png)
-
----
-
-## Download
-
-| Package | Link |
-|---------|------|
-| **Installer** (recommended) | [4H-Unfolder-v0.1.0.A-setup.exe](https://github.com/NghiaZer/4H-Unfolder/releases/download/v0.1.0.A/4H-Unfolder-v0.1.0.A-setup.exe) |
-| **Portable ZIP** | [4H-Unfolder-v0.1.0.A-portable.zip](https://github.com/NghiaZer/4H-Unfolder/releases/download/v0.1.0.A/4H-Unfolder-v0.1.0.A-portable.zip) |
-
-> **No runtime required** — fully self-contained win-x64 binary.  
-> Requires Windows 10 / 11 (x64).
+```
+4H-Unfolder/
+├── 4h-unfolder-win/   WPF / .NET 8 — Windows native app
+└── 4h-unfolder-mac/   Tauri 2 + React + Rust — macOS native app
+```
 
 ---
 
-## Prerequisites (build from source)
+## Platforms
 
-| Requirement | Download |
-|-------------|---------|
-| .NET 8 **SDK** | <https://dotnet.microsoft.com/download/dotnet/8.0> |
-| Windows 10 / 11 (WPF) | — |
+| Platform | Tech | Version | Status |
+|----------|------|---------|--------|
+| Windows | WPF / .NET 8 / C# | v0.1.0.A | Production |
+| macOS | Tauri 2 / React 18 / Rust | v0.0.0.1-alpha | Alpha |
 
 ---
 
-## Build & Run
+## Windows
 
-```bash
-cd D:\CODING\UNFOLD
-dotnet restore
-dotnet build          # 0 errors, 5 NuGet warnings only
+See [4h-unfolder-win/README.md](4h-unfolder-win/README.md) for full documentation.
+
+```powershell
+cd 4h-unfolder-win
+dotnet restore && dotnet build
 dotnet run --project src/FourHUnfolder.App
 ```
 
-### Tests
+## macOS
+
+See [4h-unfolder-mac/README.md](4h-unfolder-mac/README.md) and [4h-unfolder-mac/PROGRESS.md](4h-unfolder-mac/PROGRESS.md).
 
 ```bash
-dotnet test tests/FourHUnfolder.Tests   # 56 / 56 pass
+cd 4h-unfolder-mac
+npm install && npm run tauri:dev
 ```
-
----
-
-## Supported input formats
-
-| Format | Notes |
-|--------|-------|
-| **Wavefront OBJ** | v / vt / f, fan-triangulates n-gons; reads companion `.mtl` for textures |
-| **Pepakura PDO** | PD6 / v3: 3-D geometry + UV + embedded texture (zlib RGB24) |
-| **FBX / COLLADA / 3DS / STL / DXF / LWO / PLY** | Via AssimpNet 5 |
-
----
-
-## Features
-
-### Load & 3-D viewport
-- Import any supported mesh format via **Load Mesh** (📂)
-- **Model Orientation dialog** on every load: choose Up / Front axes (±X/Y/Z), optional UV-flip
-- Interactive HelixToolkit 3-D viewport — LMB orbit, MMB pan, scroll zoom, RMB pivot
-- Per-material **multi-texture** display in 3-D (each material group rendered separately)
-- **Light / Dark theme** — toggle in Settings → General
-
-### Texture management
-- Load / replace / remove texture with **live preview** before committing
-- Orange border + badge indicates active preview mode; Apply / Cancel to confirm
-- **Texture Dialog** — per-material texture slots; browse or clear each slot independently
-
-### Unfold
-- Click **Unfold** → **setup dialog**:
-  - Real-world target size (axis + value + unit: mm / cm / inch)
-  - Paper size (A4 / A3 / A2 / A1 / Letter / Legal / Custom + Portrait / Landscape)
-- Algorithm: dual-graph MST (Kruskal + Union-Find) → BFS triangle flattening
-- MST edges = **Fold** (dashed blue), non-MST interior = **Cut** (solid red)
-- Trapezoidal / rectangular / triangular **glue tabs** on every cut edge (shape, angle, depth configurable)
-
-### Interactive 2-D layout canvas
-
-| Action | Result |
-|--------|--------|
-| Drag piece | Moves piece on the paper |
-| Double-click edge | **Auto-align** to nearest 90° — undoable |
-| Lasso drag | Multi-select pieces |
-| Toolbar Rotate ±90° / Flip H | Rotate or mirror selected piece — undoable |
-| Toolbar Align L/R/T/B/Center-H/V | Align selected pieces — undoable |
-| Auto-arrange | Strip-pack all pieces (sort by area, try 90° rotation) |
-| Ctrl+Z / Ctrl+Y | Undo / Redo all edits |
-
-Edge visual key:
-
-| Style | Meaning |
-|-------|---------|
-| Dashed blue | Fold edge |
-| Solid red | Cut edge |
-| Thin dark grey | Boundary |
-
-### Edge-Edit mode (✏)
-- Hover any edge in the 3-D viewport → coloured tube highlight (attach = green, detach = red)
-- LMB = toggle Fold ↔ Cut; undoable
-- Edge colours configurable in Settings → 3D View
-
-### Rotate-by-Point mode (⊙)
-- Click pivot on canvas → drag handle to rotate piece to any angle — undoable
-
-### Assembly animation (🎬)
-- Step-by-step 3-phase fold guide — all three phases per assembly step:
-  - **Phase 0** Lift-off: piece starts flat at its exact 2-D canvas layout position, then arcs upward (sin lift) before settling at the fold origin
-  - **Phase 1** Paper-fold: faces rotate around shared fold edges via accumulated `Matrix4x4` (BFS spanning tree)
-  - **Phase 2** Fly toward camera: folded shape translates + scales to a staged model position directly above the canvas — visually grows as it rises, making pieces appear to fly toward the viewer
-- Unified scene layout: 2-D canvas plane at the bottom, assembled 3-D model stage at the top; camera auto-frames both on open
-- Faint amber ghost of fully assembled model always visible at the top (destination hint)
-- Per-material texture on each piece; amber emissive highlight on current step
-- **Step timeline slider** — drag to jump to any step instantly (two-way binding)
-- Controls toolbar: step description left · **⏮ ◀ ▶ ⏭** centred · colour legend right
-- Clean 3-D viewport — no overlay; legend moved to control bar
-- Play / Pause auto-animation
-
-### 3-D face selection
-| Action | Result |
-|--------|--------|
-| Left-click face (3-D) | Selects face; yellow overlay + sync to 2-D |
-| Right-click face (3-D) | Context menu: Detach / Attach |
-| Click piece (2-D) | Bidirectional sync to 3-D selection |
-
-### Settings dialog (⚙)
-Four panels — all persisted to `%AppData%\4H-Unfolder\settings.json`.  
-All numeric sliders have a companion TextBox for direct number entry (two-way binding). Switching panels resets scroll to top.
-
-### Model Orientation dialog
-Shown on every mesh load. Two-column layout: 3D preview (60%) · controls (40%).  
-Up axis + Front axis selectors with live mesh preview. Flip UV checkbox. Footer: **Import** (primary) · **Cancel** + "Don't ask again" checkbox.
-
-### Unfold Setup dialog (📐)
-Two-column grid layout — top-down logical flow: **Preset** → **Orientation** → **Custom Size**.  
-Custom Width/Height fields are dimmed (Opacity 0.45) and locked when a fixed preset is selected; enabled only when "Custom…" is chosen.
-
-| Panel | GroupBoxes | Notable options |
-|-------|-----------|----------------|
-| **3D View** | Environment · Mesh, Camera & Lighting | Background · Display mode (Solid/SolidEdges/Wireframe) · Face/back-face color · Opacity · Camera FOV/clip · Edge overlay · Edge-Edit hover colors · Lighting |
-| **2D View** | Canvas & Grid Setup · Lines & Interaction · Layout & Annotations | Canvas & paper color · Grid (show/size/color) · Fold/cut line style · Edge hover + ID labels · Piece gap · Snap-to-grid · Glue tabs · Face numbers |
-| **Print** | Page Layout & Tab Geometry · Export Content Options | Margin · Bleed · SVG scale · Tab shape/angle/depth · Alternate flaps · Fold/cut line style (print) · Grayscale |
-| **General** | App Preferences | Display unit (mm / inch) · **Light / Dark theme** |
-
-### Save / Load project (`.4hu`)
-- Self-contained ZIP bundle: mesh file + textures + full session state
-- Legacy `.pmc` (JSON) also supported for loading
-- **Unsaved-changes warning** on Load / Open / Close
-
-### Export
-- **SVG** — UV-mapped texture per face (base64 data URI + affine transform); fold/cut/tab lines; edge dedup
-- **PDF** — multi-page; fold/cut/tab lines; page labels
-
----
-
-## Architecture
-
-```
-4H-Unfolder.sln
-├── src/
-│   ├── FourHUnfolder.Domain          # Pure models — zero external deps
-│   │   ├── Models/        Vertex, Edge, Face, Mesh, EmbeddedTextureData
-│   │   │                  PaperSizeModel, ModelScale
-│   │   ├── DualGraph/     DualGraph, GraphNode, GraphEdge
-│   │   ├── Results/       UnfoldedFace, GlueTab, UnfoldResult, AssemblyStep
-│   │   ├── Settings/      AppSettings (View3D + View2D + Print + General)
-│   │   └── Persistence/   ProjectState
-│   │
-│   ├── FourHUnfolder.Geometry        # Algorithms (→ Domain)
-│   │   └── Algorithms/    DualGraphBuilder, KruskalMstBuilder, EdgeMarker,
-│   │                       UnfoldEngine, OverlapDetector (spatial grid + AABB + SAT),
-│   │                       GlueTabGenerator, PieceComputer,
-│   │                       AssemblyPlanner, PieceFoldTree
-│   │
-│   ├── FourHUnfolder.Application     # Use-case services (→ Domain, Geometry)
-│   │   ├── Interfaces/    IMeshLoader, IExporter
-│   │   └── Services/      MeshService, UnfoldService,
-│   │                       ProjectSerializer, SettingsService
-│   │
-│   ├── FourHUnfolder.Infrastructure  # I/O (→ Domain, Application)
-│   │   ├── Loaders/       ObjMeshLoader, PdoMeshLoader, AssimpMeshLoader,
-│   │   │                   MultiFormatMeshLoader
-│   │   └── Exporters/     SvgExporter, PdfExporter, AffineTransformHelper
-│   │
-│   └── FourHUnfolder.App             # WPF UI (→ Application, Infrastructure)
-│       ├── ViewModels/    MainViewModel, PieceViewModel, SettingsViewModel,
-│       │                   MaterialTextureViewModel, AssemblyViewModel,
-│       │                   ModelOrientationViewModel
-│       ├── Controls/      PatternCanvasControl
-│       ├── Dialogs/       UnfoldSetupDialog, SettingsDialog, TextureDialog,
-│       │                   AssemblyAnimationWindow, ModelOrientationDialog
-│       ├── Services/      ThemeService
-│       ├── Themes/        LightTheme.xaml, DarkTheme.xaml
-│       └── MainWindow.xaml
-│
-└── tests/
-    └── FourHUnfolder.Tests   # xUnit + FluentAssertions — 56 tests
-        MstAlgorithmTests, UnfoldEngineTests,
-        GeometryAlgorithmTests, SvgExporterTests, PdoMeshLoaderTests
-```
-
-### Dependency graph
-
-```
-Domain ──→ Geometry ──→ Application ──→ Infrastructure ──→ App
-                                                            ↑
-                                              HelixToolkit.WPF
-                                              CommunityToolkit.Mvvm
-                                              Microsoft.Extensions.DI
-                                              AssimpNet 5
-                                              PdfSharp.Standard
-```
-
----
-
-## Unfold pipeline
-
-| Step | Class | What it does |
-|------|-------|-------------|
-| 1 | `MultiFormatMeshLoader` | Routes by extension → OBJ / PDO / Assimp |
-| 2 | `DualGraphBuilder` | One node per face; dihedral-angle edge weights |
-| 3 | `KruskalMstBuilder` | MST via Kruskal + path-compressed Union-Find |
-| 4 | `EdgeMarker` | MST → Fold; non-MST interior → Cut; boundary → Boundary |
-| 5 | `UnfoldEngine` | BFS flattening; circle-circle apex reconstruction |
-| 6 | `OverlapDetector` | Spatial grid broad-phase + AABB pre-check + SAT (O(n·k)) |
-| 7 | `GlueTabGenerator` | Configurable tabs on all cut edges |
-| 8 | `PieceComputer` | Union-Find on fold graph → connected components |
-| 9 | `SvgExporter` / `PdfExporter` | Edge-dedup; UV-mapped texture; multi-page PDF |
-
----
-
-## NuGet packages
-
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `HelixToolkit.WPF` | 2.25.0 | 3-D viewport |
-| `CommunityToolkit.Mvvm` | 8.3.2 | `[ObservableProperty]` / `[RelayCommand]` |
-| `Microsoft.Extensions.DependencyInjection` | 8.0.1 | Constructor injection |
-| `AssimpNet` | 5.0.0-beta1 | FBX / COLLADA / 3DS / STL / DXF / LWO / PLY import |
-| `PdfSharp.Standard` | 1.51.8 | PDF export |
-
----
-
-## File formats
-
-| Format | Role |
-|--------|------|
-| `.obj` + `.mtl` | Input mesh (OBJ + material / texture reference) |
-| `.pdo` | Input mesh (Pepakura Designer v3 / PD6, with embedded texture) |
-| `.fbx`, `.dae`, `.3ds`, `.stl`, `.dxf`, `.lwo`, `.ply` | Input mesh (via Assimp) |
-| `.png` / `.jpg` / `.bmp` / `.tiff` | Texture images |
-| `.4hu` | 4H-Unfolder project bundle (ZIP: mesh + textures + state JSON) |
-| `.pmc` | Legacy project format (JSON, load-only) |
-| `.svg` | Export — printable 2-D pattern with embedded texture |
-| `.pdf` | Export — multi-page printable pattern |
-
----
-
-## Quick test — tetrahedron
-
-Save as `tetrahedron.obj` and open with **Load Mesh**:
-
-```obj
-# Simple tetrahedron
-v  0.0  0.0  0.0
-v  1.0  0.0  0.0
-v  0.5  1.0  0.0
-v  0.5  0.5  1.0
-f 1 2 3
-f 1 2 4
-f 2 3 4
-f 1 3 4
-```
-
-Expected after **Unfold** (A4, 200 mm longest axis):  
-4 triangular faces flat, 3 dashed fold lines, 3 solid cut lines, 3 glue tabs.
-
----
-
-## Known limitations
-
-- Undo/redo covers edge edits and piece transforms; complex multi-step sequences may have minor position drift
-- SVG texture requires UV-mapped mesh; plain geometry without UV coordinates exports without texture
-
----
-
-## Contributing
-
-Contributions, bug reports and feature requests are welcome!  
-See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, branch workflow and coding conventions.
 
 ---
 
 ## License
 
-[MIT](LICENSE) © 2026 NghiaZer
+[MIT](LICENSE)
