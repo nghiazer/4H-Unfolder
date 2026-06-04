@@ -1,10 +1,75 @@
 # 4H-Unfolder — Session Progress Log
 
-> **Last updated:** 2026-06-04 (session 41 — refactoring, security hardening, tech-debt cleanup; branch `main`)
-> **Branch:** `main` (current: v0.1.0.A)
-> **Target framework:** .NET 8 / WPF
-> **SDK required:** `winget install Microsoft.DotNet.SDK.8`
+> **Last updated:** 2026-06-04 (session 42 — macOS port Phase 1; branch `feat/mac-port`)
+> **Branch:** `feat/mac-port`
+> **Target framework:** .NET 8 / WPF (Windows) + Tauri 2 / React 18 / Rust (macOS)
+> **SDK required (Windows):** `winget install Microsoft.DotNet.SDK.8`
+> **SDK required (macOS):** See [`4h-unfolder-mac/SETUP.md`](4h-unfolder-mac/SETUP.md)
 > **History archive:** see [`BUGS_HISTORY.md`](BUGS_HISTORY.md) for all prior bug/tech-debt records
+
+---
+
+## macOS Port — `4h-unfolder-mac/` (Tauri 2 + React 18 + Rust)
+
+### Migration Plan
+Full plan: [`~/.claude/plans/quiet-squishing-beaver.md`] — 6 phases, ~27–30 sessions total.
+
+### Phase 1 — Rust Algorithm Core ✅ COMPLETE (session 42)
+
+**Goal:** Rust pipeline produces bit-for-bit equivalent output to C# for all test meshes.
+
+#### Data model fixes (critical divergences resolved)
+| Component | Fix |
+|-----------|-----|
+| `models/mesh.rs` | Added `EdgeType` enum, `Face.edge_ids [AB,BC,CA]`, `Face.material_id`, `MeshEdge.edge_type`, `PdoLayout`, `EmbeddedTexture` |
+| `models/unfold.rs` | Full rewrite: `FlapMode` (10 variants), `FlapOverride` serialize/deserialize matching C#, `UnfoldedFace` with `bool[3]` edge arrays, `GlueTab` P0/P1/P2/P3, `TabShape`, `UnfoldResult`, `PieceLayout`, `UnfoldResponse`, `AssemblyStep` |
+| `models/settings.rs` | Expanded with all print/view/general settings fields |
+
+#### Algorithm fixes
+| File | Fix |
+|------|-----|
+| `algorithms/constants.rs` | New: `DEGENERATE_EDGE/FACE/TAB` (1e-6/1e-10/1e-4), `SAT_TOUCH_EPSILON` (1e-5) |
+| `algorithms/spanning_tree.rs` | Added `compute_face_normal`, `compute_dihedral_angle` (acos weighted MST), `mark_edges` |
+| `algorithms/face_unfold.rs` | **Full rewrite** — BFS + `place_root_face` (law-of-cosines) + `triangle_apex` + `reconstruct_apex` (cross-product side test) + `place_child_face`; replaces wrong DFS+face-normal-basis approach |
+| `algorithms/glue_tabs.rs` | **Full rewrite** — 10-mode FlapMode dispatch, Trapezoid/Rect/Triangle shapes, AlternateFlaps deny-set, proper `face.mesh_edge_ids[i]` edge lookup (replaces wrong `edge_id % n`) |
+| `algorithms/layout.rs` | Updated to use new `PieceLayout` + `UnfoldedFace` structs |
+
+#### Command fixes
+| File | Fix |
+|------|-----|
+| `commands/mesh.rs` | `build_edges()` stamps `face.edge_ids` in winding order [AB,BC,CA]; non-manifold guard; `tobj` parse with UVs + materials + MTL texture paths |
+| `commands/unfold.rs` | **Full rewrite** — 11-step pipeline matching `UnfoldService.Unfold()`: dihedral MST → edge overrides → mark edges → BFS unfold → overlap stub → glue tabs → cut pair IDs → dihedral angles → pieces → auto-arrange → `UnfoldResponse` |
+| `commands/export.rs` | Updated to use `UnfoldResponse` instead of old `UnfoldResult` |
+| `commands/project.rs` | Expanded `ProjectState`; security hardening (asset whitelist, `Path::file_name()`, version check ≤ 2) |
+| `commands/settings.rs` | Updated for expanded `AppSettings` |
+| `src-tauri/tauri.conf.json` | Fixed: removed invalid fields (`fileDropEnabled`, `category`), RGBA placeholder icons |
+
+#### TypeScript sync
+| File | Fix |
+|------|-----|
+| `src/types/mesh.ts` | `EdgeType`, `Face.edgeIds[3]`, `Face.materialId`, `MeshEdge.edgeType`, `PdoLayout`, `EmbeddedTexture` |
+| `src/types/unfold.ts` | All 10 `FlapMode` variants, `UnfoldedFace` with `edgeIsFold/edgeIsBoundary/meshEdgeIds [3]`, `GlueTab` P0/P1/P2/P3, `UnfoldResponse`, `PieceLayout`, `AssemblyStep`, `UnfoldOptions` |
+| `src/types/settings.ts` | Expanded with all print/view settings; `DEFAULT_SETTINGS` updated |
+| `src/types/tauri.ts` | Typed wrappers for all commands including new `UnfoldResponse`, `ExportOpts`, `ProjectStateDto` |
+| `src/state/unfoldStore.ts` | `edgeOverrides`, `pieceLayouts`, `getEffectivePieceLayouts()`, serialize overrides to Rust format |
+| `src/state/settingsStore.ts` | `resetToDefaults()`, uses new `DEFAULT_SETTINGS` |
+
+#### Test results
+```
+cargo check  → 0 errors, 9 warnings (dead code, used in later phases)
+cargo test   → 12/12 pass
+  - algorithms::spanning_tree: 3 tests (dihedral angle, MST, edge marking)
+  - algorithms::face_unfold:   4 tests (root placement, edge lengths, count, piece_id)
+  - algorithms::glue_tabs:     3 tests (Default mode, depth bounds, OffOffNoFlap)
+  - commands::mesh:            2 tests (edge_ids winding order, non-manifold guard)
+```
+
+#### Test fixtures added
+- `src-tauri/tests/fixtures/tetrahedron.obj` — 4 vertices, 4 faces, 6 edges
+- `src-tauri/tests/fixtures/cube.obj` — 8 vertices, 12 faces, 18 edges
+
+### Phase 2–6 — Pending
+See migration plan for full breakdown. Next: **Phase 2** — OBJ loader completion (UVs, materials, MTL) + `get_mesh_info` command.
 
 ---
 

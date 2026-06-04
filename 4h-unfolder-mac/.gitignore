@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.DS_Store
+.env
+.env.local
+
+# Rust / Tauri
+src-tauri/target/
+src-tauri/WixTools/
+
+# Build outputs
+*.dmg
+*.app
+publish/
