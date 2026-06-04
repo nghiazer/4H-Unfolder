@@ -5,7 +5,7 @@ import { useUIStore } from '@/state/uiStore';
 export function PropertiesPanel() {
   const mesh       = useMeshStore((s) => s.mesh);
   const fileName   = useMeshStore((s) => s.fileName);
-  const result     = useUnfoldStore((s) => s.result);
+  const result     = useUnfoldStore((s) => s.response);
   const selected   = useUIStore((s) => s.selectedFaceIds);
 
   return (
@@ -32,7 +32,7 @@ export function PropertiesPanel() {
             Unfold Result
           </h3>
           <dl className="space-y-1">
-            <Row label="Pieces"     value={result.pieces.length} />
+            <Row label="Pieces"     value={result.pieceLayouts.length} />
             <Row label="Sheet"      value={`${result.sheetWidthMm} × ${result.sheetHeightMm} mm`} />
           </dl>
         </section>

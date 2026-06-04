@@ -7,7 +7,14 @@ interface Props {
 }
 
 export function GlueTabShape({ tab, scale }: Props) {
-  const points = tab.polygon.flatMap((v) => [v.x * scale, v.y * scale]);
+  const s = scale;
+  // Quad: p0(cut edge) → p1(cut edge) → p2(inset) → p3(inset)
+  const points = [
+    tab.p0.x * s, tab.p0.y * s,
+    tab.p1.x * s, tab.p1.y * s,
+    tab.p2.x * s, tab.p2.y * s,
+    tab.p3.x * s, tab.p3.y * s,
+  ];
 
   return (
     <Line
@@ -16,7 +23,6 @@ export function GlueTabShape({ tab, scale }: Props) {
       fill="#d4edda"
       stroke="#5a9e6f"
       strokeWidth={0.5}
-      dash={[3, 2]}
       opacity={0.8}
       listening={false}
     />

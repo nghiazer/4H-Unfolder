@@ -14,7 +14,7 @@ export function Toolbar() {
   const unfold     = useUnfoldStore((s) => s.unfold);
   const unfolding  = useUnfoldStore((s) => s.unfolding);
   const hasMesh    = useMeshStore((s) => s.mesh !== null);
-  const hasResult  = useUnfoldStore((s) => s.result !== null);
+  const hasResult  = useUnfoldStore((s) => s.response !== null);
 
   const modeBtn = (m: EditorMode, icon: React.ReactNode, label: string) => (
     <ToolbarButton
