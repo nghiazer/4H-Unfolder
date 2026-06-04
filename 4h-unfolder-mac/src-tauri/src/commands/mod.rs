@@ -1,3 +1,4 @@
+pub mod assembly;
 pub mod export;
 pub mod mesh;
 pub mod project;

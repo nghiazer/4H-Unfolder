@@ -44,6 +44,13 @@ svg          = "0.17"
 # Rayon for parallel face processing
 rayon        = "1.10"
 
+# Base64 encoding (texture export)
+base64       = "0.22"
+
+# zlib decompression for PDO embedded textures
+flate2       = "1.0"
+
+
 # Platform dirs (settings path)
 dirs         = "5.0"
 

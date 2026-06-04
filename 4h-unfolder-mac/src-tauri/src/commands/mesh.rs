@@ -44,6 +44,39 @@ pub async fn load_obj_from_bytes(bytes: Vec<u8>) -> Result<Mesh, String> {
     parse_obj_bytes(&bytes, None)
 }
 
+/// Universal mesh loader — dispatches on file extension.
+/// Supports: .obj (tobj), .pdo (Pepakura v3).
+/// Returns an error with a clear message for unsupported formats.
+#[command]
+pub async fn load_mesh(path: String) -> Result<Mesh, String> {
+    let ext = std::path::Path::new(&path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
+    match ext.as_str() {
+        "obj" => {
+            let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+            let dir   = std::path::Path::new(&path)
+                .parent()
+                .map(|p| p.to_string_lossy().into_owned());
+            parse_obj_bytes(&bytes, dir.as_deref())
+        }
+        "pdo" => {
+            let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+            crate::loaders::pdo_loader::load_pdo(&bytes)
+        }
+        "fbx" | "glb" | "gltf" | "dae" | "stl" | "ply" | "3ds" => {
+            Err(format!(
+                "Format '.{}' requires Assimp. Run `brew install assimp` and rebuild.",
+                ext
+            ))
+        }
+        _ => Err(format!("Unsupported mesh format: .{}", ext)),
+    }
+}
+
 /// Return metadata about an already-loaded mesh without re-sending the full payload.
 #[command]
 pub async fn get_mesh_info(mesh: Mesh) -> Result<MeshInfoDto, String> {
@@ -64,6 +97,70 @@ pub async fn get_mesh_info(mesh: Mesh) -> Result<MeshInfoDto, String> {
         material_names:         mesh.material_names.clone(),
         edges_stamped,
     })
+}
+
+/// Scale and/or mirror-X all vertices of a mesh, then recompute bounds + edges.
+/// `scale_factor` multiplies every vertex coordinate (converts mesh units → mm).
+/// `mirror_x` flips the X axis and fixes face winding so normals stay outward.
+#[command]
+pub async fn transform_mesh(
+    mut mesh: Mesh,
+    scale_factor: f64,
+    mirror_x: bool,
+) -> Result<Mesh, String> {
+    for v in &mut mesh.vertices {
+        v.x *= scale_factor;
+        v.y *= scale_factor;
+        v.z *= scale_factor;
+        if mirror_x { v.x = -v.x; }
+    }
+
+    if mirror_x {
+        // Flip winding to maintain outward normals after X mirror.
+        for face in &mut mesh.faces {
+            face.vertices.swap(1, 2);
+            if let Some(ref mut uvs) = face.uvs { uvs.swap(1, 2); }
+        }
+        // Re-stamp edge adjacency after winding change.
+        mesh.edges = build_edges(&mut mesh.faces);
+    }
+
+    mesh.recompute_bounds();
+    Ok(mesh)
+}
+
+/// Read an image file from disk and return it as a base64-encoded data URI.
+/// Used by the 3D viewport to load textures via `convertFileSrc` alternative.
+#[command]
+pub async fn get_texture_as_base64(path: String) -> Result<String, String> {
+    use std::path::Path;
+
+    // Security: only allow known image extensions
+    let ext = Path::new(&path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .unwrap_or_default();
+    let allowed = ["png", "jpg", "jpeg", "bmp", "tga", "tiff", "webp", "gif"];
+    if !allowed.contains(&ext.as_str()) {
+        return Err(format!("Extension '{}' not allowed", ext));
+    }
+
+    let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+    use base64::Engine;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+
+    let mime = match ext.as_str() {
+        "jpg" | "jpeg" => "image/jpeg",
+        "png"          => "image/png",
+        "bmp"          => "image/bmp",
+        "tiff"         => "image/tiff",
+        "webp"         => "image/webp",
+        "gif"          => "image/gif",
+        _              => "application/octet-stream",
+    };
+
+    Ok(format!("data:{};base64,{}", mime, b64))
 }
 
 // ---------------------------------------------------------------------------
