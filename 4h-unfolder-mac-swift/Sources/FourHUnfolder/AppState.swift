@@ -72,7 +72,10 @@ final class AppState: ObservableObject {
     func openMeshFilePicker() {
         let panel = NSOpenPanel()
         panel.title = "Open Mesh File"
-        panel.allowedContentTypes = [.init(filenameExtension: "obj")!]
+        panel.allowedContentTypes = [
+            .init(filenameExtension: "obj")!,
+            .init(filenameExtension: "pdo")!
+        ]
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
@@ -249,7 +252,7 @@ enum SVGExporter {
                 let pts = tab.polygon
                     .map { "\(Double($0.x) * sc + ox),\(Double($0.y) * sc + oy)" }
                     .joined(separator: " ")
-                lines.append(#"  <polygon points="\#(pts)" fill="\#(tabColor)" fill-opacity="0.6" stroke="#2e7d32" stroke-width="0.4"/>"#)
+                lines.append("  <polygon points=\"\(pts)\" fill=\"\(tabColor)\" fill-opacity=\"0.6\" stroke=\"#2e7d32\" stroke-width=\"0.4\"/>")
             }
         }
 

@@ -1,3 +1,4 @@
+import Foundation
 import simd
 
 // MARK: - Edge type (assigned after MST + overrides)
