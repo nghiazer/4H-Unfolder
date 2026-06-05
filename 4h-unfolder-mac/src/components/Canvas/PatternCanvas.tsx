@@ -10,7 +10,6 @@ import { PieceGroup } from './PieceGroup';
 import { LassoOverlay } from './LassoOverlay';
 import { SheetBackground } from './SheetBackground';
 import { DropZone } from './DropZone';
-import { handleDroppedFile } from '@/services/meshLoader';
 
 interface Props {
   width:  number;
@@ -97,15 +96,6 @@ export function PatternCanvas({ width, height }: Props) {
   const allFaces         = renderedPieces.flatMap((p) => p.faces);
 
   // ---------------------------------------------------------------------------
-  // Drop handler
-  // ---------------------------------------------------------------------------
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    const files = Array.from(e.dataTransfer.files);
-    if (files[0]) handleDroppedFile(files[0].name);
-  };
-
-  // ---------------------------------------------------------------------------
   // Middle-mouse pan
   // ---------------------------------------------------------------------------
   const handleStageMouseDown = (e: KonvaEventObject<MouseEvent>) => {
@@ -146,7 +136,6 @@ export function PatternCanvas({ width, height }: Props) {
   return (
     <div
       className="flex-1 overflow-hidden bg-canvas relative"
-      onDrop={handleDrop}
       onDragOver={(e) => e.preventDefault()}
     >
       {!hasMesh && <DropZone />}

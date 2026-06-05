@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { Toolbar } from '@/components/Toolbar/Toolbar';
 import { PatternCanvas } from '@/components/Canvas/PatternCanvas';
 import { PropertiesPanel } from '@/components/Sidebar/PropertiesPanel';
@@ -10,6 +11,8 @@ import { ModelOrientationDialog } from '@/components/Dialogs/ModelOrientationDia
 import { AssemblyPanel } from '@/components/Assembly/AssemblyPanel';
 import { useSettingsStore } from '@/state/settingsStore';
 import { useUIStore } from '@/state/uiStore';
+import { useMeshStore } from '@/state/meshStore';
+import { handleDroppedFile } from '@/services/meshLoader';
 import { useGlobalKeyboard } from '@/hooks/useKeyboard';
 
 const MIN_PANE_PX = 180;
@@ -17,6 +20,7 @@ const MIN_PANE_PX = 180;
 export function AppLayout() {
   const loadSettings     = useSettingsStore((s) => s.loadSettings);
   const showViewport3D   = useUIStore((s) => s.showViewport3D);
+  const meshError        = useMeshStore((s) => s.error);
   const [showAssembly, setShowAssembly] = useState(false);
 
   const canvasRef   = useRef<HTMLDivElement>(null);
@@ -29,6 +33,21 @@ export function AppLayout() {
 
   useEffect(() => { loadSettings(); }, [loadSettings]);
   useGlobalKeyboard();
+
+  // Tauri file drag-drop listener — provides full filesystem paths unlike browser DragEvent
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    getCurrentWebviewWindow()
+      .onDragDropEvent((event) => {
+        if (event.payload.type === 'drop') {
+          for (const path of event.payload.paths) {
+            handleDroppedFile(path);
+          }
+        }
+      })
+      .then((fn) => { unlisten = fn; });
+    return () => { unlisten?.(); };
+  }, []);
 
   // Observe the canvas container for size changes
   useEffect(() => {
@@ -70,6 +89,18 @@ export function AppLayout() {
   return (
     <div className="flex flex-col h-screen bg-background text-foreground font-sans overflow-hidden">
       <Toolbar showAssembly={showAssembly} onToggleAssembly={() => setShowAssembly((v) => !v)} />
+
+      {meshError && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-destructive/10 border-b border-destructive/30 text-destructive text-sm">
+          <span className="flex-1 truncate">{meshError}</span>
+          <button
+            className="shrink-0 opacity-60 hover:opacity-100 text-xs font-bold"
+            onClick={() => useMeshStore.setState((s) => ({ ...s, error: null }))}
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       <div ref={splitContainerRef} className="flex flex-1 overflow-hidden">
         {/* 3D Viewport — conditionally visible */}
