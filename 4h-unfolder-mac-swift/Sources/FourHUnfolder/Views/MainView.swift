@@ -40,12 +40,47 @@ struct MainView: View {
                     PatternCanvasView()
                         .frame(minWidth: 280)
                 }
+
+                // Status bar
+                if let result = appState.unfoldResult {
+                    statusBar(result: result)
+                }
             }
         }
         .navigationTitle(appState.mesh.map {
             $0.name.isEmpty ? "4H Unfolder" : $0.name
         } ?? "4H Unfolder")
         .toolbar { toolbarItems }
+    }
+
+    // MARK: - Status bar
+
+    @ViewBuilder
+    private func statusBar(result: UnfoldResult) -> some View {
+        HStack(spacing: 14) {
+            Label("\(result.faces.count)", systemImage: "triangle")
+                .help("Face count")
+            Label("\(result.pieces.count)", systemImage: "square.on.square")
+                .help("Piece count")
+            if result.hasOverlaps {
+                Label("Overlaps", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                    .help("Pattern has overlapping pieces")
+            }
+            Spacer()
+            let p = appState.settings.print.effectivePaper
+            Text("\(p.name) \(appState.settings.print.isLandscape ? "L" : "P")")
+                .foregroundStyle(.tertiary)
+            Text(String(format: "%.0f × %.0f mm", p.widthMm, p.heightMm))
+                .foregroundStyle(.tertiary)
+        }
+        .font(.caption)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 5)
+        .background(.bar)
+        .overlay(alignment: .top) {
+            Divider()
+        }
     }
 
     // MARK: - Toolbar
@@ -64,7 +99,6 @@ struct MainView: View {
             } label: {
                 Label("Open Mesh…", systemImage: "cube.fill")
             }
-            .keyboardShortcut("o", modifiers: .command)
             .help("Open an OBJ or PDO mesh file (⌘O)")
 
             Divider()
@@ -75,7 +109,6 @@ struct MainView: View {
             } label: {
                 Label("Unfold", systemImage: "triangle.bottomhalf.pattern.checkered")
             }
-            .keyboardShortcut("u", modifiers: .command)
             .disabled(appState.mesh == nil || appState.isLoading)
             .help("Run unfold pipeline (⌘U)")
 
@@ -89,7 +122,6 @@ struct MainView: View {
             }
             .disabled(appState.unfoldResult == nil)
             .help("Export unfolded pattern as SVG (⌘⇧E)")
-            .keyboardShortcut("e", modifiers: [.command, .shift])
 
             // Export PDF
             Button {
@@ -99,7 +131,6 @@ struct MainView: View {
             }
             .disabled(appState.unfoldResult == nil)
             .help("Export unfolded pattern as PDF (⌘P)")
-            .keyboardShortcut("p", modifiers: .command)
 
             Divider()
 
@@ -109,7 +140,6 @@ struct MainView: View {
             } label: {
                 Label("Open Project…", systemImage: "folder.badge.plus")
             }
-            .keyboardShortcut("o", modifiers: [.command, .shift])
             .help("Open a saved .4hu project (⌘⇧O)")
 
             Button {
@@ -117,7 +147,6 @@ struct MainView: View {
             } label: {
                 Label("Save Project…", systemImage: "externaldrive.badge.checkmark")
             }
-            .keyboardShortcut("s", modifiers: .command)
             .disabled(appState.mesh == nil)
             .help("Save project as .4hu bundle (⌘S)")
 
@@ -127,13 +156,11 @@ struct MainView: View {
             Button { appState.undo() } label: {
                 Image(systemName: "arrow.uturn.backward")
             }
-            .keyboardShortcut("z", modifiers: .command)
             .help("Undo edge override (⌘Z)")
 
             Button { appState.redo() } label: {
                 Image(systemName: "arrow.uturn.forward")
             }
-            .keyboardShortcut("z", modifiers: [.command, .shift])
             .help("Redo (⌘⇧Z)")
         }
     }

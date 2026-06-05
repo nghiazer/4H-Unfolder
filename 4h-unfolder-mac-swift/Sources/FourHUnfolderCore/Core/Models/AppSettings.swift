@@ -2,7 +2,7 @@ import Foundation
 
 // MARK: - Paper size
 
-struct PaperSizeModel: Codable, Equatable, Identifiable {
+struct PaperSizeModel: Codable, Equatable, Hashable, Identifiable {
     var name: String
     var widthMm: Double
     var heightMm: Double
@@ -49,6 +49,18 @@ struct AppSettings: Codable, Equatable {
         var svgScaleFactor: Double = 1.0
         var marginMm: Double = 5.0
         var bleedMm: Double = 0.0
+
+        var paperSize: PaperSizeModel = .a4
+        var isLandscape: Bool = false
+
+        var effectivePaper: PaperSizeModel {
+            let w = paperSize.widthMm, h = paperSize.heightMm
+            if isLandscape {
+                return PaperSizeModel(name: paperSize.name, widthMm: max(w, h), heightMm: min(w, h))
+            } else {
+                return PaperSizeModel(name: paperSize.name, widthMm: min(w, h), heightMm: max(w, h))
+            }
+        }
 
         enum TabShape: String, Codable, CaseIterable, Identifiable {
             case trapezoid = "Trapezoid"

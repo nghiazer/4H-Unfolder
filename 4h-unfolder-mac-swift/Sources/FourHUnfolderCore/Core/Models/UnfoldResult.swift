@@ -38,6 +38,17 @@ struct UnfoldedFace {
     func meshEdgeId(_ i: Int) -> Int {
         switch i { case 0: meshEdge0; case 1: meshEdge1; default: meshEdge2 }
     }
+
+    func translated(by offset: SIMD2<Float>) -> UnfoldedFace {
+        UnfoldedFace(
+            faceId: faceId, materialId: materialId,
+            v0: v0 + offset, v1: v1 + offset, v2: v2 + offset,
+            edge0IsFold: edge0IsFold, edge1IsFold: edge1IsFold, edge2IsFold: edge2IsFold,
+            edge0IsBoundary: edge0IsBoundary, edge1IsBoundary: edge1IsBoundary, edge2IsBoundary: edge2IsBoundary,
+            uv0: uv0, uv1: uv1, uv2: uv2,
+            meshEdge0: meshEdge0, meshEdge1: meshEdge1, meshEdge2: meshEdge2
+        )
+    }
 }
 
 // MARK: - Glue tab
@@ -54,6 +65,13 @@ struct GlueTab {
     let borderFoldStyle: FlapMode?
 
     var polygon: [SIMD2<Float>] { [p0, p1, p2, p3] }
+
+    func translated(by offset: SIMD2<Float>) -> GlueTab {
+        GlueTab(faceId: faceId, localEdgeIdx: localEdgeIdx,
+                p0: p0 + offset, p1: p1 + offset,
+                p2: p2 + offset, p3: p3 + offset,
+                borderFoldStyle: borderFoldStyle)
+    }
 }
 
 // MARK: - Complete unfold result

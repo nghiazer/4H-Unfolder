@@ -12,6 +12,7 @@ final class AppState: ObservableObject {
     @Published var selectedFaceId: Int? = nil
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var fitToWindowTrigger: Int = 0
 
     /// URL of the file the current mesh was loaded from (needed for project save).
     private(set) var sourceMeshURL: URL?
@@ -71,6 +72,53 @@ final class AppState: ObservableObject {
     }
 
     func selectAll() { /* Phase 6 */ }
+
+    func fitToWindow() { fitToWindowTrigger &+= 1 }
+
+    // MARK: - Auto-arrange pieces on paper
+
+    func autoArrange() {
+        guard var result = unfoldResult else { return }
+        let paper  = settings.print.effectivePaper
+        let margin = Float(settings.print.marginMm)
+        let pageW  = Float(paper.widthMm)
+
+        var newFaces = result.faces
+        var newTabs  = result.tabs
+        var curX: Float = margin
+        var curY: Float = margin
+        var rowH: Float = 0
+
+        for faceIds in result.pieces {
+            let faceSet   = Set(faceIds)
+            let pieceFaces = result.faces.filter { faceSet.contains($0.faceId) }
+            guard !pieceFaces.isEmpty else { continue }
+
+            let allX = pieceFaces.flatMap { [$0.v0.x, $0.v1.x, $0.v2.x] }
+            let allY = pieceFaces.flatMap { [$0.v0.y, $0.v1.y, $0.v2.y] }
+            let minX = allX.min()!, maxX = allX.max()!
+            let minY = allY.min()!, maxY = allY.max()!
+            let w = maxX - minX, h = maxY - minY
+
+            if curX + w > pageW - margin && curX > margin {
+                curX = margin; curY += rowH + margin; rowH = 0
+            }
+
+            let off = SIMD2<Float>(curX - minX, curY - minY)
+            for i in newFaces.indices where faceSet.contains(newFaces[i].faceId) {
+                newFaces[i] = newFaces[i].translated(by: off)
+            }
+            for i in newTabs.indices where faceSet.contains(newTabs[i].faceId) {
+                newTabs[i] = newTabs[i].translated(by: off)
+            }
+            curX += w + margin
+            rowH = max(rowH, h)
+        }
+
+        result.faces = newFaces
+        result.tabs  = newTabs
+        unfoldResult = result
+    }
 
     // MARK: - Mesh file operations
 
