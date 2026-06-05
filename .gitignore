@@ -10,6 +10,9 @@ obj/
 4h-unfolder-mac/dist/
 4h-unfolder-mac/node_modules/
 
+# Build outputs (Swift SPM)
+4h-unfolder-mac-swift/.build/
+
 # NuGet
 packages/
 *.nupkg
