@@ -104,8 +104,8 @@ struct OverlapDetector {
             let aProjs = av.map { simd_dot($0, axis) }
             let bProjs = bv.map { simd_dot($0, axis) }
 
-            let aMin = aProjs.min()!, aMax = aProjs.max()!
-            let bMin = bProjs.min()!, bMax = bProjs.max()!
+            guard let aMin = aProjs.min(), let aMax = aProjs.max(),
+                  let bMin = bProjs.min(), let bMax = bProjs.max() else { continue }
 
             // Separated if projections don't overlap (allow epsilon for shared fold edges)
             if aMax <= bMin + eps || bMax <= aMin + eps { return true }

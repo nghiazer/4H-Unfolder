@@ -1,34 +1,38 @@
 import SwiftUI
 import SceneKit
+import CoreGraphics
 import simd
 @testable import FourHUnfolderCore
 
 // MARK: - Native 3D viewport backed by SCNView (Metal-accelerated)
 //
 // Features:
-//  - Per-vertex normals (averaged from adjacent face normals) for smooth shading
-//  - Selected face orange highlight (separate SCNNode, renderingOrder=10)
-//  - Camera auto-framed on mesh load / update
-//  - Ambient + directional lighting
+//  - Expanded vertex buffer (un-indexed) — each face-vertex carries its own UV
+//  - One SCNGeometryElement + SCNMaterial per materialId group (multi-material)
+//  - Texture from textureCache (CGImage) or solid blue fallback
+//  - Per-vertex smooth normals (averaged face normals)
+//  - Selected face orange highlight (renderingOrder=10)
+//  - Camera auto-framed on mesh update
+//  - UV convention: stored UVs have Y=0 at top. SceneKit needs Y=0 at bottom → V-flip applied.
 
 struct SceneKitView: NSViewRepresentable {
     let mesh: Mesh?
     let selectedFaceId: Int?
+    let textureCache: [Int: CGImage]
 
     // MARK: - NSViewRepresentable
 
     func makeNSView(context: Context) -> SCNView {
         let view = SCNView()
         view.scene = SCNScene()
-        view.allowsCameraControl  = true
+        view.allowsCameraControl      = true
         view.autoenablesDefaultLighting = false
-        view.antialiasingMode     = .multisampling4X
-        view.backgroundColor      = NSColor(white: 0.10, alpha: 1)
-        view.showsStatistics      = false
+        view.antialiasingMode         = .multisampling4X
+        view.backgroundColor          = NSColor(white: 0.10, alpha: 1)
+        view.showsStatistics          = false
 
         let scene = view.scene!
 
-        // Camera
         let camNode = SCNNode(); camNode.name = "camera"
         camNode.camera = SCNCamera()
         camNode.camera!.fieldOfView = 60
@@ -36,7 +40,6 @@ struct SceneKitView: NSViewRepresentable {
         scene.rootNode.addChildNode(camNode)
         view.pointOfView = camNode
 
-        // Ambient light
         let ambNode = SCNNode(); ambNode.name = "ambient"
         ambNode.light = SCNLight()
         ambNode.light!.type      = .ambient
@@ -44,7 +47,6 @@ struct SceneKitView: NSViewRepresentable {
         ambNode.light!.color     = NSColor.white
         scene.rootNode.addChildNode(ambNode)
 
-        // Directional light
         let dirNode = SCNNode(); dirNode.name = "sun"
         dirNode.light = SCNLight()
         dirNode.light!.type      = .directional
@@ -58,7 +60,6 @@ struct SceneKitView: NSViewRepresentable {
 
     func updateNSView(_ scnView: SCNView, context: Context) {
         let root = scnView.scene!.rootNode
-        // Remove previous mesh + selection nodes
         root.childNodes(passingTest: { n, _ in
             n.name == "mesh_main" || n.name == "mesh_sel"
         }).forEach { $0.removeFromParentNode() }
@@ -67,55 +68,99 @@ struct SceneKitView: NSViewRepresentable {
 
         root.addChildNode(buildMainNode(mesh: mesh))
 
-        if let selId = selectedFaceId {
-            if let selNode = buildSelectionNode(mesh: mesh, faceId: selId) {
-                root.addChildNode(selNode)
-            }
+        if let selId = selectedFaceId,
+           let selNode = buildSelectionNode(mesh: mesh, faceId: selId) {
+            root.addChildNode(selNode)
         }
 
         autoFrameCamera(scnView, mesh: mesh)
     }
 
-    // MARK: - Mesh geometry
+    // MARK: - Multi-material mesh geometry
 
     private func buildMainNode(mesh: Mesh) -> SCNNode {
-        // Compute per-face normals, accumulate into per-vertex normals
-        var accum = [SIMD3<Float>](repeating: .zero, count: mesh.vertices.count)
+        // Accumulate per-vertex smooth normals from face normals
+        var vertNormAccum = [SIMD3<Float>](repeating: .zero, count: mesh.vertices.count)
         for face in mesh.faces {
+            let n = computeFaceNormal(mesh, face)
+            if face.a < mesh.vertices.count { vertNormAccum[face.a] += n }
+            if face.b < mesh.vertices.count { vertNormAccum[face.b] += n }
+            if face.c < mesh.vertices.count { vertNormAccum[face.c] += n }
+        }
+
+        // Expanded arrays: 3 independent entries per face (no vertex sharing across triangles)
+        var positions: [SCNVector3] = []
+        var normals:   [SCNVector3] = []
+        var uvCoords:  [CGPoint]    = []
+        positions.reserveCapacity(mesh.faces.count * 3)
+        normals.reserveCapacity(mesh.faces.count * 3)
+        uvCoords.reserveCapacity(mesh.faces.count * 3)
+
+        var groups: [Int: [Int32]] = [:]  // materialId → sequential vertex indices
+
+        for (fi, face) in mesh.faces.enumerated() {
             guard face.a < mesh.vertices.count,
                   face.b < mesh.vertices.count,
                   face.c < mesh.vertices.count else { continue }
-            let n = computeFaceNormal(mesh, face)
-            accum[face.a] += n; accum[face.b] += n; accum[face.c] += n
-        }
 
-        let positions = mesh.vertices.map { SCNVector3($0.position) }
-        let normals   = accum.map { v -> SCNVector3 in
-            let len = simd_length(v)
-            return len > 1e-10 ? SCNVector3(v / len) : SCNVector3(0, 1, 0)
-        }
+            let base = Int32(positions.count)
 
-        var idx: [Int32] = []
-        idx.reserveCapacity(mesh.faces.count * 3)
-        for face in mesh.faces {
-            idx.append(Int32(face.a)); idx.append(Int32(face.b)); idx.append(Int32(face.c))
+            positions.append(SCNVector3(mesh.vertices[face.a].position))
+            positions.append(SCNVector3(mesh.vertices[face.b].position))
+            positions.append(SCNVector3(mesh.vertices[face.c].position))
+
+            normals.append(normalizedSCN(vertNormAccum[face.a]))
+            normals.append(normalizedSCN(vertNormAccum[face.b]))
+            normals.append(normalizedSCN(vertNormAccum[face.c]))
+
+            // UV: stored with Y=0 at top; SceneKit needs Y=0 at bottom → V-flip (1 - v)
+            let faceUV = (fi < mesh.faceUVs.count && !mesh.uvs.isEmpty)
+                ? mesh.faceUVs[fi] : (ua: 0, ub: 0, uc: 0)
+            uvCoords.append(sceneKitUV(faceUV.ua, mesh: mesh))
+            uvCoords.append(sceneKitUV(faceUV.ub, mesh: mesh))
+            uvCoords.append(sceneKitUV(faceUV.uc, mesh: mesh))
+
+            groups[face.materialId, default: []].append(contentsOf: [base, base + 1, base + 2])
         }
 
         let posSrc  = SCNGeometrySource(vertices: positions)
         let normSrc = SCNGeometrySource(normals: normals)
-        let element = SCNGeometryElement(indices: idx, primitiveType: .triangles)
-        let geo     = SCNGeometry(sources: [posSrc, normSrc], elements: [element])
+        let uvSrc   = SCNGeometrySource(textureCoordinates: uvCoords)
 
-        let mat = SCNMaterial()
-        mat.diffuse.contents  = NSColor(red: 0.55, green: 0.78, blue: 1.00, alpha: 1)
-        mat.specular.contents = NSColor(white: 0.4, alpha: 1)
-        mat.shininess         = 60
-        mat.isDoubleSided     = true
-        mat.lightingModel     = .phong
-        geo.materials         = [mat]
+        let sortedMatIds = groups.keys.sorted()
+        let elements  = sortedMatIds.map { SCNGeometryElement(indices: groups[$0]!, primitiveType: .triangles) }
+        let materials = sortedMatIds.map { makeMaterial(matId: $0) }
+
+        let geo       = SCNGeometry(sources: [posSrc, normSrc, uvSrc], elements: elements)
+        geo.materials = materials
 
         let node = SCNNode(geometry: geo); node.name = "mesh_main"
         return node
+    }
+
+    private func sceneKitUV(_ uvIdx: Int, mesh: Mesh) -> CGPoint {
+        guard uvIdx < mesh.uvs.count else { return .zero }
+        let v = mesh.uvs[uvIdx]
+        return CGPoint(x: CGFloat(v.x), y: CGFloat(1.0 - v.y))
+    }
+
+    private func normalizedSCN(_ v: SIMD3<Float>) -> SCNVector3 {
+        let len = simd_length(v)
+        return len > 1e-10 ? SCNVector3(v / len) : SCNVector3(0, 1, 0)
+    }
+
+    private func makeMaterial(matId: Int) -> SCNMaterial {
+        let mat = SCNMaterial()
+        mat.isDoubleSided     = true
+        mat.lightingModel     = .phong
+        mat.specular.contents = NSColor(white: 0.3, alpha: 1)
+        mat.shininess         = 50
+        if let img = textureCache[matId] {
+            mat.diffuse.contents = img
+        } else {
+            mat.diffuse.contents = NSColor(red: 0.55, green: 0.78, blue: 1.00, alpha: 1)
+        }
+        return mat
     }
 
     // MARK: - Selection highlight
@@ -136,15 +181,14 @@ struct SceneKitView: NSViewRepresentable {
         let geo = SCNGeometry(sources: [posSrc], elements: [el])
 
         let mat = SCNMaterial()
-        mat.diffuse.contents   = NSColor.orange.withAlphaComponent(0.65)
-        mat.emission.contents  = NSColor.orange.withAlphaComponent(0.25)
-        mat.isDoubleSided      = true
+        mat.diffuse.contents    = NSColor.orange.withAlphaComponent(0.65)
+        mat.emission.contents   = NSColor.orange.withAlphaComponent(0.25)
+        mat.isDoubleSided       = true
         mat.writesToDepthBuffer = false
         geo.materials = [mat]
 
         let node = SCNNode(geometry: geo); node.name = "mesh_sel"
-        node.renderingOrder = 10   // draw on top of main mesh
-        // Offset slightly along face normal to avoid z-fighting
+        node.renderingOrder = 10
         let n = computeFaceNormal(mesh, face)
         node.position = SCNVector3(n.x * 0.002, n.y * 0.002, n.z * 0.002)
         return node

@@ -1,8 +1,10 @@
 import SwiftUI
+import UniformTypeIdentifiers
 @testable import FourHUnfolderCore
 
 struct MainView: View {
     @EnvironmentObject var appState: AppState
+    @State private var isDropTarget = false
 
     var body: some View {
         NavigationSplitView {
@@ -33,7 +35,8 @@ struct MainView: View {
                 HSplitView {
                     SceneKitView(
                         mesh: appState.mesh,
-                        selectedFaceId: appState.selectedFaceId
+                        selectedFaceId: appState.selectedFaceId,
+                        textureCache: appState.textureCache
                     )
                     .frame(minWidth: 280)
 
@@ -51,6 +54,25 @@ struct MainView: View {
             $0.name.isEmpty ? "4H Unfolder" : $0.name
         } ?? "4H Unfolder")
         .toolbar { toolbarItems }
+        // Accept .obj / .pdo / .4hu dragged onto the window
+        .onDrop(of: [UTType.fileURL], isTargeted: $isDropTarget) { providers in
+            guard let provider = providers.first else { return false }
+            _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                guard let url else { return }
+                Task { @MainActor in await appState.loadMesh(from: url) }
+            }
+            return true
+        }
+        .overlay {
+            if isDropTarget {
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.accentColor, lineWidth: 3)
+                    .background(Color.accentColor.opacity(0.08),
+                                in: RoundedRectangle(cornerRadius: 12))
+                    .padding(4)
+                    .allowsHitTesting(false)
+            }
+        }
     }
 
     // MARK: - Status bar

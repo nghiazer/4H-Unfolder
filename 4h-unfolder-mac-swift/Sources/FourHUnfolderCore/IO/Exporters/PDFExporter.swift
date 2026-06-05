@@ -76,9 +76,10 @@ struct PDFExporter {
         }
 
         // ── Layer 3: cut edges ───────────────────────────────────────────────
+        // Reset any dash pattern left from fold-line layer (runs unconditionally).
+        ctx.setLineDash(phase: 0, lengths: [])
         if settings.printCutLines {
             let cutColor = cgColor(hex: settings.cutLineColor) ?? CGColor(red: 0.9, green: 0.1, blue: 0.1, alpha: 1)
-            ctx.setLineDash(phase: 0, lengths: [])
             var drawn = Set<Int>()
             for face in result.faces {
                 let verts = [face.v0, face.v1, face.v2]
@@ -105,7 +106,7 @@ struct PDFExporter {
         }
 
         // ── Layer 4: glue tabs ───────────────────────────────────────────────
-        if settings.includGlueTabs {
+        if settings.includeGlueTabs {
             let tabFill   = settings.grayscaleOutput
                 ? CGColor(gray: 0.63, alpha: 0.55)
                 : CGColor(red: 0.66, green: 0.84, blue: 0.64, alpha: 0.55)

@@ -1,5 +1,8 @@
 import SwiftUI
+import CoreGraphics
 import simd
+// FourHUnfolderCore is compiled with -enable-testing (see Package.swift) so
+// internal symbols remain accessible here without a full public API surface.
 @testable import FourHUnfolderCore
 
 // MARK: - 2D interactive pattern canvas
@@ -7,7 +10,7 @@ import simd
 // Rendering layers (draw order):
 //  1. Paper background (white rect)
 //  2. Grid lines (optional)
-//  3. Face polygons (filled)
+//  3. Face polygons (filled, optionally UV-textured)
 //  4. Edges (fold=blue dashed, cut=red, boundary=gray)
 //  5. Glue tabs (semi-transparent green)
 //  6. Cut-edge pair numbers
@@ -16,18 +19,24 @@ import simd
 //  9. Selection highlight (amber overlay)
 //
 // Interactions:
-//  - Pinch (trackpad) → zoom centered on view
-//  - Click + drag → pan
+//  - Pinch (trackpad) → zoom
+//  - Drag on empty space → pan canvas
+//  - Drag on a face → move that piece (non-destructive offset, cleared on re-unfold)
 //  - Tap near edge (≤8pt) → toggleEdge → re-unfold
 //  - Tap on face → select face (shown in 3D viewport too)
-//  - Mesh change → auto-reset zoom/pan to fit
 
 struct PatternCanvasView: View {
     @EnvironmentObject var appState: AppState
 
-    @State private var zoom: CGFloat = 1.0
-    @State private var pan:  CGSize  = .zero
-    @GestureState private var livePan: CGSize  = .zero
+    // Leaves 15% margin when fitting the pattern to the window.
+    private let fitScalePadding: CGFloat = 0.85
+
+    @State private var zoom: CGFloat  = 1.0
+    @State private var pan:  CGSize   = .zero
+    @State private var basePan: CGSize = .zero       // committed pan before current drag
+    @State private var dragPieceIdx: Int? = nil
+    @State private var isPieceDrag: Bool = false
+    @State private var prevDragTranslation: CGSize = .zero
     @GestureState private var liveMag: CGFloat = 1.0
 
     private var v2d: AppSettings.View2DSettings { appState.settings.view2D }
@@ -46,14 +55,14 @@ struct PatternCanvasView: View {
                         if v2d.showGrid { drawGrid(ctx, size: size, result: result, xf: xf) }
                         drawFaces(ctx, result: result, xf: xf)
                         drawEdges(ctx, result: result, xf: xf)
-                        if v2d.showGlueTabs   { drawTabs(ctx, result: result, xf: xf) }
+                        if v2d.showGlueTabs    { drawTabs(ctx, result: result, xf: xf) }
                         drawCutLabels(ctx, result: result, xf: xf)
                         if v2d.showFaceNumbers { drawFaceLabels(ctx, result: result, xf: xf) }
                         if v2d.showFoldAngles  { drawFoldAngles(ctx, result: result, xf: xf) }
                         drawSelection(ctx, result: result, xf: xf)
                     }
                     .gesture(magnifyGesture)
-                    .gesture(panGesture)
+                    .gesture(makeUnifiedDragGesture(result: result, canvasSize: geo.size))
                     .onTapGesture { pt in
                         handleTap(at: pt, result: result, canvasSize: geo.size)
                     }
@@ -64,15 +73,12 @@ struct PatternCanvasView: View {
                 }
             }
         }
-        // Reset pan/zoom whenever a new mesh is loaded or Fit to Window triggered
-        .onChange(of: appState.mesh?.name ?? "", perform: { _ in
-            zoom = 1.0
-            pan  = .zero
-        })
-        .onChange(of: appState.fitToWindowTrigger, perform: { _ in
-            zoom = 1.0
-            pan  = .zero
-        })
+        .onChange(of: appState.mesh?.name ?? "") { _ in
+            zoom = 1.0; pan = .zero; basePan = .zero
+        }
+        .onChange(of: appState.fitToWindowTrigger) { _ in
+            zoom = 1.0; pan = .zero; basePan = .zero
+        }
     }
 
     // MARK: - Gestures
@@ -83,12 +89,64 @@ struct PatternCanvasView: View {
             .onEnded { zoom = clampZoom(zoom * $0) }
     }
 
-    private var panGesture: some Gesture {
+    // Combined pan + piece-drag gesture.
+    // On first movement: hit-test start location to decide mode.
+    // Piece-drag mode: only moves the piece, canvas stays still.
+    // Pan mode: only pans the canvas, no piece moves.
+    private func makeUnifiedDragGesture(result: UnfoldResult, canvasSize: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 2)
-            .updating($livePan) { val, state, _ in state = val.translation }
-            .onEnded {
-                pan.width  += $0.translation.width
-                pan.height += $0.translation.height
+            .onChanged { val in
+                if dragPieceIdx == nil && !isPieceDrag {
+                    let xf  = modelToScreen(size: canvasSize, result: result)
+                    let inv = xf.inverted()
+                    let startModel = val.startLocation.applying(inv)
+                    let mp = SIMD2<Float>(Float(startModel.x), Float(startModel.y))
+                    var found = false
+                    for face in result.faces {
+                        let (ev0, ev1, ev2) = effectiveVerts(face, result: result)
+                        if pointInTriangle(mp, ev0, ev1, ev2),
+                           let pi = appState.pieceIndex(forFaceId: face.faceId, result: result) {
+                            dragPieceIdx = pi
+                            isPieceDrag  = true
+                            prevDragTranslation = .zero
+                            found = true
+                            break
+                        }
+                    }
+                    if !found { isPieceDrag = false }
+                }
+
+                if isPieceDrag, let pi = dragPieceIdx {
+                    let delta = CGSize(
+                        width:  val.translation.width  - prevDragTranslation.width,
+                        height: val.translation.height - prevDragTranslation.height
+                    )
+                    let bb = result.boundingBox
+                    let pw = CGFloat(bb.max.x - bb.min.x)
+                    let ph = CGFloat(bb.max.y - bb.min.y)
+                    let scale = min(canvasSize.width  / max(1, pw),
+                                    canvasSize.height / max(1, ph)) * fitScalePadding * zoom * liveMag
+                    let dmm = SIMD2<Float>(Float(delta.width / scale), Float(delta.height / scale))
+                    appState.pieceOffsets[pi, default: .zero] += dmm
+                    prevDragTranslation = val.translation
+                } else if !isPieceDrag {
+                    pan = CGSize(
+                        width:  basePan.width  + val.translation.width,
+                        height: basePan.height + val.translation.height
+                    )
+                }
+            }
+            .onEnded { val in
+                if !isPieceDrag {
+                    pan = CGSize(
+                        width:  basePan.width  + val.translation.width,
+                        height: basePan.height + val.translation.height
+                    )
+                    basePan = pan
+                }
+                dragPieceIdx = nil
+                isPieceDrag  = false
+                prevDragTranslation = .zero
             }
     }
 
@@ -111,7 +169,8 @@ struct PatternCanvasView: View {
         let modelPt = point.applying(inv)
         let mp = SIMD2<Float>(Float(modelPt.x), Float(modelPt.y))
         for face in result.faces {
-            if pointInTriangle(mp, face.v0, face.v1, face.v2) {
+            let (ev0, ev1, ev2) = effectiveVerts(face, result: result)
+            if pointInTriangle(mp, ev0, ev1, ev2) {
                 appState.selectedFaceId = face.faceId
                 return
             }
@@ -164,12 +223,90 @@ struct PatternCanvasView: View {
         ctx.stroke(p, with: .color(.gray.opacity(0.18)), lineWidth: 0.5)
     }
 
-    // 3. Face fills
+    // 3. Face fills — textured when UV data + texture available, solid otherwise
     private func drawFaces(_ ctx: GraphicsContext, result: UnfoldResult, xf: CGAffineTransform) {
-        let fill = Color(hex: v2d.faceFillColor) ?? Color(red: 0.80, green: 0.88, blue: 1.0, opacity: 0.85)
+        let solidFill = Color(hex: v2d.faceFillColor) ?? Color(red: 0.80, green: 0.88, blue: 1.0, opacity: 0.85)
+        let mesh = appState.mesh
+
         for face in result.faces {
-            ctx.fill(triPath([face.v0, face.v1, face.v2], xf: xf), with: .color(fill))
+            let (ev0, ev1, ev2) = effectiveVerts(face, result: result)
+            if v2d.showTexture,
+               let mesh,
+               face.materialId >= 0,
+               let img = appState.textureCache[face.materialId],
+               face.faceId < mesh.faceUVs.count,
+               !mesh.uvs.isEmpty {
+                let faceUV = mesh.faceUVs[face.faceId]
+                func safeUV(_ i: Int) -> SIMD2<Float> { i < mesh.uvs.count ? mesh.uvs[i] : .zero }
+                let uvA = safeUV(faceUV.ua), uvB = safeUV(faceUV.ub), uvC = safeUV(faceUV.uc)
+                let sa = screenPt(ev0, xf: xf)
+                let sb = screenPt(ev1, xf: xf)
+                let sc = screenPt(ev2, xf: xf)
+                ctx.withCGContext { cg in
+                    drawTexturedTriangle(cg, image: img,
+                                         uvA: uvA, uvB: uvB, uvC: uvC,
+                                         sa: sa, sb: sb, sc: sc)
+                }
+            } else {
+                ctx.fill(triPath([ev0, ev1, ev2], xf: xf), with: .color(solidFill))
+            }
         }
+    }
+
+    // Draw a CGImage affine-mapped onto a triangle in screen space.
+    private func drawTexturedTriangle(
+        _ cg: CGContext,
+        image: CGImage,
+        uvA: SIMD2<Float>, uvB: SIMD2<Float>, uvC: SIMD2<Float>,
+        sa: CGPoint, sb: CGPoint, sc: CGPoint
+    ) {
+        let w = CGFloat(image.width), h = CGFloat(image.height)
+        let ta = CGPoint(x: CGFloat(uvA.x) * w, y: CGFloat(uvA.y) * h)
+        let tb = CGPoint(x: CGFloat(uvB.x) * w, y: CGFloat(uvB.y) * h)
+        let tc = CGPoint(x: CGFloat(uvC.x) * w, y: CGFloat(uvC.y) * h)
+
+        guard let xf = affineFromTriangle(src: (ta, tb, tc), dst: (sa, sb, sc)) else {
+            cg.saveGState()
+            cg.setFillColor(CGColor(red: 0.8, green: 0.88, blue: 1.0, alpha: 0.85))
+            cg.addPath(cgTriangle(sa, sb, sc)); cg.fillPath()
+            cg.restoreGState()
+            return
+        }
+
+        cg.saveGState()
+        cg.addPath(cgTriangle(sa, sb, sc))
+        cg.clip()
+        let imageFlip = CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: h)
+        cg.concatenate(imageFlip.concatenating(xf))
+        cg.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+        cg.restoreGState()
+    }
+
+    private func cgTriangle(_ a: CGPoint, _ b: CGPoint, _ c: CGPoint) -> CGPath {
+        let p = CGMutablePath()
+        p.move(to: a); p.addLine(to: b); p.addLine(to: c); p.closeSubpath()
+        return p
+    }
+
+    private func affineFromTriangle(
+        src: (CGPoint, CGPoint, CGPoint),
+        dst: (CGPoint, CGPoint, CGPoint)
+    ) -> CGAffineTransform? {
+        let (u0, v0) = (src.0.x, src.0.y)
+        let (u1, v1) = (src.1.x, src.1.y)
+        let (u2, v2) = (src.2.x, src.2.y)
+        let det = u0 * (v1 - v2) - v0 * (u1 - u2) + (u1 * v2 - u2 * v1)
+        guard abs(det) > 1e-5 else { return nil }
+        let (x0, y0) = (dst.0.x, dst.0.y)
+        let (x1, y1) = (dst.1.x, dst.1.y)
+        let (x2, y2) = (dst.2.x, dst.2.y)
+        let a  = ((v1 - v2) * x0 + (v2 - v0) * x1 + (v0 - v1) * x2) / det
+        let b  = ((u2 - u1) * x0 + (u0 - u2) * x1 + (u1 - u0) * x2) / det
+        let tx = ((u1 * v2 - u2 * v1) * x0 + (u2 * v0 - u0 * v2) * x1 + (u0 * v1 - u1 * v0) * x2) / det
+        let c  = ((v1 - v2) * y0 + (v2 - v0) * y1 + (v0 - v1) * y2) / det
+        let d  = ((u2 - u1) * y0 + (u0 - u2) * y1 + (u1 - u0) * y2) / det
+        let ty = ((u1 * v2 - u2 * v1) * y0 + (u2 * v0 - u0 * v2) * y1 + (u0 * v1 - u1 * v0) * y2) / det
+        return CGAffineTransform(a: a, b: c, c: b, d: d, tx: tx, ty: ty)
     }
 
     // 4. Edges
@@ -185,7 +322,8 @@ struct PatternCanvasView: View {
         var drawnCuts  = Set<Int>()
 
         for face in result.faces {
-            let verts = [face.v0, face.v1, face.v2]
+            let (ev0, ev1, ev2) = effectiveVerts(face, result: result)
+            let verts = [ev0, ev1, ev2]
             for ei in 0..<3 {
                 let p0 = verts[ei], p1 = verts[(ei + 1) % 3]
                 let mid = face.meshEdgeId(ei)
@@ -210,8 +348,9 @@ struct PatternCanvasView: View {
         let fill   = (Color(hex: v2d.glueTabColor) ?? .green).opacity(0.30)
         let stroke = Color(red: 0.18, green: 0.49, blue: 0.20)
         for tab in result.tabs {
-            guard tab.polygon.count >= 3 else { continue }
-            let path = polyPath(tab.polygon, xf: xf)
+            let poly = effectiveTabPolygon(tab, result: result)
+            guard poly.count >= 3 else { continue }
+            let path = polyPath(poly, xf: xf)
             ctx.fill(path,   with: .color(fill))
             ctx.stroke(path, with: .color(stroke),
                        style: StrokeStyle(lineWidth: 0.6, dash: [4, 2]))
@@ -223,7 +362,8 @@ struct PatternCanvasView: View {
         guard !result.cutEdgePairIds.isEmpty else { return }
         var drawn = Set<Int>()
         for face in result.faces {
-            let verts = [face.v0, face.v1, face.v2]
+            let (ev0, ev1, ev2) = effectiveVerts(face, result: result)
+            let verts = [ev0, ev1, ev2]
             for ei in 0..<3 where !face.edgeIsFold(ei) && !face.edgeIsBoundary(ei) {
                 let mid = face.meshEdgeId(ei)
                 guard mid >= 0, let pairId = result.cutEdgePairIds[mid],
@@ -242,7 +382,8 @@ struct PatternCanvasView: View {
     // 7. Face ID labels (at face centroid)
     private func drawFaceLabels(_ ctx: GraphicsContext, result: UnfoldResult, xf: CGAffineTransform) {
         for face in result.faces {
-            let c = (face.v0 + face.v1 + face.v2) / 3
+            let (ev0, ev1, ev2) = effectiveVerts(face, result: result)
+            let c = (ev0 + ev1 + ev2) / 3
             ctx.draw(
                 Text("\(face.faceId)")
                     .font(.system(size: 9))
@@ -257,7 +398,8 @@ struct PatternCanvasView: View {
         var drawn = Set<Int>()
         let foldColor = Color(hex: v2d.foldLineColor) ?? Color(red: 0.25, green: 0.40, blue: 0.87)
         for face in result.faces {
-            let verts = [face.v0, face.v1, face.v2]
+            let (ev0, ev1, ev2) = effectiveVerts(face, result: result)
+            let verts = [ev0, ev1, ev2]
             for ei in 0..<3 where face.edgeIsFold(ei) {
                 let mid = face.meshEdgeId(ei)
                 guard mid >= 0, let deg = result.edgeDihedralAngles[mid],
@@ -277,7 +419,8 @@ struct PatternCanvasView: View {
     private func drawSelection(_ ctx: GraphicsContext, result: UnfoldResult, xf: CGAffineTransform) {
         guard let selId = appState.selectedFaceId else { return }
         for face in result.faces where face.faceId == selId {
-            let path = triPath([face.v0, face.v1, face.v2], xf: xf)
+            let (ev0, ev1, ev2) = effectiveVerts(face, result: result)
+            let path = triPath([ev0, ev1, ev2], xf: xf)
             ctx.fill(path,   with: .color(Color.orange.opacity(0.35)))
             ctx.stroke(path, with: .color(Color.orange), lineWidth: 2.0)
         }
@@ -290,10 +433,10 @@ struct PatternCanvasView: View {
         let pw = CGFloat(bb.max.x - bb.min.x); guard pw > 0 else { return .identity }
         let ph = CGFloat(bb.max.y - bb.min.y); guard ph > 0 else { return .identity }
 
-        let fitScale   = min(size.width / pw, size.height / ph) * 0.85
+        let fitScale   = min(size.width / pw, size.height / ph) * fitScalePadding
         let effectZoom = fitScale * zoom * liveMag
-        let cx = size.width  / 2 + pan.width  + livePan.width
-        let cy = size.height / 2 + pan.height + livePan.height
+        let cx = size.width  / 2 + pan.width
+        let cy = size.height / 2 + pan.height
         let ox = -CGFloat(bb.min.x) - pw / 2
         let oy = -CGFloat(bb.min.y) - ph / 2
 
@@ -312,7 +455,8 @@ struct PatternCanvasView: View {
         var bestFI: Int? = nil; var bestEI: Int? = nil
 
         for (fi, face) in result.faces.enumerated() {
-            let verts = [face.v0, face.v1, face.v2]
+            let (ev0, ev1, ev2) = effectiveVerts(face, result: result)
+            let verts = [ev0, ev1, ev2]
             for ei in 0..<3 {
                 let a = screenPt(verts[ei],         xf: xf)
                 let b = screenPt(verts[(ei+1) % 3], xf: xf)
@@ -322,6 +466,19 @@ struct PatternCanvasView: View {
         }
         guard let fi = bestFI, let ei = bestEI else { return nil }
         return (fi, ei, result.faces[fi])
+    }
+
+    // MARK: - Effective vertex helpers (apply per-piece drag offset)
+
+    private func effectiveVerts(_ face: UnfoldedFace, result: UnfoldResult)
+        -> (SIMD2<Float>, SIMD2<Float>, SIMD2<Float>) {
+        let off = appState.offset(forFaceId: face.faceId, result: result)
+        return (face.v0 + off, face.v1 + off, face.v2 + off)
+    }
+
+    private func effectiveTabPolygon(_ tab: GlueTab, result: UnfoldResult) -> [SIMD2<Float>] {
+        let off = appState.offset(forFaceId: tab.faceId, result: result)
+        return tab.polygon.map { $0 + off }
     }
 
     // MARK: - Geometry helpers

@@ -1,5 +1,9 @@
 import AppKit
 import SwiftUI
+import CoreGraphics
+import ImageIO
+// FourHUnfolderCore is compiled with -enable-testing (see Package.swift) so
+// internal symbols remain accessible here without a full public API surface.
 @testable import FourHUnfolderCore
 
 @MainActor
@@ -13,6 +17,9 @@ final class AppState: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var fitToWindowTrigger: Int = 0
+    @Published var textureCache: [Int: CGImage] = [:]
+    /// Piece-index (index in result.pieces) → cumulative drag offset in mm
+    @Published var pieceOffsets: [Int: SIMD2<Float>] = [:]
 
     /// URL of the file the current mesh was loaded from (needed for project save).
     private(set) var sourceMeshURL: URL?
@@ -71,9 +78,69 @@ final class AppState: ObservableObject {
         Task { await unfold() }
     }
 
-    func selectAll() { /* Phase 6 */ }
+    /// Cycles through faces one at a time. Repeated calls advance the selection.
+    func selectAll() {
+        guard let result = unfoldResult, !result.faces.isEmpty else { return }
+        if let sel = selectedFaceId,
+           let idx = result.faces.firstIndex(where: { $0.faceId == sel }),
+           idx + 1 < result.faces.count {
+            selectedFaceId = result.faces[idx + 1].faceId
+        } else {
+            selectedFaceId = result.faces.first?.faceId
+        }
+    }
 
     func fitToWindow() { fitToWindowTrigger &+= 1 }
+
+    // MARK: - Piece offset helpers
+
+    func pieceIndex(forFaceId fid: Int, result: UnfoldResult) -> Int? {
+        result.pieces.firstIndex { $0.contains(fid) }
+    }
+
+    func offset(forFaceId fid: Int, result: UnfoldResult) -> SIMD2<Float> {
+        guard let pi = pieceIndex(forFaceId: fid, result: result) else { return .zero }
+        return pieceOffsets[pi] ?? .zero
+    }
+
+    // MARK: - Texture cache (materialId → CGImage)
+
+    private func buildTextureCache(mesh: Mesh, sourceURL: URL) -> [Int: CGImage] {
+        var cache: [Int: CGImage] = [:]
+        // Embedded textures (PDO): index in embeddedTextures == materialId
+        for (i, tex) in mesh.embeddedTextures.enumerated() {
+            if let img = cgImageFromRGB24(tex) { cache[i] = img }
+        }
+        // File-based textures (OBJ + MTL)
+        for (i, path) in mesh.materialTexturePaths.enumerated() where cache[i] == nil {
+            guard let path else { continue }
+            guard let url = resolveTextureURL(path, relativeTo: sourceURL) else { continue }
+            guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
+                  let img = CGImageSourceCreateImageAtIndex(src, 0, nil) else { continue }
+            cache[i] = img
+        }
+        return cache
+    }
+
+    private func cgImageFromRGB24(_ tex: EmbeddedTextureData) -> CGImage? {
+        let cs = CGColorSpaceCreateDeviceRGB()
+        guard let provider = CGDataProvider(data: tex.rgb24Bytes as CFData) else { return nil }
+        return CGImage(
+            width: tex.width, height: tex.height,
+            bitsPerComponent: 8, bitsPerPixel: 24, bytesPerRow: tex.width * 3,
+            space: cs,
+            bitmapInfo: CGBitmapInfo(rawValue: 0),
+            provider: provider,
+            decode: nil, shouldInterpolate: true, intent: .defaultIntent
+        )
+    }
+
+    private func resolveTextureURL(_ path: String, relativeTo base: URL) -> URL? {
+        let abs = URL(fileURLWithPath: path)
+        if FileManager.default.fileExists(atPath: abs.path) { return abs }
+        let rel = base.deletingLastPathComponent().appendingPathComponent(path)
+        return FileManager.default.fileExists(atPath: rel.path) ? rel : nil
+    }
 
     // MARK: - Auto-arrange pieces on paper
 
@@ -118,6 +185,7 @@ final class AppState: ObservableObject {
         result.faces = newFaces
         result.tabs  = newTabs
         unfoldResult = result
+        pieceOffsets = [:]
     }
 
     // MARK: - Mesh file operations
@@ -144,8 +212,10 @@ final class AppState: ObservableObject {
         undoStack = []
         redoStack = []
         do {
-            mesh = try await loader.load(from: url)
+            let loaded = try await loader.load(from: url)
+            mesh = loaded
             sourceMeshURL = url
+            textureCache = buildTextureCache(mesh: loaded, sourceURL: url)
             await unfold()
         } catch {
             errorMessage = error.localizedDescription
@@ -164,6 +234,7 @@ final class AppState: ObservableObject {
             flapOverrides: flapOverrides,
             settings: settings.print
         )
+        pieceOffsets = [:]
         isLoading = false
     }
 
@@ -199,10 +270,11 @@ final class AppState: ObservableObject {
         }
         isLoading = true
         errorMessage = nil
-        let edgeOv   = edgeOverrides
-        let flapOv   = flapOverrides
-        let snap     = settings
-        let meshSnap = sourceMeshURL
+        let edgeOv      = edgeOverrides
+        let flapOv      = flapOverrides
+        let snap        = settings
+        let meshSnap    = sourceMeshURL
+        let offsetsSnap = pieceOffsets
         do {
             try await Task.detached(priority: .utility) {
                 try ProjectSerializer().save(
@@ -210,6 +282,7 @@ final class AppState: ObservableObject {
                     edgeOverrides: edgeOv,
                     flapOverrides: flapOv,
                     settings: snap,
+                    pieceOffsets: offsetsSnap,
                     to: url
                 )
             }.value
@@ -230,17 +303,23 @@ final class AppState: ObservableObject {
             let (state, meshURL, tempDir) = try await Task.detached(priority: .utility) {
                 try ProjectSerializer().load(from: url)
             }.value
+            // tempDir is always cleaned up, even if loader.load throws
+            defer { try? FileManager.default.removeItem(at: tempDir) }
 
-            // Load mesh (reads entire file into memory — temp dir can be deleted after)
+            // Load mesh (reads entire file into memory)
             let loadedMesh = try await loader.load(from: meshURL)
-            try? FileManager.default.removeItem(at: tempDir)
 
             // Restore state
-            mesh            = loadedMesh
-            sourceMeshURL   = url          // project file becomes the source URL
-            edgeOverrides   = state.edgeOverrides
-            flapOverrides   = state.flapOverrides
-            settings        = state.settings
+            mesh          = loadedMesh
+            sourceMeshURL = url          // project file becomes the source URL
+            edgeOverrides = state.edgeOverrides
+            flapOverrides = state.flapOverrides
+            settings      = state.settings
+            pieceOffsets  = state.pieceOffsets.reduce(into: [Int: SIMD2<Float>]()) { d, kv in
+                guard let pi = Int(kv.key), kv.value.count >= 2,
+                      kv.value[0].isFinite, kv.value[1].isFinite else { return }
+                d[pi] = SIMD2<Float>(kv.value[0], kv.value[1])
+            }
 
             await unfold()
         } catch {

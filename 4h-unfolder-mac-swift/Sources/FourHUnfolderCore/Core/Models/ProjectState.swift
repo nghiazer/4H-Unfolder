@@ -9,4 +9,6 @@ struct ProjectState: Codable {
     var flapOverrides: [Int: FlapOverride]      // meshEdgeId → FlapOverride
     var settings: AppSettings
     var appVersion: String = "0.0.0.1-alpha"
+    /// pieceIndex (stringified) → [x, y] offset in mm
+    var pieceOffsets: [String: [Float]] = [:]
 }

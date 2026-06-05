@@ -55,6 +55,37 @@ final class UnfoldEngineTests: XCTestCase {
         XCTAssertEqual(faces[0].v1.y, 0, accuracy: 1e-5)
     }
 
+    // MARK: - Single face
+
+    func testSingleFace_placedAtOrigin() {
+        let mesh = Mesh()
+        mesh.name = "test_single"
+        mesh.vertices = [
+            Vertex(id: 0, position: SIMD3(0,   0, 0)),
+            Vertex(id: 1, position: SIMD3(5,   0, 0)),
+            Vertex(id: 2, position: SIMD3(2.5, 4, 0)),
+        ]
+        let e0 = mesh.getOrAddEdge(v1: 0, v2: 1, faceId: 0)
+        let e1 = mesh.getOrAddEdge(v1: 1, v2: 2, faceId: 0)
+        let e2 = mesh.getOrAddEdge(v1: 2, v2: 0, faceId: 0)
+        mesh.faces.append(Face(id: 0, a: 0, b: 1, c: 2, edgeIds: (e0, e1, e2)))
+
+        let faces = TestMesh.runUnfold(mesh)
+        XCTAssertEqual(faces.count, 1, "Single-face mesh must produce exactly 1 unfolded face")
+
+        let f = faces[0]
+        // Root face: v0 at origin, v1 on positive X axis, v2 above baseline
+        XCTAssertEqual(f.v0.x, 0, accuracy: 1e-5)
+        XCTAssertEqual(f.v0.y, 0, accuracy: 1e-5)
+        XCTAssertEqual(f.v1.y, 0, accuracy: 1e-5)
+        XCTAssertGreaterThan(f.v1.x, 0, "v1 must be to the right of v0")
+
+        // All three edges are boundary
+        XCTAssertTrue(f.edgeIsBoundary(0))
+        XCTAssertTrue(f.edgeIsBoundary(1))
+        XCTAssertTrue(f.edgeIsBoundary(2))
+    }
+
     // MARK: - Cube
 
     func testCube_faceCount() {
