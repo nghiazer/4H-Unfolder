@@ -12,9 +12,14 @@ final class AppState: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
 
-    private let loader = MeshLoaderFactory()
+    /// URL of the file the current mesh was loaded from (needed for project save).
+    private(set) var sourceMeshURL: URL?
 
-    // MARK: - Undo / Redo (lightweight: snapshots of overrides only)
+    private let loader       = MeshLoaderFactory()
+    private let unfoldSvc    = UnfoldService()
+    private let serializer   = ProjectSerializer()
+
+    // MARK: - Undo / Redo (snapshots of overrides only)
 
     private typealias OverrideSnapshot = (edges: [Int: EdgeType], flaps: [Int: FlapOverride])
     private var undoStack: [OverrideSnapshot] = []
@@ -41,11 +46,10 @@ final class AppState: ObservableObject {
         Task { await unfold() }
     }
 
-    // MARK: - Edge override
+    // MARK: - Edge / flap overrides
 
     func toggleEdge(_ meshEdgeId: Int) {
-        guard let mesh else { return }
-        guard meshEdgeId < mesh.edges.count else { return }
+        guard let mesh, meshEdgeId < mesh.edges.count else { return }
         pushUndo()
         let current = edgeOverrides[meshEdgeId] ?? mesh.edges[meshEdgeId].type
         edgeOverrides[meshEdgeId] = (current == .fold) ? .cut : .fold
@@ -67,7 +71,7 @@ final class AppState: ObservableObject {
 
     func selectAll() { /* Phase 6 */ }
 
-    // MARK: - File operations
+    // MARK: - Mesh file operations
 
     func openMeshFilePicker() {
         let panel = NSOpenPanel()
@@ -92,34 +96,111 @@ final class AppState: ObservableObject {
         redoStack = []
         do {
             mesh = try await loader.load(from: url)
+            sourceMeshURL = url
+            await unfold()
+        } catch {
+            errorMessage = error.localizedDescription
+            isLoading = false
+        }
+    }
+
+    // MARK: - Unfold pipeline (delegates to UnfoldService actor)
+
+    func unfold() async {
+        guard let mesh else { return }
+        isLoading = true
+        unfoldResult = await unfoldSvc.unfold(
+            mesh: mesh,
+            edgeOverrides: edgeOverrides,
+            flapOverrides: flapOverrides,
+            settings: settings.print
+        )
+        isLoading = false
+    }
+
+    // MARK: - Project save / load (.4hu bundle)
+
+    func openProjectFilePicker() {
+        let panel = NSOpenPanel()
+        panel.title = "Open Project"
+        panel.allowedContentTypes = [.init(filenameExtension: "4hu")!]
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task { await loadProject(from: url) }
+    }
+
+    func saveProjectFilePicker() {
+        guard sourceMeshURL != nil else {
+            errorMessage = "No mesh loaded — open an OBJ or PDO file first."
+            return
+        }
+        let panel = NSSavePanel()
+        panel.title = "Save Project"
+        panel.allowedContentTypes = [.init(filenameExtension: "4hu")!]
+        panel.nameFieldStringValue = "\(mesh?.name ?? "project").4hu"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task { await saveProject(to: url) }
+    }
+
+    private func saveProject(to url: URL) async {
+        guard let sourceMeshURL else {
+            errorMessage = ProjectSerializer.ProjectError.noSourceMesh.localizedDescription
+            return
+        }
+        isLoading = true
+        errorMessage = nil
+        let edgeOv   = edgeOverrides
+        let flapOv   = flapOverrides
+        let snap     = settings
+        let meshSnap = sourceMeshURL
+        do {
+            try await Task.detached(priority: .utility) {
+                try ProjectSerializer().save(
+                    meshURL: meshSnap,
+                    edgeOverrides: edgeOv,
+                    flapOverrides: flapOv,
+                    settings: snap,
+                    to: url
+                )
+            }.value
         } catch {
             errorMessage = error.localizedDescription
         }
         isLoading = false
     }
 
-    // MARK: - Unfold pipeline
-
-    func unfold() async {
-        guard let mesh else { return }
+    private func loadProject(from url: URL) async {
         isLoading = true
+        errorMessage = nil
+        unfoldResult = nil
+        undoStack = []
+        redoStack = []
+        do {
+            // Extract bundle off main thread
+            let (state, meshURL, tempDir) = try await Task.detached(priority: .utility) {
+                try ProjectSerializer().load(from: url)
+            }.value
 
-        let meshSnapshot    = mesh
-        let edgeOvSnapshot  = edgeOverrides
-        let flapOvSnapshot  = flapOverrides
-        let settingsSnapshot = settings
-        let result = await Task.detached(priority: .userInitiated) {
-            runUnfoldPipeline(mesh: meshSnapshot,
-                              edgeOverrides: edgeOvSnapshot,
-                              flapOverrides: flapOvSnapshot,
-                              settings: settingsSnapshot)
-        }.value
+            // Load mesh (reads entire file into memory — temp dir can be deleted after)
+            let loadedMesh = try await loader.load(from: meshURL)
+            try? FileManager.default.removeItem(at: tempDir)
 
-        unfoldResult = result
-        isLoading = false
+            // Restore state
+            mesh            = loadedMesh
+            sourceMeshURL   = url          // project file becomes the source URL
+            edgeOverrides   = state.edgeOverrides
+            flapOverrides   = state.flapOverrides
+            settings        = state.settings
+
+            await unfold()
+        } catch {
+            errorMessage = error.localizedDescription
+            isLoading = false
+        }
     }
 
-    // MARK: - Export
+    // MARK: - SVG export
 
     func exportSVG() async {
         guard let result = unfoldResult else { return }
@@ -130,65 +211,6 @@ final class AppState: ObservableObject {
         let svg = SVGExporter.export(result: result, settings: settings.print)
         try? svg.write(to: url, atomically: true, encoding: .utf8)
     }
-}
-
-// MARK: - Unfold pipeline (runs off main thread)
-
-private func runUnfoldPipeline(
-    mesh: Mesh,
-    edgeOverrides: [Int: EdgeType],
-    flapOverrides: [Int: FlapOverride],
-    settings: AppSettings
-) -> UnfoldResult {
-    // 1. Dual graph
-    let dualGraph = DualGraphBuilder().build(mesh: mesh)
-
-    // 2. Kruskal MST → fold edge IDs
-    let mstEdges = KruskalMSTBuilder().build(graph: dualGraph)
-    var foldEdgeIds = Set(mstEdges.map { $0.sharedMeshEdgeId })
-
-    // 3. Apply user overrides
-    for (eid, type) in edgeOverrides {
-        if type == .fold { foldEdgeIds.insert(eid) }
-        else             { foldEdgeIds.remove(eid) }
-    }
-
-    // 4. Mark edge types
-    EdgeMarker().mark(mesh: mesh, foldEdgeIds: foldEdgeIds)
-
-    // 5. BFS unfold
-    let engineResult = UnfoldEngine().unfold(mesh: mesh, foldEdgeIds: foldEdgeIds)
-
-    // 6. Glue tabs
-    let tabs = GlueTabGenerator().generate(
-        faces: engineResult.faces, mesh: mesh,
-        settings: settings.print, flapOverrides: flapOverrides
-    )
-
-    // 7. Overlap detection
-    let hasOverlaps = OverlapDetector().hasOverlaps(faces: engineResult.faces)
-
-    // 8. Piece detection
-    let pieces = PieceComputer().computePieces(mesh: mesh)
-
-    // 9. Build cut-edge pair IDs
-    var cutEdgePairIds: [Int: Int] = [:]
-    var pairCounter = 1
-    for edge in mesh.edges where edge.type == .cut && edge.connectsFaces {
-        if cutEdgePairIds[edge.id] == nil {
-            cutEdgePairIds[edge.id] = pairCounter
-            pairCounter += 1
-        }
-    }
-
-    return UnfoldResult(
-        faces: engineResult.faces,
-        tabs: tabs,
-        hasOverlaps: hasOverlaps,
-        cutEdgePairIds: cutEdgePairIds,
-        edgeDihedralAngles: engineResult.dihedralAngles,
-        pieces: pieces
-    )
 }
 
 // MARK: - Minimal SVG exporter
