@@ -33,7 +33,8 @@ struct MainView: View {
                 HSplitView {
                     SceneKitView(
                         mesh: appState.mesh,
-                        selectedFaceId: appState.selectedFaceId
+                        selectedFaceId: appState.selectedFaceId,
+                        textureCache: appState.textureCache
                     )
                     .frame(minWidth: 280)
 

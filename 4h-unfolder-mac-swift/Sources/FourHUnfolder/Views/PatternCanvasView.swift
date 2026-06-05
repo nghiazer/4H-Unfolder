@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreGraphics
 import simd
 @testable import FourHUnfolderCore
 
@@ -164,12 +165,101 @@ struct PatternCanvasView: View {
         ctx.stroke(p, with: .color(.gray.opacity(0.18)), lineWidth: 0.5)
     }
 
-    // 3. Face fills
+    // 3. Face fills — textured when UV data + texture available, solid otherwise
     private func drawFaces(_ ctx: GraphicsContext, result: UnfoldResult, xf: CGAffineTransform) {
-        let fill = Color(hex: v2d.faceFillColor) ?? Color(red: 0.80, green: 0.88, blue: 1.0, opacity: 0.85)
+        let solidFill = Color(hex: v2d.faceFillColor) ?? Color(red: 0.80, green: 0.88, blue: 1.0, opacity: 0.85)
+        let mesh = appState.mesh
+
         for face in result.faces {
-            ctx.fill(triPath([face.v0, face.v1, face.v2], xf: xf), with: .color(fill))
+            // Textured path: requires showTexture, valid materialId, cached CGImage, and UV data
+            if v2d.showTexture,
+               let mesh,
+               face.materialId >= 0,
+               let img = appState.textureCache[face.materialId],
+               face.faceId < mesh.faceUVs.count,
+               !mesh.uvs.isEmpty {
+                let faceUV = mesh.faceUVs[face.faceId]
+                func safeUV(_ i: Int) -> SIMD2<Float> { i < mesh.uvs.count ? mesh.uvs[i] : .zero }
+                let uvA = safeUV(faceUV.ua), uvB = safeUV(faceUV.ub), uvC = safeUV(faceUV.uc)
+                let sa = screenPt(face.v0, xf: xf)
+                let sb = screenPt(face.v1, xf: xf)
+                let sc = screenPt(face.v2, xf: xf)
+                ctx.withCGContext { cg in
+                    drawTexturedTriangle(cg, image: img,
+                                         uvA: uvA, uvB: uvB, uvC: uvC,
+                                         sa: sa, sb: sb, sc: sc)
+                }
+            } else {
+                ctx.fill(triPath([face.v0, face.v1, face.v2], xf: xf), with: .color(solidFill))
+            }
         }
+    }
+
+    // Draw a CGImage affine-mapped onto a triangle in screen space.
+    // UV convention: stored Y=0 at top (CGImage). CGContext.draw() has CG origin at bottom-left,
+    // so we compose an imageFlip (CG bottom-left → our Y-down top-left) before xf.
+    private func drawTexturedTriangle(
+        _ cg: CGContext,
+        image: CGImage,
+        uvA: SIMD2<Float>, uvB: SIMD2<Float>, uvC: SIMD2<Float>,
+        sa: CGPoint, sb: CGPoint, sc: CGPoint
+    ) {
+        let w = CGFloat(image.width), h = CGFloat(image.height)
+        // Texture pixel coords: UV.y=0 is top → ta.y = uvA.y * h
+        let ta = CGPoint(x: CGFloat(uvA.x) * w, y: CGFloat(uvA.y) * h)
+        let tb = CGPoint(x: CGFloat(uvB.x) * w, y: CGFloat(uvB.y) * h)
+        let tc = CGPoint(x: CGFloat(uvC.x) * w, y: CGFloat(uvC.y) * h)
+
+        guard let xf = affineFromTriangle(src: (ta, tb, tc), dst: (sa, sb, sc)) else {
+            // Degenerate UV triangle — fall back to solid fill
+            cg.saveGState()
+            cg.setFillColor(CGColor(red: 0.8, green: 0.88, blue: 1.0, alpha: 0.85))
+            cg.addPath(cgTriangle(sa, sb, sc)); cg.fillPath()
+            cg.restoreGState()
+            return
+        }
+
+        cg.saveGState()
+        cg.addPath(cgTriangle(sa, sb, sc))
+        cg.clip()
+        // CGContext.draw() places image with bottom-left at rect.origin (CG Y-up convention).
+        // Compose imageFlip (CG Y-up → our Y-down pixel space) then xf (pixel → screen).
+        let imageFlip = CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: h)
+        cg.concatenate(imageFlip.concatenating(xf))
+        cg.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+        cg.restoreGState()
+    }
+
+    private func cgTriangle(_ a: CGPoint, _ b: CGPoint, _ c: CGPoint) -> CGPath {
+        let p = CGMutablePath()
+        p.move(to: a); p.addLine(to: b); p.addLine(to: c); p.closeSubpath()
+        return p
+    }
+
+    // Compute CGAffineTransform T such that T(src.i) = dst.i for i=0,1,2.
+    // Solves 3-point affine via cofactor inversion of the UV matrix.
+    private func affineFromTriangle(
+        src: (CGPoint, CGPoint, CGPoint),
+        dst: (CGPoint, CGPoint, CGPoint)
+    ) -> CGAffineTransform? {
+        let (u0, v0) = (src.0.x, src.0.y)
+        let (u1, v1) = (src.1.x, src.1.y)
+        let (u2, v2) = (src.2.x, src.2.y)
+        let det = u0 * (v1 - v2) - v0 * (u1 - u2) + (u1 * v2 - u2 * v1)
+        guard abs(det) > 1e-8 else { return nil }
+        let (x0, y0) = (dst.0.x, dst.0.y)
+        let (x1, y1) = (dst.1.x, dst.1.y)
+        let (x2, y2) = (dst.2.x, dst.2.y)
+        // Row 0 of the affine: [a, b, tx] where x' = a*u + b*v + tx
+        let a  = ((v1 - v2) * x0 + (v2 - v0) * x1 + (v0 - v1) * x2) / det
+        let b  = ((u2 - u1) * x0 + (u0 - u2) * x1 + (u1 - u0) * x2) / det
+        let tx = ((u1 * v2 - u2 * v1) * x0 + (u2 * v0 - u0 * v2) * x1 + (u0 * v1 - u1 * v0) * x2) / det
+        // Row 1: [c, d, ty] where y' = c*u + d*v + ty
+        let c  = ((v1 - v2) * y0 + (v2 - v0) * y1 + (v0 - v1) * y2) / det
+        let d  = ((u2 - u1) * y0 + (u0 - u2) * y1 + (u1 - u0) * y2) / det
+        let ty = ((u1 * v2 - u2 * v1) * y0 + (u2 * v0 - u0 * v2) * y1 + (u0 * v1 - u1 * v0) * y2) / det
+        // CGAffineTransform(a:b:c:d:tx:ty) applies: x'=a*x+c*y+tx, y'=b*x+d*y+ty
+        return CGAffineTransform(a: a, b: c, c: b, d: d, tx: tx, ty: ty)
     }
 
     // 4. Edges

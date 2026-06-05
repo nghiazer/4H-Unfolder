@@ -1,5 +1,7 @@
 import AppKit
 import SwiftUI
+import CoreGraphics
+import ImageIO
 @testable import FourHUnfolderCore
 
 @MainActor
@@ -13,6 +15,7 @@ final class AppState: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var fitToWindowTrigger: Int = 0
+    @Published var textureCache: [Int: CGImage] = [:]
 
     /// URL of the file the current mesh was loaded from (needed for project save).
     private(set) var sourceMeshURL: URL?
@@ -74,6 +77,45 @@ final class AppState: ObservableObject {
     func selectAll() { /* Phase 6 */ }
 
     func fitToWindow() { fitToWindowTrigger &+= 1 }
+
+    // MARK: - Texture cache (materialId → CGImage)
+
+    private func buildTextureCache(mesh: Mesh, sourceURL: URL) -> [Int: CGImage] {
+        var cache: [Int: CGImage] = [:]
+        // Embedded textures (PDO): index in embeddedTextures == materialId
+        for (i, tex) in mesh.embeddedTextures.enumerated() {
+            if let img = cgImageFromRGB24(tex) { cache[i] = img }
+        }
+        // File-based textures (OBJ + MTL)
+        for (i, path) in mesh.materialTexturePaths.enumerated() where cache[i] == nil {
+            guard let path else { continue }
+            guard let url = resolveTextureURL(path, relativeTo: sourceURL) else { continue }
+            guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
+                  let img = CGImageSourceCreateImageAtIndex(src, 0, nil) else { continue }
+            cache[i] = img
+        }
+        return cache
+    }
+
+    private func cgImageFromRGB24(_ tex: EmbeddedTextureData) -> CGImage? {
+        let cs = CGColorSpaceCreateDeviceRGB()
+        guard let provider = CGDataProvider(data: tex.rgb24Bytes as CFData) else { return nil }
+        return CGImage(
+            width: tex.width, height: tex.height,
+            bitsPerComponent: 8, bitsPerPixel: 24, bytesPerRow: tex.width * 3,
+            space: cs,
+            bitmapInfo: CGBitmapInfo(rawValue: 0),
+            provider: provider,
+            decode: nil, shouldInterpolate: true, intent: .defaultIntent
+        )
+    }
+
+    private func resolveTextureURL(_ path: String, relativeTo base: URL) -> URL? {
+        let abs = URL(fileURLWithPath: path)
+        if FileManager.default.fileExists(atPath: abs.path) { return abs }
+        let rel = base.deletingLastPathComponent().appendingPathComponent(path)
+        return FileManager.default.fileExists(atPath: rel.path) ? rel : nil
+    }
 
     // MARK: - Auto-arrange pieces on paper
 
@@ -144,8 +186,10 @@ final class AppState: ObservableObject {
         undoStack = []
         redoStack = []
         do {
-            mesh = try await loader.load(from: url)
+            let loaded = try await loader.load(from: url)
+            mesh = loaded
             sourceMeshURL = url
+            textureCache = buildTextureCache(mesh: loaded, sourceURL: url)
             await unfold()
         } catch {
             errorMessage = error.localizedDescription

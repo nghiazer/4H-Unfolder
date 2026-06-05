@@ -73,6 +73,7 @@ struct FourHUnfolderApp: App {
                 Toggle("Show Glue Tabs",    isOn: $appState.settings.view2D.showGlueTabs)
                 Toggle("Show Fold Angles",  isOn: $appState.settings.view2D.showFoldAngles)
                 Toggle("Show Face Numbers", isOn: $appState.settings.view2D.showFaceNumbers)
+                Toggle("Show Textures",     isOn: $appState.settings.view2D.showTexture)
             }
         }
     }

@@ -61,7 +61,7 @@ struct ObjMeshLoader: MeshLoaderProtocol {
                 guard parts.count >= 3,
                       let u = Float(parts[1]), let v = Float(parts[2])
                 else { continue }
-                uvCoords.append(SIMD2(u, v))
+                uvCoords.append(SIMD2(u, 1.0 - v))   // V-flip: OBJ v=0 is bottom; store as top-left=0
 
             case "usemtl":
                 guard parts.count >= 2 else { continue }
