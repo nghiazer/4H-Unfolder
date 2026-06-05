@@ -1,6 +1,8 @@
 import SwiftUI
 import CoreGraphics
 import simd
+// FourHUnfolderCore is compiled with -enable-testing (see Package.swift) so
+// internal symbols remain accessible here without a full public API surface.
 @testable import FourHUnfolderCore
 
 // MARK: - 2D interactive pattern canvas
@@ -25,6 +27,9 @@ import simd
 
 struct PatternCanvasView: View {
     @EnvironmentObject var appState: AppState
+
+    // Leaves 15% margin when fitting the pattern to the window.
+    private let fitScalePadding: CGFloat = 0.85
 
     @State private var zoom: CGFloat  = 1.0
     @State private var pan:  CGSize   = .zero
@@ -120,7 +125,7 @@ struct PatternCanvasView: View {
                     let pw = CGFloat(bb.max.x - bb.min.x)
                     let ph = CGFloat(bb.max.y - bb.min.y)
                     let scale = min(canvasSize.width  / max(1, pw),
-                                    canvasSize.height / max(1, ph)) * 0.85 * zoom * liveMag
+                                    canvasSize.height / max(1, ph)) * fitScalePadding * zoom * liveMag
                     let dmm = SIMD2<Float>(Float(delta.width / scale), Float(delta.height / scale))
                     appState.pieceOffsets[pi, default: .zero] += dmm
                     prevDragTranslation = val.translation
@@ -428,7 +433,7 @@ struct PatternCanvasView: View {
         let pw = CGFloat(bb.max.x - bb.min.x); guard pw > 0 else { return .identity }
         let ph = CGFloat(bb.max.y - bb.min.y); guard ph > 0 else { return .identity }
 
-        let fitScale   = min(size.width / pw, size.height / ph) * 0.85
+        let fitScale   = min(size.width / pw, size.height / ph) * fitScalePadding
         let effectZoom = fitScale * zoom * liveMag
         let cx = size.width  / 2 + pan.width
         let cy = size.height / 2 + pan.height

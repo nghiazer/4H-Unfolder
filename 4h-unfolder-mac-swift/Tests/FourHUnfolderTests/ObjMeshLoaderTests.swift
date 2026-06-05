@@ -122,6 +122,21 @@ final class ObjMeshLoaderTests: XCTestCase {
         } catch { /* expected */ }
     }
 
+    func testMissingMTL_loadsGracefully() async throws {
+        // OBJ that references a non-existent MTL file must load without throwing;
+        // missing material is silently ignored, geometry is still valid.
+        let content = """
+            mtllib does_not_exist.mtl
+            v 0 0 0
+            v 1 0 0
+            v 0.5 1 0
+            f 1 2 3
+            """
+        let mesh = try await loadString(content, name: "no_mtl.obj")
+        XCTAssertEqual(mesh.faces.count, 1, "Geometry must load even when MTL is missing")
+        XCTAssertEqual(mesh.vertices.count, 3)
+    }
+
     // MARK: - Comments and blank lines
 
     func testCommentLines_areIgnored() async throws {

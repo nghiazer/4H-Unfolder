@@ -2,6 +2,8 @@ import AppKit
 import SwiftUI
 import CoreGraphics
 import ImageIO
+// FourHUnfolderCore is compiled with -enable-testing (see Package.swift) so
+// internal symbols remain accessible here without a full public API surface.
 @testable import FourHUnfolderCore
 
 @MainActor
