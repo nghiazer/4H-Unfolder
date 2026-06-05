@@ -65,9 +65,9 @@ struct UnfoldEngine {
                 guard fi < mesh.faceUVs.count else { return (nil, nil, nil) }
                 let uvIdx = mesh.faceUVs[fi]
                 return (
-                    uvIdx.ua < mesh.uvs.count ? mesh.uvs[uvIdx.ua] : nil,
-                    uvIdx.ub < mesh.uvs.count ? mesh.uvs[uvIdx.ub] : nil,
-                    uvIdx.uc < mesh.uvs.count ? mesh.uvs[uvIdx.uc] : nil
+                    uvIdx.ua >= 0 && uvIdx.ua < mesh.uvs.count ? mesh.uvs[uvIdx.ua] : nil,
+                    uvIdx.ub >= 0 && uvIdx.ub < mesh.uvs.count ? mesh.uvs[uvIdx.ub] : nil,
+                    uvIdx.uc >= 0 && uvIdx.uc < mesh.uvs.count ? mesh.uvs[uvIdx.uc] : nil
                 )
             }()
 

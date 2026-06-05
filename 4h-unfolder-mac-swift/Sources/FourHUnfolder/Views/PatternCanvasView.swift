@@ -291,7 +291,7 @@ struct PatternCanvasView: View {
         let (u1, v1) = (src.1.x, src.1.y)
         let (u2, v2) = (src.2.x, src.2.y)
         let det = u0 * (v1 - v2) - v0 * (u1 - u2) + (u1 * v2 - u2 * v1)
-        guard abs(det) > 1e-8 else { return nil }
+        guard abs(det) > 1e-5 else { return nil }
         let (x0, y0) = (dst.0.x, dst.0.y)
         let (x1, y1) = (dst.1.x, dst.1.y)
         let (x2, y2) = (dst.2.x, dst.2.y)

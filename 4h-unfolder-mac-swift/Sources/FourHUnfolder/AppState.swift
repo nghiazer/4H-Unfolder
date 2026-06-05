@@ -301,10 +301,11 @@ final class AppState: ObservableObject {
             let (state, meshURL, tempDir) = try await Task.detached(priority: .utility) {
                 try ProjectSerializer().load(from: url)
             }.value
+            // tempDir is always cleaned up, even if loader.load throws
+            defer { try? FileManager.default.removeItem(at: tempDir) }
 
-            // Load mesh (reads entire file into memory — temp dir can be deleted after)
+            // Load mesh (reads entire file into memory)
             let loadedMesh = try await loader.load(from: meshURL)
-            try? FileManager.default.removeItem(at: tempDir)
 
             // Restore state
             mesh          = loadedMesh
@@ -313,7 +314,8 @@ final class AppState: ObservableObject {
             flapOverrides = state.flapOverrides
             settings      = state.settings
             pieceOffsets  = state.pieceOffsets.reduce(into: [Int: SIMD2<Float>]()) { d, kv in
-                guard let pi = Int(kv.key), kv.value.count >= 2 else { return }
+                guard let pi = Int(kv.key), kv.value.count >= 2,
+                      kv.value[0].isFinite, kv.value[1].isFinite else { return }
                 d[pi] = SIMD2<Float>(kv.value[0], kv.value[1])
             }
 

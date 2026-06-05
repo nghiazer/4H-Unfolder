@@ -52,7 +52,7 @@ actor UnfoldService {
         for edge in mesh.edges where edge.type == .cut && edge.connectsFaces {
             if cutEdgePairIds[edge.id] == nil {
                 cutEdgePairIds[edge.id] = pairCounter
-                pairCounter += 1
+                if pairCounter < Int.max { pairCounter += 1 }
             }
         }
 
