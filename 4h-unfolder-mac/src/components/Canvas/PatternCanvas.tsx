@@ -139,6 +139,13 @@ export function PatternCanvas({ width, height }: Props) {
       onDragOver={(e) => e.preventDefault()}
     >
       {!hasMesh && <DropZone />}
+      {hasMesh && !response && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none">
+          <p className="text-muted-foreground text-sm opacity-50">
+            Mesh loaded — click ⚡ Unfold to generate the pattern
+          </p>
+        </div>
+      )}
 
       <Stage
         ref={stageRef}

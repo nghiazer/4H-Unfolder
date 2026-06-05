@@ -24,6 +24,7 @@ pub struct Vertex {
 /// `edge_ids[i]` is the mesh edge between `vertices[i]` and `vertices[(i+1)%3]`,
 /// matching C# Face.EdgeIds order [AB, BC, CA].
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Face {
     pub id:          usize,
     /// Vertex indices [A, B, C].
@@ -40,6 +41,7 @@ pub struct Face {
 /// `vert_a ≤ vert_b` (canonical form).
 /// `face_b = None` means boundary edge.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MeshEdge {
     pub id:        usize,
     pub face_a:    usize,
@@ -52,6 +54,7 @@ pub struct MeshEdge {
 
 /// Pre-computed 2-D paper-space layout embedded in a PDO file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PdoFace {
     pub face_id:    usize,
     pub part_index: i32,
@@ -68,6 +71,7 @@ pub struct PdoLayout {
 
 /// An embedded texture decoded from a PDO file (uncompressed RGB24).
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EmbeddedTexture {
     pub name:       String,
     pub width:      u32,
@@ -94,6 +98,7 @@ impl Default for BoundingBox {
 
 /// Complete loaded mesh.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Mesh {
     pub name:      String,
     pub vertices:  Vec<Vertex>,
