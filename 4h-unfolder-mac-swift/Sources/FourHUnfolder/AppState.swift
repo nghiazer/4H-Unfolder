@@ -16,6 +16,8 @@ final class AppState: ObservableObject {
     @Published var errorMessage: String?
     @Published var fitToWindowTrigger: Int = 0
     @Published var textureCache: [Int: CGImage] = [:]
+    /// Piece-index (index in result.pieces) → cumulative drag offset in mm
+    @Published var pieceOffsets: [Int: SIMD2<Float>] = [:]
 
     /// URL of the file the current mesh was loaded from (needed for project save).
     private(set) var sourceMeshURL: URL?
@@ -74,9 +76,20 @@ final class AppState: ObservableObject {
         Task { await unfold() }
     }
 
-    func selectAll() { /* Phase 6 */ }
+    func selectAll() { /* stub — multi-select planned in Phase 10 */ }
 
     func fitToWindow() { fitToWindowTrigger &+= 1 }
+
+    // MARK: - Piece offset helpers
+
+    func pieceIndex(forFaceId fid: Int, result: UnfoldResult) -> Int? {
+        result.pieces.firstIndex { $0.contains(fid) }
+    }
+
+    func offset(forFaceId fid: Int, result: UnfoldResult) -> SIMD2<Float> {
+        guard let pi = pieceIndex(forFaceId: fid, result: result) else { return .zero }
+        return pieceOffsets[pi] ?? .zero
+    }
 
     // MARK: - Texture cache (materialId → CGImage)
 
@@ -160,6 +173,7 @@ final class AppState: ObservableObject {
         result.faces = newFaces
         result.tabs  = newTabs
         unfoldResult = result
+        pieceOffsets = [:]
     }
 
     // MARK: - Mesh file operations
@@ -208,6 +222,7 @@ final class AppState: ObservableObject {
             flapOverrides: flapOverrides,
             settings: settings.print
         )
+        pieceOffsets = [:]
         isLoading = false
     }
 
