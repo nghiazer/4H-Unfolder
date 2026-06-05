@@ -75,7 +75,7 @@ export const useUIStore = create<UIState>()(
     editingEdgeId:   null,
     editingFaceId:   null,
     lasso:           { active: false, points: [] },
-    showViewport3D:  false,
+    showViewport3D:  true,
     viewport:  { scale: 1, tx: 0, ty: 0 },
     dialogs:   { settings: false, export: false, editFlaps: false, scale: false, orient: false },
 

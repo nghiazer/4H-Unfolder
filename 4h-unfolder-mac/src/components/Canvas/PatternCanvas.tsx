@@ -1,4 +1,4 @@
-import { useRef, useMemo } from 'react';
+import { useRef, useMemo, useEffect } from 'react';
 import { Stage, Layer } from 'react-konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import type { GlueTab, PieceLayout, UnfoldedFace, UnfoldResponse } from '@/types/unfold';
@@ -78,7 +78,16 @@ export function PatternCanvas({ width, height }: Props) {
   const hasMesh    = useMeshStore((s) => s.mesh !== null);
   const viewport   = useUIStore((s) => s.viewport);
   const mode       = useUIStore((s) => s.mode);
-  const { handleWheel } = useCanvasZoomPan(stageRef);
+  const { handleWheel, fitToView } = useCanvasZoomPan(stageRef);
+
+  // Auto-fit to sheet when unfold result arrives
+  useEffect(() => {
+    if (!response) return;
+    const W = response.sheetWidthMm  * MM_TO_PX;
+    const H = response.sheetHeightMm * MM_TO_PX;
+    requestAnimationFrame(() => fitToView(W, H, width, height));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [response]); // intentionally only on new unfold result
 
   // Pan state for middle-mouse drag.
   const panStart = useRef<{ mouseX: number; mouseY: number; tx: number; ty: number } | null>(null);
