@@ -3,15 +3,16 @@
 ## Build
 
 ```bash
-# Requires Xcode 15+ installed (NOT just Command Line Tools)
+# Requires Xcode 15+ (NOT just Command Line Tools)
 cd 4h-unfolder-mac-swift
-swift build
+swift build                  # debug
+swift build -c release       # release
 
-# Open in Xcode (recommended):
-# File → Open → select Package.swift → Product → Run (⌘R)
+# Publish build (creates .app bundle + ZIP):
+./scripts/build-release.sh v0.0.0.1-alpha
 
-# Tests: run in Xcode → Product → Test (⌘U)
-# Note: swift test does NOT work (XCTest requires full Xcode SDK)
+# Tests — must use Xcode (swift test fails, XCTest needs full SDK):
+# Product → Test (⌘U) or Test Navigator (⌘5)
 ```
 
 ---
@@ -20,16 +21,18 @@ swift build
 
 | Phase | Description | Status | Commit |
 |-------|-------------|--------|--------|
-| 1 | Core architecture + algorithm layer (UnionFind, DualGraph, Kruskal, UnfoldEngine, GlueTabGenerator, OverlapDetector, EdgeMarker, PieceComputer) | ✅ Done | `5294cc8` |
-| 2 | PDO binary parser (v3 format, embedded zlib textures, subtraction cipher) | ✅ Done | `5294cc8` |
+| 1 | Core algorithm layer — UnionFind, DualGraph, Kruskal MST, UnfoldEngine (BFS + ReconstructApex), GlueTabGenerator, OverlapDetector (SAT), EdgeMarker, PieceComputer | ✅ Done | `5294cc8` |
+| 2 | PDO binary parser — v3 format, subtraction cipher, embedded zlib textures | ✅ Done | `5294cc8` |
 | 3 | UnfoldService actor + ProjectSerializer (.4hu ZIP bundle) | ✅ Done | `5294cc8` |
 | 4 | PatternCanvasView (interactive 2D canvas) + SceneKitView (Metal 3D viewport) | ✅ Done | `5294cc8` |
-| 5 | SVGExporter + PDFExporter + ObjMeshLoader (MTL parsing, UV coords) | ✅ Done | `5294cc8` |
+| 5 | SVGExporter + PDFExporter + ObjMeshLoader (MTL parsing, UV coordinates) | ✅ Done | `5294cc8` |
 | 6 | FourHUnfolderCore library target (SPM split) + 53 unit tests | ✅ Done | `773504d` |
-| 7 | Native menus, paper size picker, auto-arrange pieces, status bar | ✅ Done | `c0a66a4` |
-| 8 | Multi-material + UV texture rendering (3D viewport + 2D canvas) | ⏳ Planned | — |
-| 9 | Piece drag (manual positioning), Preferences window, app polish | ⏳ Planned | — |
-| 10 | Tech debt sprint (stubs, typo fixes, test coverage, code split) | ⏳ Planned | — |
+| 7 | Native menus (CommandGroup/CommandMenu), paper size picker, auto-arrange, status bar | ✅ Done | `c0a66a4` |
+| 8 | Multi-material + UV texture rendering — 3D viewport (SCNGeometry multi-element) + 2D canvas (affine UV-mapped triangles) | ✅ Done | `bf8d014` |
+| 9 | Per-piece manual drag (non-destructive pieceOffsets), 4-tab Preferences window, onOpenURL, onDrop, Settings scene (⌘,) | ✅ Done | `7f5adab` |
+| 10 | Tech debt sprint — `includeGlueTabs` typo fix, `selectAll()` impl, `pieceOffsets` project persistence, 10 new unit tests | ✅ Done | `5965900` |
+| CR | Cross-review — fix 7 CRITICAL/HIGH/MEDIUM issues (force-unwraps, CGContext leak, epsilon, temp-dir defer, isFinite guard) + 16 new tests | ✅ Done | `9ad99d7` `078ff78` |
+| PUB | Release packaging — `Resources/Info.plist` (file types .obj/.pdo/.4hu), `scripts/build-release.sh` (ad-hoc signed .app + ZIP) | ✅ Done | `ef4b3d1` |
 
 ---
 
@@ -37,51 +40,61 @@ swift build
 
 | Feature | Windows (WPF) | macOS (Swift) |
 |---------|---------------|---------------|
-| OBJ mesh loading | ✅ | ✅ |
+| OBJ mesh loading (+ MTL textures) | ✅ | ✅ |
 | PDO mesh loading (v3) | ✅ | ✅ |
 | Kruskal MST unfold pipeline | ✅ | ✅ |
 | Edge toggle fold ↔ cut | ✅ | ✅ |
 | Glue tabs (Trapezoid / Rectangle / Triangle) | ✅ | ✅ |
 | 10 FlapMode variants per edge | ✅ | ✅ |
 | Overlap detection (spatial grid + SAT) | ✅ | ✅ |
-| SVG export | ✅ | ✅ (solid fill, no texture) |
-| PDF export | ✅ | ✅ (solid fill, no texture) |
+| SVG export | ✅ | ✅ |
+| PDF export | ✅ | ✅ |
 | Project save / load (.4hu ZIP bundle) | ✅ | ✅ |
 | Undo / redo (edge + flap overrides) | ✅ | ✅ |
 | Interactive 2D canvas (zoom, pan, tap) | ✅ | ✅ |
+| Per-piece manual drag | ✅ | ✅ |
 | Auto-arrange pieces on paper | ✅ | ✅ |
 | Paper size picker (A4/A3/A2/A1/Letter/Legal) | ✅ | ✅ |
 | Portrait / Landscape toggle | ✅ | ✅ |
+| pieceOffsets persisted in .4hu bundle | ✅ | ✅ |
+| UV texture in 3D viewport | ✅ | ✅ |
+| UV texture fill in 2D canvas | ✅ | ✅ |
+| Preferences window (4 tabs) | ✅ | ✅ |
+| Drag-and-drop mesh onto app window | ✅ | ✅ |
+| File associations (.obj / .pdo / .4hu in Info.plist) | ✅ | ✅ |
+| Select all / cycle faces | ✅ | ✅ |
 | Native macOS menus (⌘O, ⌘S, ⌘U …) | N/A | ✅ |
 | Status bar (face count, pieces, overlaps) | N/A | ✅ |
-| UV texture in 3D viewport | ✅ | ⏳ Phase 8 |
-| UV texture fill in 2D canvas | ✅ | ⏳ Phase 8 |
 | UV texture in SVG / PDF export | ✅ | ❌ Not planned |
-| Per-piece manual drag | ✅ | ⏳ Phase 9 |
-| Preferences window | ✅ | ⏳ Phase 9 |
-| File associations (.obj / .pdo / .4hu) | ✅ | ⏳ Phase 9 |
-| Drag-and-drop onto app window | ✅ | ⏳ Phase 9 |
 | Multi-page PDF layout | ✅ | ❌ Not planned |
 | PDO v4 / PD6 format | ✅ | ❌ Not planned |
-| Select all faces | ✅ | ⏳ Phase 10 |
 | Assembly 3D viewer | ✅ | ❌ Not planned |
 
 ---
 
 ## Known Issues / Tech Debt
 
-| ID | Priority | Area | Description |
-|----|----------|------|-------------|
-| TD-M-1 | 🟡 Med | AppState | `selectAll()` is a stub — body is empty |
-| TD-M-2 | 🟢 Low | AppSettings / Exporters | Typo: `includGlueTabs` (missing 'e') — appears in `AppSettings.PrintSettings`, `SVGExporter`, `PDFExporter` |
-| TD-M-3 | 🟢 Low | AppSettings / PatternCanvasView | `View2DSettings.showTexture` is defined but no renderer reads it — dead code until Phase 8 |
-| TD-M-4 | 🟡 Med | ProjectSerializer | `pieceOffsets` (Phase 9) not serialized into `.4hu` bundle — positions lost on project reload |
-| TG-M-1 | 🟢 Low | Tests | `FlapMode.border_MountainFold`, `.border_ValleyFold`, `.border_NoFold` variants not unit tested |
-| TG-M-2 | 🟡 Med | Tests | No project save / load round-trip test |
-| TG-M-3 | 🟢 Low | Tests | Single-face mesh unfolding not covered |
-| TG-M-4 | 🟢 Low | Tests | Extreme tab angles (1°, 179°) not tested — potential `depth/tan(angle)` edge case |
-| CQ-M-1 | 🟢 Low | PatternCanvasView | File will exceed 500 lines after Phase 8 — split into Renderer + Helpers |
-| CQ-M-2 | 🟢 Low | All Views | `@testable import FourHUnfolderCore` on production views — workaround for `internal` visibility; document intent |
+All issues from Phases 1–10 and the cross-review audit have been resolved.
+
+| ID | Priority | Description |
+|----|----------|-------------|
+| CQ-M-1 | 🟢 Low | PatternCanvasView is ~470 lines — consider splitting into CanvasRenderer + CanvasHelpers sub-files when adding more render layers |
+| PERF | 🟢 Low | SVG/PDF export does not include UV texture rendering — solid fill only |
+
+---
+
+## Test Summary (87 tests across 8 files)
+
+| File | Tests | Covers |
+|------|-------|--------|
+| `UnionFindTests` | 5 | Path compression, union by rank, single-element |
+| `KruskalMSTTests` | 8 | Edge count (n-1), uniqueness, flat mesh, disconnected |
+| `UnfoldEngineTests` | 14 | Edge-length preservation, dihedral angles, single-face, edge overrides, empty mesh |
+| `GlueTabGeneratorTests` | 17 | All 3 shapes, inset cap at 45%, border FlapMode variants, extreme angles, alternateFlaps |
+| `OverlapDetectorTests` | 9 | SAT epsilon, shared-edge false-positive guard, spatial grid |
+| `ObjMeshLoaderTests` | 14 | Euler V−E+F=2, boundary edges, error cases, missing MTL graceful load |
+| `ProjectSerializerTests` | 3 | Round-trip edge/flap overrides, pieceOffsets, missing state.json error |
+| `SVGExporterTests` | 17 | XML structure, polygon count, dimensions, fold/cut/tab flags, grayscale, empty result, coordinate origin |
 
 ---
 
@@ -89,55 +102,51 @@ swift build
 
 ```
 4h-unfolder-mac-swift/
-├── Package.swift                    ← SPM manifest (3 targets)
+├── Package.swift                         ← SPM manifest (3 targets, -enable-testing)
+├── Resources/
+│   └── Info.plist                        ← App bundle metadata + document types
+├── scripts/
+│   └── build-release.sh                  ← Release packaging script
 ├── Sources/
-│   ├── FourHUnfolderCore/           ← Pure Swift library (no UI deps)
+│   ├── FourHUnfolderCore/                ← Pure Swift library (no UI deps)
 │   │   ├── Core/
-│   │   │   ├── Math/                ← SIMDExtensions (triangleApex, reconstructApex)
-│   │   │   ├── Models/              ← Mesh, Face, Edge, UnfoldResult, GlueTab, AppSettings
-│   │   │   ├── Graph/               ← DualGraph, DualGraphBuilder, UnionFind
-│   │   │   └── Algorithms/          ← UnfoldEngine, KruskalMSTBuilder, GlueTabGenerator,
-│   │   │                               OverlapDetector, EdgeMarker, PieceComputer
+│   │   │   ├── Math/                     ← SIMDExtensions (triangleApex, reconstructApex)
+│   │   │   ├── Models/                   ← Mesh, Face, Edge, UnfoldResult, GlueTab,
+│   │   │   │                               AppSettings, FlapOverride, ProjectState
+│   │   │   ├── Graph/                    ← DualGraph, DualGraphBuilder, UnionFind
+│   │   │   └── Algorithms/               ← UnfoldEngine, KruskalMSTBuilder,
+│   │   │                                   GlueTabGenerator, OverlapDetector,
+│   │   │                                   EdgeMarker, PieceComputer
 │   │   ├── IO/
-│   │   │   ├── Loaders/             ← ObjMeshLoader, PdoMeshLoader, MeshLoaderFactory
-│   │   │   └── Exporters/           ← SVGExporter, PDFExporter
-│   │   └── Services/                ← UnfoldService (actor), ProjectSerializer, ProjectState
-│   └── FourHUnfolder/               ← SwiftUI app (macOS 13+)
-│       ├── App.swift                ← @main, CommandGroup / CommandMenu
-│       ├── AppState.swift           ← @MainActor ObservableObject (mesh, result, overrides)
+│   │   │   ├── Loaders/                  ← ObjMeshLoader, PdoMeshLoader, MeshLoaderFactory
+│   │   │   └── Exporters/                ← SVGExporter, PDFExporter
+│   │   └── Services/                     ← UnfoldService (actor), ProjectSerializer
+│   └── FourHUnfolder/                    ← SwiftUI app (macOS 13+)
+│       ├── App.swift                     ← @main, CommandGroup, Settings scene
+│       ├── AppState.swift                ← @MainActor ObservableObject
 │       ├── ContentView.swift
 │       └── Views/
-│           ├── MainView.swift       ← NavigationSplitView + HSplitView + status bar
-│           ├── SidebarView.swift    ← Settings form (unfold, print layout, view toggles)
-│           ├── SceneKitView.swift   ← Metal-backed 3D viewport (NSViewRepresentable)
-│           └── PatternCanvasView.swift ← SwiftUI Canvas 2D interactive pattern
-└── Tests/FourHUnfolderTests/        ← 53 XCTest cases
+│           ├── MainView.swift            ← NavigationSplitView + status bar + onDrop
+│           ├── SidebarView.swift         ← Settings form
+│           ├── SceneKitView.swift        ← Metal 3D viewport (multi-material UV)
+│           ├── PatternCanvasView.swift   ← 9-layer SwiftUI Canvas + piece drag
+│           └── PreferencesView.swift     ← 4-tab Preferences (General/Print/Canvas/3D)
+└── Tests/FourHUnfolderTests/             ← 87 XCTest cases
     ├── Helpers/TestMeshBuilders.swift
     ├── UnionFindTests.swift
     ├── KruskalMSTTests.swift
     ├── UnfoldEngineTests.swift
     ├── GlueTabGeneratorTests.swift
     ├── OverlapDetectorTests.swift
-    └── ObjMeshLoaderTests.swift
+    ├── ObjMeshLoaderTests.swift
+    ├── ProjectSerializerTests.swift
+    └── SVGExporterTests.swift
 ```
 
 ### SPM target layout
 
-| Target | Type | Depends on |
-|--------|------|-----------|
-| `FourHUnfolderCore` | library (`-enable-testing`) | — |
-| `FourHUnfolder` | executableTarget | FourHUnfolderCore |
-| `FourHUnfolderTests` | testTarget | FourHUnfolderCore |
-
----
-
-## Test Summary (Phase 6, 53 tests)
-
-| File | Tests | Covers |
-|------|-------|--------|
-| `UnionFindTests` | 5 | Path compression, union by rank |
-| `KruskalMSTTests` | 8 | MST edge count, uniqueness, disconnected mesh |
-| `UnfoldEngineTests` | 11 | Edge length preservation, dihedral angles, edge overrides |
-| `GlueTabGeneratorTests` | 11 | Inset cap at 45%, all 3 shapes, alternateFlaps |
-| `OverlapDetectorTests` | 8 | SAT epsilon, shared-edge false-positive guard |
-| `ObjMeshLoaderTests` | 10 | Euler V−E+F=2, boundary edges, error cases |
+| Target | Type | Key flag |
+|--------|------|----------|
+| `FourHUnfolderCore` | library | `-enable-testing` (internal types accessible via `@testable`) |
+| `FourHUnfolder` | executableTarget | depends on FourHUnfolderCore |
+| `FourHUnfolderTests` | testTarget | depends on FourHUnfolderCore |

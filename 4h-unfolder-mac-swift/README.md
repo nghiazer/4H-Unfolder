@@ -2,35 +2,51 @@
 
 Native macOS port of 4H-Unfolder, built with Swift 5.9 + SwiftUI + SceneKit (Metal). Unfolds 3D meshes into 2D printable papercraft patterns.
 
-> **Status: Alpha (v0.0.0.1)** — core pipeline complete, texture rendering in progress.
+> **Status: v0.0.0.1-alpha** — core pipeline complete, Phases 1–10 done, 87 unit tests passing.
 > See [PROGRESS.md](PROGRESS.md) for detailed phase tracking.
+
+---
+
+## Download
+
+Pre-built ad-hoc signed bundle (macOS 13+, no installer needed):
+
+```
+publish/mac/v0.0.0.1-alpha/4H-Unfolder_v0.0.0.1-alpha_mac.zip
+```
+
+> **First launch**: Right-click `4H Unfolder.app` → **Open** (Gatekeeper bypass for unsigned builds).
+> For a signed build, open in Xcode → Product → Archive → Distribute App.
 
 ---
 
 ## Features
 
-- **Load** OBJ (with MTL textures) and PDO v3 files
-- **Unfold** via Kruskal MST spanning tree + BFS layout — produces flat 2D pattern
-- **Interactive 2D canvas** — zoom/pan, click edges to toggle fold ↔ cut, tap faces to select
-- **Glue tabs** — Trapezoid / Rectangle / Triangle shapes; 10 FlapMode variants per edge
-- **Overlap detection** — spatial grid + SAT algorithm
-- **Auto-arrange** pieces within selected paper size (A4 / A3 / A2 / A1 / Letter / Legal)
-- **Export** SVG and PDF
-- **Save / load** project as `.4hu` ZIP bundle (compatible with Windows version)
-- **Undo / redo** edge and flap overrides
-- **Metal-accelerated** 3D viewport via SceneKit
+| Category | Feature |
+|----------|---------|
+| **Import** | OBJ (+ MTL material + UV textures), PDO v3 (binary, embedded zlib textures) |
+| **Unfold** | Kruskal MST on face-adjacency dual graph → BFS face placement in paper-space mm |
+| **2D Canvas** | Zoom/pan, click edge to toggle fold ↔ cut, tap face to select, drag piece to reposition |
+| **3D Viewport** | SceneKit (Metal), multi-material, UV texture mapping, face selection highlight |
+| **Glue Tabs** | Trapezoid / Rectangle / Triangle shapes; 10 FlapMode variants per edge |
+| **Overlap** | Spatial grid + AABB + SAT detection |
+| **Layout** | Auto-arrange pieces on page; paper size picker (A4/A3/A2/A1/Letter/Legal); portrait/landscape |
+| **Export** | SVG (vector) and PDF (Core Graphics), grayscale option |
+| **Project** | Save/load `.4hu` ZIP bundle — mesh + overrides + piece positions (cross-platform with Windows) |
+| **Undo/Redo** | Lightweight snapshot of edge/flap overrides |
+| **Preferences** | 4-tab window — General, Print, Canvas, 3D View |
 
 ---
 
 ## Requirements
 
-| Requirement | Version |
-|-------------|---------|
+| | Version |
+|--|---------|
 | macOS | 13 Ventura or later |
 | Xcode | 15 or later (full install — not just Command Line Tools) |
 | Swift | 5.9 (bundled with Xcode 15) |
 
-> `swift build` from terminal also works for a non-GUI build, but **running tests requires Xcode** (`swift test` fails — XCTest framework is only in the full Xcode SDK).
+> `swift build` works for CLI builds, but **running tests requires Xcode** — `swift test` fails because XCTest is only in the full Xcode SDK.
 
 ---
 
@@ -39,43 +55,46 @@ Native macOS port of 4H-Unfolder, built with Swift 5.9 + SwiftUI + SceneKit (Met
 ### Xcode (recommended)
 
 ```bash
-# 1. Open project
-open 4h-unfolder-mac-swift/Package.swift
-# Xcode opens the SPM package automatically
-
-# 2. Select scheme "FourHUnfolder" → Run (⌘R)
+open 4h-unfolder-mac-swift/Package.swift   # Xcode opens the SPM package
+# Select scheme "FourHUnfolder" → Run (⌘R)
 ```
 
-### Command line (build only, no GUI)
+### Command line
 
 ```bash
 cd 4h-unfolder-mac-swift
 swift build                   # debug
-swift build -c release        # release
+swift build -c release        # optimised release
 ```
 
-### Run tests
+### Release package (signed bundle + ZIP)
 
-Open in Xcode → **Product → Test (⌘U)** or use the Test Navigator (⌘5).
+```bash
+cd 4h-unfolder-mac-swift
+./scripts/build-release.sh v0.0.0.1-alpha
+# → publish/mac/v0.0.0.1-alpha/4H-Unfolder_v0.0.0.1-alpha_mac.zip
+```
+
+### Tests
+
+Open in Xcode → **Product → Test (⌘U)**. All 87 tests must pass before release.
 
 ---
 
-## Usage
+## Keyboard Shortcuts
 
-| Action | How |
-|--------|-----|
-| Open mesh | ⌘O or File → Open Mesh… |
-| Unfold | ⌘U or Pattern → Run Unfold |
-| Toggle fold/cut edge | Click edge in 2D canvas |
-| Auto-arrange pieces | ⌘⇧A or sidebar "Auto-Arrange Pieces" button |
-| Fit canvas to window | ⌘0 or View → Fit Pattern to Window |
-| Export SVG | ⌘⇧E |
-| Export PDF | ⌘P |
-| Save project | ⌘S → saves as `.4hu` bundle |
-| Open project | ⌘⇧O |
-| Undo override | ⌘Z |
-| Redo | ⌘⇧Z |
-| Preferences | ⌘, (Phase 9) |
+| Shortcut | Action |
+|----------|--------|
+| ⌘O | Open mesh file (.obj / .pdo) |
+| ⌘⇧O | Open project (.4hu) |
+| ⌘S | Save project |
+| ⌘U | Run unfold |
+| ⌘⇧A | Auto-arrange pieces |
+| ⌘0 | Fit pattern to window |
+| ⌘⇧E | Export SVG |
+| ⌘P | Export PDF |
+| ⌘Z / ⌘⇧Z | Undo / Redo |
+| ⌘, | Preferences |
 
 ---
 
@@ -83,39 +102,24 @@ Open in Xcode → **Product → Test (⌘U)** or use the Test Navigator (⌘5).
 
 ```
 4h-unfolder-mac-swift/
-├── Package.swift                    ← SPM manifest
-├── README.md                        ← This file
-├── PROGRESS.md                      ← Phase tracker + feature status
+├── Package.swift                    ← SPM manifest (3 targets)
+├── Resources/Info.plist             ← App bundle metadata + file-type associations
+├── scripts/build-release.sh         ← Release packaging (ad-hoc sign + ZIP)
 ├── Sources/
 │   ├── FourHUnfolderCore/           ← Pure Swift library (zero UI deps)
+│   │   ├── Core/Math/               ← SIMD geometry (triangleApex, reconstructApex)
 │   │   ├── Core/Models/             ← Mesh, UnfoldResult, AppSettings, FlapOverride
 │   │   ├── Core/Graph/              ← DualGraph, UnionFind, KruskalMSTBuilder
 │   │   ├── Core/Algorithms/         ← UnfoldEngine, GlueTabGenerator, OverlapDetector
 │   │   ├── IO/Loaders/              ← ObjMeshLoader, PdoMeshLoader
 │   │   ├── IO/Exporters/            ← SVGExporter, PDFExporter
 │   │   └── Services/                ← UnfoldService (actor), ProjectSerializer
-│   └── FourHUnfolder/               ← SwiftUI app target
-│       ├── App.swift                ← @main entry, native menus
-│       ├── AppState.swift           ← Observable state, unfold pipeline, file I/O
-│       └── Views/                   ← MainView, SidebarView, SceneKitView, PatternCanvasView
-└── Tests/FourHUnfolderTests/        ← 53 XCTest cases
-```
-
-### Architecture
-
-```
-FourHUnfolderCore (library)
-    ├── Core          ← pure algorithms, zero external deps
-    ├── IO            ← file loading + export
-    └── Services      ← pipeline orchestration (UnfoldService actor)
-
-FourHUnfolder (app)
-    └── depends on FourHUnfolderCore
-        uses @testable import to access internal types
-        (library compiled with -enable-testing)
-
-FourHUnfolderTests (test target)
-    └── depends on FourHUnfolderCore
+│   └── FourHUnfolder/               ← SwiftUI app target (macOS 13+)
+│       ├── App.swift                ← @main, native menus, Settings scene (⌘,)
+│       ├── AppState.swift           ← @MainActor ObservableObject, undo stack
+│       └── Views/                   ← MainView, SidebarView, SceneKitView,
+│                                       PatternCanvasView, PreferencesView
+└── Tests/FourHUnfolderTests/        ← 87 XCTest cases (8 files)
 ```
 
 ---
@@ -124,42 +128,13 @@ FourHUnfolderTests (test target)
 
 | Format | Load | Save |
 |--------|------|------|
-| `.obj` (Wavefront OBJ + MTL) | ✅ | — |
-| `.pdo` (Pepakura Designer v3) | ✅ | — |
+| `.obj` (Wavefront OBJ + MTL + UV textures) | ✅ | — |
+| `.pdo` (Pepakura Designer v3, embedded textures) | ✅ | — |
 | `.svg` (Scalable Vector Graphics) | — | ✅ |
 | `.pdf` (Portable Document Format) | — | ✅ |
-| `.4hu` (4H-Unfolder project bundle) | ✅ | ✅ |
+| `.4hu` (4H-Unfolder project bundle, cross-platform) | ✅ | ✅ |
 
-> **PDO support**: version 3 only. PD6/v4 format not supported.
-
----
-
-## Keyboard Shortcuts
-
-| Shortcut | Action |
-|----------|--------|
-| ⌘O | Open mesh file |
-| ⌘⇧O | Open project (.4hu) |
-| ⌘S | Save project |
-| ⌘U | Run unfold |
-| ⌘⇧A | Auto-arrange pieces |
-| ⌘0 | Fit pattern to window |
-| ⌘⇧E | Export SVG |
-| ⌘P | Export PDF |
-| ⌘Z | Undo edge/flap override |
-| ⌘⇧Z | Redo |
-| ⌘, | Preferences (Phase 9) |
-
----
-
-## Roadmap
-
-See [PROGRESS.md](PROGRESS.md) for the full phase breakdown.
-
-**Next up:**
-- **Phase 8** — Multi-material + UV texture rendering in 3D viewport and 2D canvas
-- **Phase 9** — Per-piece drag, Preferences window, file associations
-- **Phase 10** — Tech debt (stubs, typo fixes, test coverage expansion)
+> PDO v4 / PD6 format not supported.
 
 ---
 
@@ -167,3 +142,4 @@ See [PROGRESS.md](PROGRESS.md) for the full phase breakdown.
 
 - **Windows version**: [`4h-unfolder-win/`](../4h-unfolder-win/) — WPF / .NET 8, feature-complete reference implementation
 - **Project guide**: [`CLAUDE.md`](../CLAUDE.md) — architecture overview and development guide
+- **Phase tracker**: [PROGRESS.md](PROGRESS.md) — all phases, feature parity table, test summary
