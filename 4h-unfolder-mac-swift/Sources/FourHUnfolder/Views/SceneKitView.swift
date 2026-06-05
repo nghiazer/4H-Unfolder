@@ -2,7 +2,9 @@ import SwiftUI
 import SceneKit
 import simd
 
-// Native 3D viewport backed by SCNView — hardware-accelerated via Metal.
+// MARK: - Native 3D viewport backed by SCNView (Metal-accelerated)
+// Phase 7 will add: multi-material, UV textures, edge overlay, selection glow.
+
 struct SceneKitView: NSViewRepresentable {
     let mesh: Mesh?
 
@@ -10,9 +12,9 @@ struct SceneKitView: NSViewRepresentable {
         let view = SCNView()
         view.scene = SCNScene()
         view.autoenablesDefaultLighting = true
-        view.allowsCameraControl = true          // trackpad orbit / zoom / pan
-        view.antialiasingMode = .multisampling4X
-        view.backgroundColor = .init(white: 0.10, alpha: 1)
+        view.allowsCameraControl = true
+        view.antialiasingMode    = .multisampling4X
+        view.backgroundColor     = .init(white: 0.10, alpha: 1)
 
         let cam = SCNNode()
         cam.name = "camera"
@@ -21,28 +23,24 @@ struct SceneKitView: NSViewRepresentable {
         view.scene!.rootNode.addChildNode(cam)
         view.pointOfView = cam
 
-        // Subtle ambient light
         let ambient = SCNNode()
         ambient.light = SCNLight()
-        ambient.light!.type = .ambient
-        ambient.light!.intensity = 200
+        ambient.light!.type      = .ambient
+        ambient.light!.intensity = 300
         view.scene!.rootNode.addChildNode(ambient)
 
         return view
     }
 
     func updateNSView(_ scnView: SCNView, context: Context) {
-        // Remove old mesh
         scnView.scene?.rootNode.childNodes(passingTest: { n, _ in n.name == "mesh" })
             .forEach { $0.removeFromParentNode() }
-
         guard let mesh else { return }
 
         let node = buildNode(from: mesh)
         node.name = "mesh"
         scnView.scene!.rootNode.addChildNode(node)
 
-        // Auto-frame the camera
         let (center, radius) = boundingSphere(of: mesh)
         if let cam = scnView.pointOfView {
             cam.position = SCNVector3(center.x, center.y, center.z + radius * 2.5)
@@ -50,20 +48,17 @@ struct SceneKitView: NSViewRepresentable {
         }
     }
 
-    // MARK: - Geometry helpers
+    // MARK: - Geometry
 
     private func buildNode(from mesh: Mesh) -> SCNNode {
-        // Vertices
-        let scnVerts: [SCNVector3] = mesh.vertices.map { SCNVector3($0.position.x, $0.position.y, $0.position.z) }
+        let scnVerts: [SCNVector3] = mesh.vertices.map {
+            SCNVector3($0.position.x, $0.position.y, $0.position.z)
+        }
         let src = SCNGeometrySource(vertices: scnVerts)
 
-        // Fan-triangulate each face
         var idx: [Int32] = []
         for face in mesh.faces {
-            let v = face.vertices
-            for i in 1..<(v.count - 1) {
-                idx.append(contentsOf: [Int32(v[0]), Int32(v[i]), Int32(v[i + 1])])
-            }
+            idx.append(contentsOf: [Int32(face.a), Int32(face.b), Int32(face.c)])
         }
         let el = SCNGeometryElement(indices: idx, primitiveType: .triangles)
 

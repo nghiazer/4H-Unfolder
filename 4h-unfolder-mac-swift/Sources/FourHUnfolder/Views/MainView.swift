@@ -12,18 +12,19 @@ struct MainView: View {
                 SceneKitView(mesh: appState.mesh)
                     .frame(minWidth: 300)
 
-                PatternCanvasView(result: appState.unfoldResult,
-                                  showEdgeLabels: appState.settings.showEdgeLabels)
-                    .frame(minWidth: 300)
+                PatternCanvasView(
+                    result: appState.unfoldResult,
+                    showEdgeLabels: appState.settings.view2D.showEdgeIds
+                )
+                .frame(minWidth: 300)
             }
         }
-        .navigationTitle(appState.mesh?.name ?? "4H Unfolder")
+        .navigationTitle(appState.mesh.map { $0.name.isEmpty ? "4H Unfolder" : $0.name } ?? "4H Unfolder")
         .toolbar {
             ToolbarItemGroup {
                 if appState.isLoading {
                     ProgressView().controlSize(.small)
                 }
-
                 Button("Unfold") {
                     Task { await appState.unfold() }
                 }
