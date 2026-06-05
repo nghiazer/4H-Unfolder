@@ -161,6 +161,71 @@ final class GlueTabGeneratorTests: XCTestCase {
         XCTAssertTrue(tabs.isEmpty, ".offOff_NoFlap on a fold edge must produce no tabs")
     }
 
+    // MARK: - Border FlapMode variants
+
+    private func boundaryFaceWithEdgeId(_ eid: Int) -> UnfoldedFace {
+        UnfoldedFace(
+            faceId: 0, materialId: -1,
+            v0: .zero, v1: SIMD2(10, 0), v2: SIMD2(5, 8),
+            edge0IsFold: false, edge1IsFold: false, edge2IsFold: false,
+            edge0IsBoundary: true, edge1IsBoundary: true, edge2IsBoundary: true,
+            uv0: nil, uv1: nil, uv2: nil,
+            meshEdge0: eid, meshEdge1: -1, meshEdge2: -1
+        )
+    }
+
+    func testBorderMountainFold_producesTab() {
+        let face = boundaryFaceWithEdgeId(99)
+        let override = [99: FlapOverride(mode: .border_MountainFold)]
+        let tabs = GlueTabGenerator().generate(
+            faces: [face], mesh: Mesh(), settings: defaultSettings, flapOverrides: override
+        )
+        XCTAssertEqual(tabs.count, 1, "border_MountainFold on boundary edge must produce 1 tab")
+        XCTAssertEqual(tabs[0].borderFoldStyle, .border_MountainFold)
+    }
+
+    func testBorderValleyFold_producesTab() {
+        let face = boundaryFaceWithEdgeId(100)
+        let override = [100: FlapOverride(mode: .border_ValleyFold)]
+        let tabs = GlueTabGenerator().generate(
+            faces: [face], mesh: Mesh(), settings: defaultSettings, flapOverrides: override
+        )
+        XCTAssertEqual(tabs.count, 1, "border_ValleyFold on boundary edge must produce 1 tab")
+        XCTAssertEqual(tabs[0].borderFoldStyle, .border_ValleyFold)
+    }
+
+    func testBorderNoFold_producesTab() {
+        let face = boundaryFaceWithEdgeId(101)
+        let override = [101: FlapOverride(mode: .border_NoFold)]
+        let tabs = GlueTabGenerator().generate(
+            faces: [face], mesh: Mesh(), settings: defaultSettings, flapOverrides: override
+        )
+        XCTAssertEqual(tabs.count, 1, "border_NoFold on boundary edge must produce 1 tab")
+    }
+
+    func testBorderNoFlap_noTab() {
+        let face = boundaryFaceWithEdgeId(102)
+        let override = [102: FlapOverride(mode: .border_NoFlap)]
+        let tabs = GlueTabGenerator().generate(
+            faces: [face], mesh: Mesh(), settings: defaultSettings, flapOverrides: override
+        )
+        XCTAssertTrue(tabs.isEmpty, "border_NoFlap must produce no tab")
+    }
+
+    // MARK: - Extreme angles (must not crash)
+
+    func testTrapezoid_extremeAngle_doesNotCrash() {
+        var s = defaultSettings; s.glueTabShape = .trapezoid
+
+        s.glueTabSideAngleDeg = 1
+        let tabs1 = generate(singleCutFace(), settings: s)
+        XCTAssertEqual(tabs1.count, 1, "Angle=1° should produce 1 tab without crashing")
+
+        s.glueTabSideAngleDeg = 179
+        let tabs2 = generate(singleCutFace(), settings: s)
+        XCTAssertEqual(tabs2.count, 1, "Angle=179° (clamped to 90°) should produce 1 tab")
+    }
+
     // MARK: - AlternateFlaps
 
     func testAlternateFlaps_eachCutEdgeGetsAtMostOneTab() {

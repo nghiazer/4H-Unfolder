@@ -94,7 +94,7 @@ private struct PrintTab: View {
                     Text("°")
                 }
                 Toggle("Alternate Flaps", isOn: ps.alternateFlaps)
-                Toggle("Include Glue Tabs", isOn: ps.includGlueTabs)
+                Toggle("Include Glue Tabs", isOn: ps.includeGlueTabs)
             }
 
             Section("Lines") {

@@ -76,7 +76,17 @@ final class AppState: ObservableObject {
         Task { await unfold() }
     }
 
-    func selectAll() { /* stub — multi-select planned in Phase 10 */ }
+    /// Cycles through faces one at a time. Repeated calls advance the selection.
+    func selectAll() {
+        guard let result = unfoldResult, !result.faces.isEmpty else { return }
+        if let sel = selectedFaceId,
+           let idx = result.faces.firstIndex(where: { $0.faceId == sel }),
+           idx + 1 < result.faces.count {
+            selectedFaceId = result.faces[idx + 1].faceId
+        } else {
+            selectedFaceId = result.faces.first?.faceId
+        }
+    }
 
     func fitToWindow() { fitToWindowTrigger &+= 1 }
 
@@ -258,10 +268,11 @@ final class AppState: ObservableObject {
         }
         isLoading = true
         errorMessage = nil
-        let edgeOv   = edgeOverrides
-        let flapOv   = flapOverrides
-        let snap     = settings
-        let meshSnap = sourceMeshURL
+        let edgeOv      = edgeOverrides
+        let flapOv      = flapOverrides
+        let snap        = settings
+        let meshSnap    = sourceMeshURL
+        let offsetsSnap = pieceOffsets
         do {
             try await Task.detached(priority: .utility) {
                 try ProjectSerializer().save(
@@ -269,6 +280,7 @@ final class AppState: ObservableObject {
                     edgeOverrides: edgeOv,
                     flapOverrides: flapOv,
                     settings: snap,
+                    pieceOffsets: offsetsSnap,
                     to: url
                 )
             }.value
@@ -295,11 +307,15 @@ final class AppState: ObservableObject {
             try? FileManager.default.removeItem(at: tempDir)
 
             // Restore state
-            mesh            = loadedMesh
-            sourceMeshURL   = url          // project file becomes the source URL
-            edgeOverrides   = state.edgeOverrides
-            flapOverrides   = state.flapOverrides
-            settings        = state.settings
+            mesh          = loadedMesh
+            sourceMeshURL = url          // project file becomes the source URL
+            edgeOverrides = state.edgeOverrides
+            flapOverrides = state.flapOverrides
+            settings      = state.settings
+            pieceOffsets  = state.pieceOffsets.reduce(into: [Int: SIMD2<Float>]()) { d, kv in
+                guard let pi = Int(kv.key), kv.value.count >= 2 else { return }
+                d[pi] = SIMD2<Float>(kv.value[0], kv.value[1])
+            }
 
             await unfold()
         } catch {

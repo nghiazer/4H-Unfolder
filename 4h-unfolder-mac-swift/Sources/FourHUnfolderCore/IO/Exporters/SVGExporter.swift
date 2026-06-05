@@ -95,7 +95,7 @@ struct SVGExporter {
         }
 
         // ── Layer 4: glue tabs ───────────────────────────────────────────────
-        if settings.includGlueTabs {
+        if settings.includeGlueTabs {
             let tabColor = settings.grayscaleOutput ? "#a0a0a0" : "#a8d5a2"
             lines.append("  <!-- glue tabs -->")
             for tab in result.tabs {

@@ -105,7 +105,7 @@ struct PDFExporter {
         }
 
         // ── Layer 4: glue tabs ───────────────────────────────────────────────
-        if settings.includGlueTabs {
+        if settings.includeGlueTabs {
             let tabFill   = settings.grayscaleOutput
                 ? CGColor(gray: 0.63, alpha: 0.55)
                 : CGColor(red: 0.66, green: 0.84, blue: 0.64, alpha: 0.55)

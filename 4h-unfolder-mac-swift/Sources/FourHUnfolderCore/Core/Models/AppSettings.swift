@@ -41,7 +41,7 @@ struct AppSettings: Codable, Equatable {
         var cutLineWidth: Double = 1.0
 
         var grayscaleOutput: Bool = false
-        var includGlueTabs: Bool = true
+        var includeGlueTabs: Bool = true
         var includePageLabel: Bool = true
         var printFoldLines: Bool = true
         var printCutLines: Bool = true

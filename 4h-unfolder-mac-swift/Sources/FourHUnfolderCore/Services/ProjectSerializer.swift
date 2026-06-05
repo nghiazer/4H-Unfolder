@@ -1,4 +1,5 @@
 import Foundation
+import simd
 
 // Saves and loads .4hu project bundles — a standard ZIP archive containing:
 //   state.json    — ProjectState (edge/flap overrides, settings, mesh filename)
@@ -37,6 +38,7 @@ struct ProjectSerializer {
         edgeOverrides: [Int: EdgeType],
         flapOverrides: [Int: FlapOverride],
         settings: AppSettings,
+        pieceOffsets: [Int: SIMD2<Float>] = [:],
         to destURL: URL
     ) throws {
         let tmp = FileManager.default.temporaryDirectory
@@ -52,11 +54,15 @@ struct ProjectSerializer {
         )
 
         // Write state.json
+        let encodedOffsets = pieceOffsets.reduce(into: [String: [Float]]()) { d, kv in
+            d["\(kv.key)"] = [kv.value.x, kv.value.y]
+        }
         let state = ProjectState(
             meshFileName: meshFileName,
             edgeOverrides: edgeOverrides,
             flapOverrides: flapOverrides,
-            settings: settings
+            settings: settings,
+            pieceOffsets: encodedOffsets
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
