@@ -4,19 +4,25 @@
 
 ```
 4H-Unfolder/
-├── 4h-unfolder-win/   ← WPF / .NET 8 (Windows)
-│   ├── src/           ← C# projects (Domain → Geometry → Application → Infrastructure → App)
-│   ├── tests/         ← xUnit tests
-│   ├── installer/     ← Inno Setup script
-│   ├── scripts/       ← PowerShell helpers
-│   ├── docs/          ← Screenshots, assets
+├── 4h-unfolder-win/         ← WPF / .NET 8 (Windows)
+│   ├── src/                 ← C# projects (Domain → Geometry → Application → Infrastructure → App)
+│   ├── tests/               ← xUnit tests
+│   ├── installer/           ← Inno Setup script
+│   ├── scripts/             ← PowerShell helpers
+│   ├── docs/                ← Screenshots, assets
 │   └── 4H-Unfolder.sln
-├── 4h-unfolder-mac/   ← Tauri 2 + React 18 + Rust (macOS)
-│   ├── src/           ← TypeScript frontend (React/Konva/R3F)
-│   ├── src-tauri/     ← Rust backend (algorithms + Tauri commands)
-│   └── README.md / PROGRESS.md
-├── CLAUDE.md          ← This file (root guide, kept at root)
-├── .mcp-project.json  ← Code-graph MCP index config
+├── 4h-unfolder-mac-swift/   ← Native Swift + SwiftUI (macOS) — requires Xcode 15+
+│   ├── Package.swift        ← SPM manifest — open this in Xcode
+│   ├── Sources/FourHUnfolder/
+│   │   ├── App.swift        ← @main entry, SwiftUI App protocol
+│   │   ├── AppState.swift   ← ObservableObject: mesh, result, settings
+│   │   ├── ContentView.swift
+│   │   ├── Models/          ← Mesh, UnfoldResult, AppSettings
+│   │   ├── Services/        ← ObjMeshLoader, UnfoldEngine, GlueTabGenerator
+│   │   └── Views/           ← MainView, SceneKitView, PatternCanvasView, SidebarView
+│   └── Tests/FourHUnfolderTests/
+├── CLAUDE.md                ← This file (root guide, kept at root)
+├── .mcp-project.json        ← Code-graph MCP index config
 └── .editorconfig
 ```
 
@@ -34,12 +40,15 @@ dotnet test tests/FourHUnfolder.Tests           # 56/56 pass
 
 ## macOS Build & Run
 
+**Requires Xcode 15+ installed.**
+
 ```bash
-cd 4h-unfolder-mac
-npm install
-npm run tauri:dev                               # hot-reload dev mode
-npm run tauri:build                             # → .app + .dmg
-cargo test --manifest-path src-tauri/Cargo.toml # 67/67 pass
+# Open in Xcode:  File → Open → select 4h-unfolder-mac-swift/Package.swift
+# Then: Product → Run  (⌘R)
+
+# Or build from command line (no GUI):
+cd 4h-unfolder-mac-swift
+swift build
 ```
 
 ---
@@ -120,13 +129,16 @@ the exact line from `find_definition`.
 
 | What | File |
 |------|------|
-| Tauri commands | `4h-unfolder-mac/src-tauri/src/lib.rs` |
-| Rust algorithms | `4h-unfolder-mac/src-tauri/src/algorithms/` |
-| Unfold pipeline | `face_unfold.rs`, `spanning_tree.rs`, `glue_tabs.rs` |
-| PDO loader | `4h-unfolder-mac/src-tauri/src/loaders/pdo_loader.rs` |
-| React app root | `4h-unfolder-mac/src/components/Layout/AppLayout.tsx` |
-| Zustand stores | `4h-unfolder-mac/src/state/` |
-| Tauri command types | `4h-unfolder-mac/src/types/tauri.ts` |
+| App entry (`@main`) | `4h-unfolder-mac-swift/Sources/FourHUnfolder/App.swift` |
+| Global state | `4h-unfolder-mac-swift/Sources/FourHUnfolder/AppState.swift` |
+| Mesh data types | `4h-unfolder-mac-swift/Sources/FourHUnfolder/Models/Mesh.swift` |
+| Unfold result types | `4h-unfolder-mac-swift/Sources/FourHUnfolder/Models/UnfoldResult.swift` |
+| OBJ loader | `4h-unfolder-mac-swift/Sources/FourHUnfolder/Services/ObjMeshLoader.swift` |
+| Unfold algorithm (BFS+spanning tree) | `4h-unfolder-mac-swift/Sources/FourHUnfolder/Services/UnfoldEngine.swift` |
+| Glue tab generator | `4h-unfolder-mac-swift/Sources/FourHUnfolder/Services/GlueTabGenerator.swift` |
+| 3D SceneKit viewport | `4h-unfolder-mac-swift/Sources/FourHUnfolder/Views/SceneKitView.swift` |
+| 2D pattern canvas | `4h-unfolder-mac-swift/Sources/FourHUnfolder/Views/PatternCanvasView.swift` |
+| Sidebar controls | `4h-unfolder-mac-swift/Sources/FourHUnfolder/Views/SidebarView.swift` |
 
 ---
 
@@ -160,10 +172,13 @@ the exact line from `find_definition`.
 - Project bundle: `.4hu` = ZIP(mesh + textures + state JSON incl. FlapOverrides)
 - MVVM: use generated property names (`HeightMm`, not `_heightMm`) — MVVMTK0034
 
-### macOS
-- Rust tests: `cargo test` in `4h-unfolder-mac/src-tauri/` — 67 tests, 0 failures
-- TypeScript: `npx tsc --noEmit` from `4h-unfolder-mac/` — 0 errors
-- Settings persisted to `~/Library/Application Support/4H-Unfolder/settings.json`
+### macOS (Swift)
+- Build: open `Package.swift` in Xcode 15+ — no npm/Rust toolchain needed
+- Tests: Xcode Test Navigator (⌘5) — tests live in `Tests/FourHUnfolderTests/`
+- Settings persisted to `~/Library/Application Support/4H-Unfolder/settings.json` via `UserDefaults`
+- 3D rendering: SceneKit (Metal-backed, `SCNView`) via `NSViewRepresentable`
+- 2D rendering: SwiftUI `Canvas` API in `PatternCanvasView`
+- SVG export: inline in `AppState.SVGExporter` — expand for PDF in a future `PDFExporter.swift`
 
 ---
 
@@ -191,12 +206,14 @@ Copy-Item "publish\*.dll"           "..\publish\win\vX.X.X.Y\"
 
 **Symptom of missing DLLs:** process shows as Suspended in Task Manager; no window; Event Log `DllNotFoundException`.
 
-### macOS
+### macOS (Swift)
+
+In Xcode: **Product → Archive** → Distribute App → Developer ID
 
 ```bash
-cd 4h-unfolder-mac
-npm run tauri:build
-# Output: src-tauri/target/release/bundle/dmg/4H Unfolder_*.dmg
+# CLI build (no signing):
+cd 4h-unfolder-mac-swift
+swift build -c release
 ```
 
-Archive: `publish/mac/vX.X.X.X/4H-Unfolder_vX.X.X.X_mac_x64.dmg`
+Archive: `publish/mac/vX.X.X.X/4H-Unfolder_vX.X.X.X_mac.dmg`
