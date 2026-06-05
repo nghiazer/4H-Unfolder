@@ -1,4 +1,5 @@
 import SwiftUI
+@testable import FourHUnfolderCore
 
 struct SidebarView: View {
     @EnvironmentObject var appState: AppState

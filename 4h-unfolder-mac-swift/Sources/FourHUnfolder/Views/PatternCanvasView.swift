@@ -1,5 +1,6 @@
 import SwiftUI
 import simd
+@testable import FourHUnfolderCore
 
 // MARK: - 2D interactive pattern canvas
 //

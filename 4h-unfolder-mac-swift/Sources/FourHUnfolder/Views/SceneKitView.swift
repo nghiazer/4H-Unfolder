@@ -1,6 +1,7 @@
 import SwiftUI
 import SceneKit
 import simd
+@testable import FourHUnfolderCore
 
 // MARK: - Native 3D viewport backed by SCNView (Metal-accelerated)
 //

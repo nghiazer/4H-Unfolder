@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+@testable import FourHUnfolderCore
 
 @MainActor
 final class AppState: ObservableObject {
