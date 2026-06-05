@@ -64,8 +64,12 @@ struct PatternCanvasView: View {
                 }
             }
         }
-        // Reset pan/zoom whenever a new mesh is loaded
+        // Reset pan/zoom whenever a new mesh is loaded or Fit to Window triggered
         .onChange(of: appState.mesh?.name ?? "", perform: { _ in
+            zoom = 1.0
+            pan  = .zero
+        })
+        .onChange(of: appState.fitToWindowTrigger, perform: { _ in
             zoom = 1.0
             pan  = .zero
         })

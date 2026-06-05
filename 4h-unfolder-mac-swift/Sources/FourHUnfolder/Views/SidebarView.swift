@@ -25,6 +25,19 @@ struct SidebarView: View {
                 }
                 Toggle("Alternate Flaps", isOn: $appState.settings.print.alternateFlaps)
             }
+            NamedSection("Print Layout") {
+                Picker("Paper Size", selection: $appState.settings.print.paperSize) {
+                    ForEach(PaperSizeModel.presets) { size in
+                        Text(size.name).tag(size)
+                    }
+                }
+                Toggle("Landscape", isOn: $appState.settings.print.isLandscape)
+                paperDimensionsRow
+                Button("Auto-Arrange Pieces") { appState.autoArrange() }
+                    .buttonStyle(.bordered)
+                    .disabled(appState.unfoldResult == nil)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
             NamedSection("View") {
                 Toggle("Show Grid",         isOn: $appState.settings.view2D.showGrid)
                 Toggle("Snap to Grid",      isOn: $appState.settings.view2D.snapToGrid)
@@ -73,6 +86,18 @@ struct SidebarView: View {
             Text(label)
             Spacer()
             Text(value).foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var paperDimensionsRow: some View {
+        let p = appState.settings.print.effectivePaper
+        HStack {
+            Text("Size")
+            Spacer()
+            Text(String(format: "%.0f × %.0f mm", p.widthMm, p.heightMm))
+                .foregroundStyle(.secondary)
+                .font(.caption)
         }
     }
 
