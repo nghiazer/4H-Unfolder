@@ -84,10 +84,21 @@ struct MainView: View {
             Button {
                 Task { await appState.exportSVG() }
             } label: {
-                Label("Export SVG…", systemImage: "square.and.arrow.up")
+                Label("Export SVG…", systemImage: "doc.text")
             }
             .disabled(appState.unfoldResult == nil)
-            .help("Export unfolded pattern as SVG")
+            .help("Export unfolded pattern as SVG (⌘⇧E)")
+            .keyboardShortcut("e", modifiers: [.command, .shift])
+
+            // Export PDF
+            Button {
+                Task { await appState.exportPDF() }
+            } label: {
+                Label("Export PDF…", systemImage: "doc.richtext")
+            }
+            .disabled(appState.unfoldResult == nil)
+            .help("Export unfolded pattern as PDF (⌘P)")
+            .keyboardShortcut("p", modifiers: .command)
 
             Divider()
 
