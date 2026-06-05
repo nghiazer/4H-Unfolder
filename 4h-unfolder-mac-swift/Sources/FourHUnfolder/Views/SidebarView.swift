@@ -1,80 +1,110 @@
 import SwiftUI
+@testable import FourHUnfolderCore
 
 struct SidebarView: View {
     @EnvironmentObject var appState: AppState
 
     var body: some View {
-        List {
-            // MARK: File
-            Section("File") {
+        Form {
+            NamedSection("File") {
                 meshInfoRow
                 Button("Open Mesh…") { appState.openMeshFilePicker() }
-                    .buttonStyle(.borderless).foregroundStyle(.accent)
+                    .buttonStyle(.borderless).foregroundStyle(Color.accentColor)
             }
-
-            // MARK: Unfold Settings
-            Section("Unfold Settings") {
-                LabeledContent("Tab Height") {
-                    HStack(spacing: 4) {
-                        TextField("5", value: $appState.settings.print.glueTabDepthMm, format: .number)
-                            .textFieldStyle(.roundedBorder).frame(width: 56)
-                        Text("mm").foregroundStyle(.secondary)
-                    }
-                }
-                LabeledContent("Tab Angle") {
-                    HStack(spacing: 4) {
-                        TextField("45", value: $appState.settings.print.glueTabSideAngleDeg, format: .number)
-                            .textFieldStyle(.roundedBorder).frame(width: 56)
-                        Text("°").foregroundStyle(.secondary)
-                    }
-                }
+            NamedSection("Unfold Settings") {
+                rowField("Tab Height",
+                         value: $appState.settings.print.glueTabDepthMm,
+                         placeholder: "5", unit: "mm")
+                rowField("Tab Angle",
+                         value: $appState.settings.print.glueTabSideAngleDeg,
+                         placeholder: "45", unit: "°")
                 Picker("Tab Style", selection: $appState.settings.print.glueTabShape) {
                     ForEach(AppSettings.PrintSettings.TabShape.allCases) { style in
                         Text(style.rawValue).tag(style)
                     }
-                }.pickerStyle(.menu)
-
+                }
                 Toggle("Alternate Flaps", isOn: $appState.settings.print.alternateFlaps)
             }
-
-            // MARK: View Options
-            Section("View") {
+            NamedSection("View") {
                 Toggle("Show Grid",         isOn: $appState.settings.view2D.showGrid)
                 Toggle("Snap to Grid",      isOn: $appState.settings.view2D.snapToGrid)
                 Toggle("Show Face Numbers", isOn: $appState.settings.view2D.showFaceNumbers)
                 Toggle("Show Fold Angles",  isOn: $appState.settings.view2D.showFoldAngles)
                 Toggle("Show Glue Tabs",    isOn: $appState.settings.view2D.showGlueTabs)
             }
-
-            // MARK: Pattern Info
             if let result = appState.unfoldResult {
-                Section("Pattern") {
-                    LabeledContent("Faces",   value: "\(result.faces.count)")
-                    LabeledContent("Tabs",    value: "\(result.tabs.count)")
-                    LabeledContent("Pieces",  value: "\(result.pieces.count)")
-                    LabeledContent("Width",   value: String(format: "%.1f mm", result.pageWidth))
-                    LabeledContent("Height",  value: String(format: "%.1f mm", result.pageHeight))
+                NamedSection("Pattern") {
+                    infoRow("Faces",  "\(result.faces.count)")
+                    infoRow("Tabs",   "\(result.tabs.count)")
+                    infoRow("Pieces", "\(result.pieces.count)")
+                    infoRow("Width",  String(format: "%.1f mm", result.pageWidth))
+                    infoRow("Height", String(format: "%.1f mm", result.pageHeight))
                     if result.hasOverlaps {
-                        Label("Overlaps detected", systemImage: "exclamationmark.triangle.fill")
+                        Label("Overlaps detected",
+                              systemImage: "exclamationmark.triangle.fill")
                             .foregroundStyle(.orange)
                     }
                 }
             }
         }
-        .listStyle(.sidebar)
-        .onChange(of: appState.settings) { _, new in new.save() }
+        .formStyle(.grouped)
+        .onChange(of: appState.settings, perform: { $0.save() })
+    }
+
+    // MARK: - Sub-views
+
+    @ViewBuilder
+    private func rowField(_ label: String, value: Binding<Double>,
+                           placeholder: String, unit: String) -> some View {
+        HStack {
+            Text(label)
+            Spacer()
+            TextField(placeholder, value: value, format: .number)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 56)
+                .multilineTextAlignment(.trailing)
+            Text(unit).foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private func infoRow(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label)
+            Spacer()
+            Text(value).foregroundStyle(.secondary)
+        }
     }
 
     @ViewBuilder
     private var meshInfoRow: some View {
         if let mesh = appState.mesh {
             VStack(alignment: .leading, spacing: 2) {
-                Text(mesh.name.isEmpty ? "Untitled" : mesh.name).fontWeight(.semibold)
+                Text(mesh.name.isEmpty ? "Untitled" : mesh.name)
+                    .fontWeight(.semibold)
                 Text("\(mesh.faces.count) faces · \(mesh.vertices.count) verts")
                     .font(.caption).foregroundStyle(.secondary)
             }.padding(.vertical, 2)
         } else {
             Text("No mesh loaded").foregroundStyle(.tertiary).italic()
         }
+    }
+}
+
+// MARK: - NamedSection helper
+// Wraps Section { content } header: { Text(title) } inside a concrete generic View,
+// preventing Swift 6's Form content builder from choosing the @TableRowBuilder overload.
+
+private struct NamedSection<Content: View>: View {
+    let title: String
+    let content: Content
+
+    init(_ title: String, @ViewBuilder _ content: () -> Content) {
+        self.title   = title
+        self.content = content()
+    }
+
+    var body: some View {
+        Section { content } header: { Text(title) }
     }
 }

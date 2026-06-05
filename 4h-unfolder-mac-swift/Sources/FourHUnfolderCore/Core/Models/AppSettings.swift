@@ -1,5 +1,4 @@
 import Foundation
-import SwiftUI
 
 // MARK: - Paper size
 
@@ -25,10 +24,10 @@ struct PaperSizeModel: Codable, Equatable, Identifiable {
 
 // MARK: - AppSettings hierarchy (mirrors C# AppSettings)
 
-struct AppSettings: Codable {
+struct AppSettings: Codable, Equatable {
 
     // MARK: Print / export settings
-    struct PrintSettings: Codable {
+    struct PrintSettings: Codable, Equatable {
         var glueTabShape: TabShape = .trapezoid
         var glueTabDepthMm: Double = 5.0
         var glueTabSideAngleDeg: Double = 45.0
@@ -60,7 +59,7 @@ struct AppSettings: Codable {
     }
 
     // MARK: 2D canvas settings
-    struct View2DSettings: Codable {
+    struct View2DSettings: Codable, Equatable {
         var canvasBackground: String = "#f0f0f0"
         var paperColor: String = "#ffffff"
         var gridSizeMm: Double = 10.0
@@ -86,7 +85,7 @@ struct AppSettings: Codable {
     }
 
     // MARK: 3D viewport settings
-    struct View3DSettings: Codable {
+    struct View3DSettings: Codable, Equatable {
         var backgroundColor: String = "#1e1e1e"
         var faceColor: String       = "#8dc8ff"
         var backFaceColor: String   = "#222244"
@@ -101,7 +100,7 @@ struct AppSettings: Codable {
     }
 
     // MARK: General
-    struct GeneralSettings: Codable {
+    struct GeneralSettings: Codable, Equatable {
         var displayUnit: String = "mm"
         var themeMode: String = "system"
         var skipOrientationDialog: Bool = false

@@ -33,7 +33,7 @@ struct ObjMeshLoader: MeshLoaderProtocol {
         }
         var rawFaces: [RawFace] = []
 
-        var lines = content.components(separatedBy: .newlines)
+        let lines = content.components(separatedBy: .newlines)
 
         // Attempt to load MTL sidecar
         if let mtlLine = lines.first(where: { $0.hasPrefix("mtllib ") }) {

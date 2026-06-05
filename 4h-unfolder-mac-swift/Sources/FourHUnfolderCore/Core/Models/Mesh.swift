@@ -1,3 +1,4 @@
+import Foundation
 import simd
 
 // MARK: - Edge type (assigned after MST + overrides)
@@ -57,7 +58,9 @@ struct PdoLayout {
 
 // MARK: - Mesh
 
-final class Mesh {
+// @unchecked Sendable: Mesh is a reference type mutated only during pipeline
+// execution (EdgeMarker). AppState ensures no concurrent access during unfold.
+final class Mesh: @unchecked Sendable {
     var name: String = ""
     var vertices: [Vertex] = []
     var edges: [Edge] = []
