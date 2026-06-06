@@ -39,6 +39,7 @@ struct ProjectSerializer {
         flapOverrides: [Int: FlapOverride],
         settings: AppSettings,
         pieceOffsets: [Int: SIMD2<Float>] = [:],
+        userGroups: [Int: Int] = [:],
         to destURL: URL
     ) throws {
         let tmp = FileManager.default.temporaryDirectory
@@ -57,12 +58,16 @@ struct ProjectSerializer {
         let encodedOffsets = pieceOffsets.reduce(into: [String: [Float]]()) { d, kv in
             d["\(kv.key)"] = [kv.value.x, kv.value.y]
         }
+        let encodedGroups = userGroups.reduce(into: [String: Int]()) { d, kv in
+            d["\(kv.key)"] = kv.value
+        }
         let state = ProjectState(
             meshFileName: meshFileName,
             edgeOverrides: edgeOverrides,
             flapOverrides: flapOverrides,
             settings: settings,
-            pieceOffsets: encodedOffsets
+            pieceOffsets: encodedOffsets,
+            userGroups: encodedGroups
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

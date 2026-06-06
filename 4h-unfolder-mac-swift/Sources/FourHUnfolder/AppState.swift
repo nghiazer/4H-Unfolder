@@ -34,6 +34,12 @@ final class AppState: ObservableObject {
     @Published var meshScaleMmPerUnit: Float = 1.0
     /// Controls whether the Unfold Setup sheet is visible.
     @Published var showUnfoldSetup = false
+    /// Piece indices (index in result.pieces) that are currently selected in the 2D canvas.
+    @Published var selectedPieceIndices: Set<Int> = []
+    /// minFaceId of piece → userGroupId. Stable key across re-unfold; persisted in .4hu.
+    @Published var userGroups: [Int: Int] = [:]
+    /// Counter for assigning new user group IDs.
+    @Published var nextUserGroupId: Int = 1
     /// Number of page columns in the current layout (set by autoArrange).
     @Published var pagesWide: Int = 1
     /// Number of page rows in the current layout (set by autoArrange).
@@ -93,6 +99,35 @@ final class AppState: ObservableObject {
         pushUndo()
         flapOverrides[meshEdgeId] = override
         Task { await unfold(); autoArrange() }
+    }
+
+    // MARK: - Piece selection & grouping
+
+    func clearSelection() { selectedPieceIndices = [] }
+
+    /// Assigns a new shared group ID to all currently selected pieces.
+    func groupSelected() {
+        guard let result = unfoldResult, selectedPieceIndices.count >= 2 else { return }
+        let gid = nextUserGroupId; nextUserGroupId += 1
+        for pi in selectedPieceIndices {
+            guard pi < result.pieces.count, let minFid = result.pieces[pi].min() else { continue }
+            userGroups[minFid] = gid
+        }
+    }
+
+    /// Removes the group assignment from all currently selected pieces.
+    func ungroupSelected() {
+        guard let result = unfoldResult else { return }
+        for pi in selectedPieceIndices {
+            guard pi < result.pieces.count, let minFid = result.pieces[pi].min() else { continue }
+            userGroups.removeValue(forKey: minFid)
+        }
+    }
+
+    /// Returns the userGroupId for a piece at the given index (keyed by its minFaceId).
+    func userGroupId(forPieceIdx pi: Int, result: UnfoldResult) -> Int? {
+        guard pi < result.pieces.count, let minFid = result.pieces[pi].min() else { return nil }
+        return userGroups[minFid]
     }
 
     func clearEdgeOverrides() {
@@ -408,12 +443,13 @@ final class AppState: ObservableObject {
             newPagesTall = max(newPagesTall, pageRow + 1)
         }
 
-        result.faces = newFaces
-        result.tabs  = newTabs
-        unfoldResult = result
-        pieceOffsets = [:]
-        pagesWide    = newPagesWide
-        pagesTall    = newPagesTall
+        result.faces         = newFaces
+        result.tabs          = newTabs
+        unfoldResult         = result
+        pieceOffsets         = [:]
+        pagesWide            = newPagesWide
+        pagesTall            = newPagesTall
+        selectedPieceIndices = []
     }
 
     // MARK: - Mesh file operations
@@ -441,6 +477,9 @@ final class AppState: ObservableObject {
         redoStack = []
         pagesWide = 1
         pagesTall = 1
+        selectedPieceIndices = []
+        userGroups = [:]
+        nextUserGroupId = 1
         do {
             let loaded = try await loader.load(from: url)
             mesh = loaded
@@ -465,8 +504,9 @@ final class AppState: ObservableObject {
             settings: settings.print,
             meshScaleMm: meshScaleMmPerUnit
         )
-        pieceOffsets   = [:]
-        pieceRotations = [:]
+        pieceOffsets         = [:]
+        pieceRotations       = [:]
+        selectedPieceIndices = []   // clear selection; userGroups kept (stable by minFaceId)
         isLoading = false
     }
 
@@ -516,6 +556,7 @@ final class AppState: ObservableObject {
         let snap        = settings
         let meshSnap    = sourceMeshURL
         let offsetsSnap = pieceOffsets
+        let groupsSnap  = userGroups
         do {
             try await Task.detached(priority: .utility) {
                 try ProjectSerializer().save(
@@ -524,6 +565,7 @@ final class AppState: ObservableObject {
                     flapOverrides: flapOv,
                     settings: snap,
                     pieceOffsets: offsetsSnap,
+                    userGroups: groupsSnap,
                     to: url
                 )
             }.value
@@ -561,6 +603,11 @@ final class AppState: ObservableObject {
                       kv.value[0].isFinite, kv.value[1].isFinite else { return }
                 d[pi] = SIMD2<Float>(kv.value[0], kv.value[1])
             }
+            userGroups = state.userGroups.reduce(into: [Int: Int]()) { d, kv in
+                guard let k = Int(kv.key) else { return }
+                d[k] = kv.value
+            }
+            nextUserGroupId = (userGroups.values.max() ?? 0) + 1
 
             await unfold()
             autoArrange()

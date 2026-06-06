@@ -11,4 +11,6 @@ struct ProjectState: Codable {
     var appVersion: String = "0.0.0.1-alpha"
     /// pieceIndex (stringified) → [x, y] offset in mm
     var pieceOffsets: [String: [Float]] = [:]
+    /// minFaceId of piece (stringified) → userGroupId — persists across re-unfold
+    var userGroups: [String: Int] = [:]
 }

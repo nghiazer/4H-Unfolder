@@ -13,31 +13,61 @@ import simd
 // mouse is inside the canvas, enabling scroll-to-zoom for mouse users.
 
 private final class CanvasScrollMonitor: ObservableObject {
-    private var monitor: Any?
+    private var scrollMon: Any?
+    private var rightDownMon: Any?
+    private var rightDragMon: Any?
+    private var rightUpMon: Any?
+    private var rightDragLast: CGPoint = .zero
 
     // Set by PatternCanvasView before starting.
     var isHovering  = false
     var hoverPoint: CGPoint = .zero   // canvas-local SwiftUI coords (top-left origin)
     var onScroll: ((_ delta: CGFloat, _ at: CGPoint) -> Void)?
+    /// Called with (dx, dy) deltas in SwiftUI screen coords (Y increases downward).
+    var onRightPanDelta: ((_ delta: CGSize) -> Void)?
 
     func start() {
-        guard monitor == nil else { return }
-        monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
-            guard let self, self.isHovering, !event.hasPreciseScrollingDeltas || event.scrollingDeltaY != 0 else {
+        // Scroll-wheel zoom
+        if scrollMon == nil {
+            scrollMon = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+                guard let self, self.isHovering,
+                      !event.hasPreciseScrollingDeltas || event.scrollingDeltaY != 0 else {
+                    return event
+                }
+                if !event.hasPreciseScrollingDeltas {
+                    self.onScroll?(event.scrollingDeltaY, self.hoverPoint)
+                }
                 return event
             }
-            // For trackpad precise scrolling (hasPreciseScrollingDeltas == true) the
-            // two-finger pan is already handled by DragGesture; only non-precise
-            // (mouse wheel) or explicit scroll-wheel events should zoom.
-            if !event.hasPreciseScrollingDeltas {
-                self.onScroll?(event.scrollingDeltaY, self.hoverPoint)
+        }
+        // Right-mouse drag → pan canvas
+        if rightDownMon == nil {
+            rightDownMon = NSEvent.addLocalMonitorForEvents(matching: .rightMouseDown) { [weak self] ev in
+                guard let self, self.isHovering else { return ev }
+                self.rightDragLast = NSEvent.mouseLocation
+                return nil   // suppress context menu while hovering canvas
             }
-            return event   // don't consume — let SwiftUI keep getting the event
+            rightDragMon = NSEvent.addLocalMonitorForEvents(matching: .rightMouseDragged) { [weak self] ev in
+                guard let self else { return ev }
+                let cur = NSEvent.mouseLocation
+                let dx  =  CGFloat(cur.x - self.rightDragLast.x)
+                let dy  = -CGFloat(cur.y - self.rightDragLast.y)   // Y-flip: AppKit↑ → SwiftUI↓
+                self.rightDragLast = cur
+                self.onRightPanDelta?(CGSize(width: dx, height: dy))
+                return nil
+            }
+            rightUpMon = NSEvent.addLocalMonitorForEvents(matching: .rightMouseUp) { [weak self] ev in
+                guard let self, self.isHovering else { return ev }
+                return nil
+            }
         }
     }
 
     func stop() {
-        if let m = monitor { NSEvent.removeMonitor(m); monitor = nil }
+        if let m = scrollMon    { NSEvent.removeMonitor(m); scrollMon    = nil }
+        if let m = rightDownMon { NSEvent.removeMonitor(m); rightDownMon = nil }
+        if let m = rightDragMon { NSEvent.removeMonitor(m); rightDragMon = nil }
+        if let m = rightUpMon   { NSEvent.removeMonitor(m); rightUpMon   = nil }
     }
 
     deinit { stop() }
@@ -81,9 +111,15 @@ struct PatternCanvasView: View {
     @State private var zoom: CGFloat  = 1.0
     @State private var pan:  CGSize   = .zero
     @State private var basePan: CGSize = .zero       // committed pan before current drag
-    @State private var dragPieceIdx: Int? = nil
-    @State private var isPieceDrag: Bool = false
-    @State private var prevDragTranslation: CGSize = .zero
+    // Multi-piece drag state
+    @State private var isDraggingPieces: Bool = false
+    @State private var dragPieceIndices: Set<Int> = []
+    @State private var dragStartOffsets: [Int: SIMD2<Float>] = [:]
+    // Lasso rubber-band selection state
+    @State private var isLassoing: Bool = false
+    @State private var lassoAnchor: CGPoint = .zero
+    @State private var lassoTip: CGPoint = .zero
+    @State private var lassoIsAdditive: Bool = false
     @GestureState private var liveMag: CGFloat = 1.0
 
     // Join preview (editEdge mode, cut edge clicked once)
@@ -131,6 +167,7 @@ struct PatternCanvasView: View {
                         if appState.canvasMode == .editEdge, joinPreview != nil {
                             drawJoinPreview(ctx, result: result, xf: xf)
                         }
+                        if isLassoing { drawLasso(ctx) }
                     }
                     .gesture(magnifyGesture)
                     .gesture(makeUnifiedDragGesture(result: result, canvasSize: geo.size))
@@ -174,6 +211,10 @@ struct PatternCanvasView: View {
                 guard scrollMonitor != nil else { return }
                 handleScrollZoom(delta: delta, cursorPt: hoverPoint, canvasSize: latestCanvasSize)
             }
+            scrollMonitor.onRightPanDelta = { [weak scrollMonitor] delta in
+                guard scrollMonitor != nil else { return }
+                handleRightPanDelta(delta)
+            }
             scrollMonitor.start()
         }
         .onDisappear { scrollMonitor.stop() }
@@ -209,15 +250,22 @@ struct PatternCanvasView: View {
             .onEnded { zoom = clampZoom(zoom * $0) }
     }
 
-    // Combined drag gesture — handles pan, piece-drag, and pivot rotation (phase 2).
-    // Decision is made on first movement using hit-test of start location.
+    // Right-drag pan helper (called from CanvasScrollMonitor.onRightPanDelta)
+    private func handleRightPanDelta(_ delta: CGSize) {
+        pan = CGSize(width: pan.width + delta.width, height: pan.height + delta.height)
+        basePan = pan
+    }
+
+    // Left drag: lasso selection (empty space) or multi-piece move (on face).
+    // Right drag: pan canvas (handled via NSEvent monitor, see handleRightPanDelta).
+    // Rotate-pivot phase 2: left drag rotates piece around pivot.
     private func makeUnifiedDragGesture(result: UnfoldResult, canvasSize: CGSize) -> some Gesture {
-        DragGesture(minimumDistance: 2)
+        DragGesture(minimumDistance: 4)
             .onChanged { val in
                 let xf    = modelToScreen(size: canvasSize, result: result)
                 let scale = currentScale(canvasSize: canvasSize, result: result)
 
-                // ── Rotate pivot phase 2: mouse drag rotates piece ──────────
+                // ── Rotate pivot phase 2 ──────────────────────────────────────
                 if appState.canvasMode == .rotatePivot && pivotPhase == 2,
                    let pi = pivotPieceIdx {
                     let dx = Float(val.location.x - CGFloat(pivotScreenPt.x))
@@ -226,11 +274,8 @@ struct PatternCanvasView: View {
                     var delta = currentAngle - handleInitialAngle
                     while delta >  Float.pi { delta -= 2 * Float.pi }
                     while delta < -Float.pi { delta += 2 * Float.pi }
-
                     let newRot = pieceInitialRot + delta * 180 / Float.pi
                     appState.pieceRotations[pi] = newRot
-
-                    // Recompute offset so pivot stays fixed in mm space
                     let faceIds = result.pieces[pi]
                     let center  = appState.pieceCenter(for: faceIds, result: result)
                     let rotated = rotate2D(pivotRawPos, around: center, degrees: newRot)
@@ -239,56 +284,106 @@ struct PatternCanvasView: View {
                     return
                 }
 
-                // ── Piece drag or canvas pan (editEdge / editFlap modes) ────
-                if appState.canvasMode != .rotatePivot {
-                    if dragPieceIdx == nil && !isPieceDrag {
-                        let inv  = xf.inverted()
-                        let spt  = val.startLocation.applying(inv)
-                        let mp   = SIMD2<Float>(Float(spt.x), Float(spt.y))
-                        var found = false
-                        for face in result.faces {
-                            let (ev0, ev1, ev2) = effectiveVerts(face, result: result)
-                            if pointInTriangle(mp, ev0, ev1, ev2),
-                               let pi = appState.pieceIndex(forFaceId: face.faceId, result: result) {
-                                dragPieceIdx = pi; isPieceDrag = true
-                                prevDragTranslation = .zero; found = true; break
-                            }
-                        }
-                        if !found { isPieceDrag = false }
-                    }
-
-                    if isPieceDrag, let pi = dragPieceIdx {
-                        let delta = CGSize(width:  val.translation.width  - prevDragTranslation.width,
-                                          height: val.translation.height - prevDragTranslation.height)
-                        let dmm = SIMD2<Float>(Float(delta.width / scale), Float(delta.height / scale))
-                        appState.pieceOffsets[pi, default: .zero] += dmm
-                        prevDragTranslation = val.translation
-                        appState.recomputePagesForOffsets()
-                    } else if !isPieceDrag {
-                        pan = CGSize(width:  basePan.width  + val.translation.width,
-                                     height: basePan.height + val.translation.height)
-                    }
-                } else {
-                    // rotatePivot mode but phase != 2 → pan canvas
-                    if !isPieceDrag {
-                        pan = CGSize(width:  basePan.width  + val.translation.width,
-                                     height: basePan.height + val.translation.height)
-                    }
-                }
-            }
-            .onEnded { val in
-                if appState.canvasMode == .rotatePivot && pivotPhase == 2 {
-                    // End of rotation drag → commit, stay in phase 2 for further adjustments
+                // ── rotatePivot (non-phase-2): left drag = canvas pan ─────────
+                if appState.canvasMode == .rotatePivot {
+                    pan = CGSize(width: basePan.width + val.translation.width,
+                                 height: basePan.height + val.translation.height)
                     return
                 }
-                if !isPieceDrag {
-                    pan = CGSize(width:  basePan.width  + val.translation.width,
-                                 height: basePan.height + val.translation.height)
-                    basePan = pan
+
+                // ── editEdge / editFlap: decide drag type on first event ───────
+                if !isDraggingPieces && !isLassoing {
+                    let inv = xf.inverted()
+                    let spt = val.startLocation.applying(inv)
+                    let mp  = SIMD2<Float>(Float(spt.x), Float(spt.y))
+
+                    var hitPieceIdx: Int? = nil
+                    for face in result.faces {
+                        let (ev0, ev1, ev2) = effectiveVerts(face, result: result)
+                        if pointInTriangle(mp, ev0, ev1, ev2),
+                           let pi = appState.pieceIndex(forFaceId: face.faceId, result: result) {
+                            hitPieceIdx = pi; break
+                        }
+                    }
+
+                    if let pi = hitPieceIdx {
+                        // Select the piece if not already selected
+                        if !appState.selectedPieceIndices.contains(pi) {
+                            appState.selectedPieceIndices = [pi]
+                        }
+                        // Expand to include group members of all selected pieces
+                        var toMove = appState.selectedPieceIndices
+                        for selPi in appState.selectedPieceIndices {
+                            if let gid = appState.userGroupId(forPieceIdx: selPi, result: result) {
+                                for (otherPi, otherFaceIds) in result.pieces.enumerated() {
+                                    if let minFid = otherFaceIds.min(),
+                                       appState.userGroups[minFid] == gid { toMove.insert(otherPi) }
+                                }
+                            }
+                        }
+                        dragPieceIndices = toMove.filter { $0 < result.pieces.count }
+                        dragStartOffsets = dragPieceIndices.reduce(into: [:]) { d, dpi in
+                            d[dpi] = appState.pieceOffsets[dpi] ?? .zero
+                        }
+                        isDraggingPieces = true
+                    } else {
+                        // Empty space → start lasso
+                        isLassoing = true
+                        lassoAnchor = val.startLocation
+                        lassoTip    = val.startLocation
+                        lassoIsAdditive = NSEvent.modifierFlags.contains(.shift)
+                    }
                 }
-                dragPieceIdx = nil
-                isPieceDrag  = false
-                prevDragTranslation = .zero
+
+                // ── Multi-piece drag ──────────────────────────────────────────
+                if isDraggingPieces {
+                    let dmm = SIMD2<Float>(Float(val.translation.width  / scale),
+                                          Float(val.translation.height / scale))
+                    for pi in dragPieceIndices {
+                        appState.pieceOffsets[pi] = (dragStartOffsets[pi] ?? .zero) + dmm
+                    }
+                    appState.recomputePagesForOffsets()
+                }
+
+                // ── Lasso update ──────────────────────────────────────────────
+                if isLassoing { lassoTip = val.location }
+            }
+            .onEnded { val in
+                defer {
+                    isDraggingPieces = false
+                    dragPieceIndices = []
+                    dragStartOffsets = [:]
+                }
+
+                if appState.canvasMode == .rotatePivot && pivotPhase == 2 { return }
+                if appState.canvasMode == .rotatePivot {
+                    basePan = pan; return
+                }
+
+                if isLassoing {
+                    isLassoing = false
+                    let xf = modelToScreen(size: canvasSize, result: result)
+                    let selRect = CGRect(
+                        x: min(lassoAnchor.x, lassoTip.x),
+                        y: min(lassoAnchor.y, lassoTip.y),
+                        width:  abs(lassoTip.x - lassoAnchor.x),
+                        height: abs(lassoTip.y - lassoAnchor.y)
+                    )
+                    guard selRect.width > 4 || selRect.height > 4 else { return }
+                    var newSel: Set<Int> = lassoIsAdditive ? appState.selectedPieceIndices : []
+                    for (pi, faceIds) in result.pieces.enumerated() {
+                        let faceSet = Set(faceIds)
+                        let hit = result.faces.lazy.filter { faceSet.contains($0.faceId) }
+                            .contains { face in
+                                let (ev0, ev1, ev2) = effectiveVerts(face, result: result)
+                                return selRect.contains(screenPt(ev0, xf: xf))
+                                    || selRect.contains(screenPt(ev1, xf: xf))
+                                    || selRect.contains(screenPt(ev2, xf: xf))
+                            }
+                        if hit { newSel.insert(pi) }
+                    }
+                    appState.selectedPieceIndices = newSel
+                }
             }
     }
 
@@ -336,14 +431,32 @@ struct PatternCanvasView: View {
                 return
             }
 
-            // No edge hit — face select (or deselect on empty area).
+            // No edge hit — face / piece select.
             let inv = xf.inverted()
             let mpt = point.applying(inv)
             let mp = SIMD2<Float>(Float(mpt.x), Float(mpt.y))
+            let isShift = NSEvent.modifierFlags.contains(.shift)
             for face in result.faces {
                 let (ev0, ev1, ev2) = effectiveVerts(face, result: result)
-                if pointInTriangle(mp, ev0, ev1, ev2) { appState.selectedFaceId = face.faceId; return }
+                if pointInTriangle(mp, ev0, ev1, ev2) {
+                    appState.selectedFaceId = face.faceId
+                    if let pi = appState.pieceIndex(forFaceId: face.faceId, result: result) {
+                        if isShift {
+                            if appState.selectedPieceIndices.contains(pi) {
+                                appState.selectedPieceIndices.remove(pi)
+                            } else {
+                                appState.selectedPieceIndices.insert(pi)
+                            }
+                        } else if !appState.selectedPieceIndices.contains(pi) {
+                            appState.selectedPieceIndices = [pi]
+                        }
+                        // Already selected + no shift → keep selection (allows drag without deselect)
+                    }
+                    return
+                }
             }
+            // Empty area → clear all selection
+            appState.clearSelection()
             appState.selectedFaceId = nil
 
         case .editFlap:
@@ -822,15 +935,45 @@ struct PatternCanvasView: View {
         }
     }
 
-    // 9. Selection highlight (amber overlay + border)
+    // 9. Selection highlight + group badges
     private func drawSelection(_ ctx: GraphicsContext, result: UnfoldResult, xf: CGAffineTransform) {
-        guard let selId = appState.selectedFaceId else { return }
-        for face in result.faces where face.faceId == selId {
-            let (ev0, ev1, ev2) = effectiveVerts(face, result: result)
-            let path = triPath([ev0, ev1, ev2], xf: xf)
-            ctx.fill(path,   with: .color(Color.orange.opacity(0.35)))
-            ctx.stroke(path, with: .color(Color.orange), lineWidth: 2.0)
+        // Group borders (colored per group ID) — drawn first so selection overlays on top
+        let groupPalette: [Color] = [.blue, .green, .purple, .teal, .pink, .cyan, .orange]
+        for (pi, faceIds) in result.pieces.enumerated() {
+            guard let minFid = faceIds.min(), let gid = appState.userGroups[minFid] else { continue }
+            let color = groupPalette[(gid - 1) % groupPalette.count].opacity(0.65)
+            let faceSet = Set(faceIds)
+            for face in result.faces where faceSet.contains(face.faceId) {
+                let (ev0, ev1, ev2) = effectiveVerts(face, result: result)
+                ctx.stroke(triPath([ev0, ev1, ev2], xf: xf), with: .color(color), lineWidth: 2.5)
+            }
+            _ = pi  // suppress unused warning
         }
+
+        // Selected piece: amber fill + orange border on all triangle edges
+        for pi in appState.selectedPieceIndices {
+            guard pi < result.pieces.count else { continue }
+            let faceSet = Set(result.pieces[pi])
+            for face in result.faces where faceSet.contains(face.faceId) {
+                let (ev0, ev1, ev2) = effectiveVerts(face, result: result)
+                let path = triPath([ev0, ev1, ev2], xf: xf)
+                ctx.fill(path,   with: .color(Color.orange.opacity(0.22)))
+                ctx.stroke(path, with: .color(Color.orange.opacity(0.85)), lineWidth: 1.5)
+            }
+        }
+    }
+
+    // Lasso rubber-band rectangle (screen-space, no model transform needed)
+    private func drawLasso(_ ctx: GraphicsContext) {
+        let rect = CGRect(
+            x: min(lassoAnchor.x, lassoTip.x),
+            y: min(lassoAnchor.y, lassoTip.y),
+            width:  abs(lassoTip.x - lassoAnchor.x),
+            height: abs(lassoTip.y - lassoAnchor.y)
+        )
+        ctx.fill(Path(rect),   with: .color(Color.blue.opacity(0.08)))
+        ctx.stroke(Path(rect), with: .color(Color.blue.opacity(0.60)),
+                   style: StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
     }
 
     // MARK: - Coordinate transform (model mm → screen px)
