@@ -120,6 +120,14 @@ struct PatternCanvasView: View {
     @State private var lassoAnchor: CGPoint = .zero
     @State private var lassoTip: CGPoint = .zero
     @State private var lassoIsAdditive: Bool = false
+    // Selection rotate-handle drag state
+    @State private var isHandleRotating: Bool = false
+    @State private var handleRotatePieceIndices: Set<Int> = []
+    @State private var handleRotatePivotScreen: CGPoint = .zero
+    @State private var handleRotatePivotMm: SIMD2<Float> = .zero
+    @State private var handleRotateStartAngle: Float = 0
+    @State private var handleRotateStartRots: [Int: Float] = [:]
+    @State private var handleRotateStartOffsets: [Int: SIMD2<Float>] = [:]
     @GestureState private var liveMag: CGFloat = 1.0
 
     // Join preview (editEdge mode, cut edge clicked once)
@@ -291,6 +299,51 @@ struct PatternCanvasView: View {
                     return
                 }
 
+                // ── Selection rotate-handle drag (detect on first event) ─────
+                if !isHandleRotating && !isDraggingPieces && !isLassoing,
+                   let info = rotateHandleInfo(result: result, xf: xf) {
+                    let dx = val.startLocation.x - info.handlePos.x
+                    let dy = val.startLocation.y - info.handlePos.y
+                    if hypot(dx, dy) <= 16 {
+                        let pieces = expandedSelectedPieces(result: result)
+                        isHandleRotating = true
+                        handleRotatePieceIndices = pieces
+                        handleRotatePivotMm = info.pivotMm
+                        let ps = screenPt(info.pivotMm, xf: xf)
+                        handleRotatePivotScreen = ps
+                        handleRotateStartAngle = atan2(
+                            Float(val.startLocation.y - ps.y),
+                            Float(val.startLocation.x - ps.x)
+                        )
+                        handleRotateStartRots    = pieces.reduce(into: [:]) { d, pi in d[pi] = appState.pieceRotations[pi] ?? 0 }
+                        handleRotateStartOffsets = pieces.reduce(into: [:]) { d, pi in d[pi] = appState.pieceOffsets[pi] ?? .zero }
+                    }
+                }
+
+                if isHandleRotating {
+                    let dx = Float(val.location.x - handleRotatePivotScreen.x)
+                    let dy = Float(val.location.y - handleRotatePivotScreen.y)
+                    let currentAngle = atan2(dy, dx)
+                    var delta = currentAngle - handleRotateStartAngle
+                    while delta >  Float.pi { delta -= 2 * Float.pi }
+                    while delta < -Float.pi { delta += 2 * Float.pi }
+                    let deltaDeg = delta * 180 / Float.pi
+                    let isGroup = handleRotatePieceIndices.count > 1
+                    for pi in handleRotatePieceIndices {
+                        appState.pieceRotations[pi] = (handleRotateStartRots[pi] ?? 0) + deltaDeg
+                        if isGroup {
+                            // Rotate each piece's effective centroid around group centroid (rigid body)
+                            let rawCenter = appState.pieceCenter(for: result.pieces[pi], result: result)
+                            let startOff  = handleRotateStartOffsets[pi] ?? .zero
+                            let rel       = rawCenter + startOff - handleRotatePivotMm
+                            let rotated   = rotate2D(rel, around: .zero, degrees: deltaDeg)
+                            appState.pieceOffsets[pi] = rotated + handleRotatePivotMm - rawCenter
+                        }
+                    }
+                    appState.recomputePagesForOffsets()
+                    return
+                }
+
                 // ── editEdge / editFlap: decide drag type on first event ───────
                 if !isDraggingPieces && !isLassoing {
                     let inv = xf.inverted()
@@ -311,17 +364,7 @@ struct PatternCanvasView: View {
                         if !appState.selectedPieceIndices.contains(pi) {
                             appState.selectedPieceIndices = [pi]
                         }
-                        // Expand to include group members of all selected pieces
-                        var toMove = appState.selectedPieceIndices
-                        for selPi in appState.selectedPieceIndices {
-                            if let gid = appState.userGroupId(forPieceIdx: selPi, result: result) {
-                                for (otherPi, otherFaceIds) in result.pieces.enumerated() {
-                                    if let minFid = otherFaceIds.min(),
-                                       appState.userGroups[minFid] == gid { toMove.insert(otherPi) }
-                                }
-                            }
-                        }
-                        dragPieceIndices = toMove.filter { $0 < result.pieces.count }
+                        dragPieceIndices = expandedSelectedPieces(result: result)
                         dragStartOffsets = dragPieceIndices.reduce(into: [:]) { d, dpi in
                             d[dpi] = appState.pieceOffsets[dpi] ?? .zero
                         }
@@ -353,6 +396,8 @@ struct PatternCanvasView: View {
                     isDraggingPieces = false
                     dragPieceIndices = []
                     dragStartOffsets = [:]
+                    isHandleRotating = false
+                    handleRotatePieceIndices = []
                 }
 
                 if appState.canvasMode == .rotatePivot && pivotPhase == 2 { return }
@@ -394,6 +439,53 @@ struct PatternCanvasView: View {
         let ph = CGFloat(bb.max.y - bb.min.y)
         let fitScale = min(canvasSize.width / max(1, pw), canvasSize.height / max(1, ph)) * fitScalePadding
         return fitScale * zoom * liveMag
+    }
+
+    // MARK: - Selection rotate-handle helpers
+
+    /// All selected pieces plus any group members they bring along.
+    private func expandedSelectedPieces(result: UnfoldResult) -> Set<Int> {
+        var expanded = appState.selectedPieceIndices
+        for selPi in appState.selectedPieceIndices {
+            if let gid = appState.userGroupId(forPieceIdx: selPi, result: result) {
+                for (otherPi, otherFaceIds) in result.pieces.enumerated() {
+                    if let minFid = otherFaceIds.min(), appState.userGroups[minFid] == gid {
+                        expanded.insert(otherPi)
+                    }
+                }
+            }
+        }
+        return expanded.filter { $0 < result.pieces.count }
+    }
+
+    /// Returns handle screen position + model-space pivot, or nil when the handle
+    /// should not be shown (no selection, or multi-piece multi-group selection).
+    private func rotateHandleInfo(result: UnfoldResult, xf: CGAffineTransform)
+        -> (handlePos: CGPoint, pivotMm: SIMD2<Float>)? {
+        let sel = appState.selectedPieceIndices
+        guard !sel.isEmpty else { return nil }
+
+        // Multiple selected pieces: only show handle if they all share one group
+        if sel.count > 1 {
+            var sharedGroup: Int? = nil
+            for pi in sel {
+                guard let gid = appState.userGroupId(forPieceIdx: pi, result: result) else { return nil }
+                if sharedGroup == nil { sharedGroup = gid }
+                else if sharedGroup != gid { return nil }
+            }
+        }
+
+        let expanded = expandedSelectedPieces(result: result)
+        guard !expanded.isEmpty else { return nil }
+
+        // Effective centroid = average of piece effective centroids
+        let pivot = expanded.reduce(SIMD2<Float>.zero) { acc, pi in
+            acc + appState.effectiveCentroid(forPieceIdx: pi, result: result)
+        } / Float(expanded.count)
+
+        let pivotScreen = screenPt(pivot, xf: xf)
+        // Place handle 44pt above pivot in screen space
+        return (CGPoint(x: pivotScreen.x, y: pivotScreen.y - 44), pivot)
     }
 
     // MARK: - Tap handler (mode-aware)
@@ -961,6 +1053,33 @@ struct PatternCanvasView: View {
                 ctx.stroke(path, with: .color(Color.orange.opacity(0.85)), lineWidth: 1.5)
             }
         }
+
+        // Rotate handle — only shown for 1 piece or 1 group
+        guard let info = rotateHandleInfo(result: result, xf: xf) else { return }
+        let hp = info.handlePos
+        let pivotSc = screenPt(info.pivotMm, xf: xf)
+
+        // Pivot dot
+        let dotR: CGFloat = 4
+        ctx.fill(Path(ellipseIn: CGRect(x: pivotSc.x-dotR, y: pivotSc.y-dotR, width: dotR*2, height: dotR*2)),
+                 with: .color(Color.orange.opacity(0.7)))
+
+        // Dashed stem from pivot to handle
+        var stem = Path(); stem.move(to: pivotSc); stem.addLine(to: hp)
+        ctx.stroke(stem, with: .color(Color.orange.opacity(0.45)),
+                   style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
+
+        // Handle circle (white fill, orange stroke)
+        let hR: CGFloat = 11
+        let hRect = CGRect(x: hp.x-hR, y: hp.y-hR, width: hR*2, height: hR*2)
+        ctx.fill(Path(ellipseIn: hRect),   with: .color(Color.white.opacity(0.92)))
+        ctx.stroke(Path(ellipseIn: hRect), with: .color(Color.orange), lineWidth: 1.5)
+
+        // Rotation indicator glyph
+        ctx.draw(
+            Text("↺").font(.system(size: 13, weight: .semibold)).foregroundColor(.orange),
+            at: hp
+        )
     }
 
     // Lasso rubber-band rectangle (screen-space, no model transform needed)

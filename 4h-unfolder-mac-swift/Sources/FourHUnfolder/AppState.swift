@@ -285,6 +285,13 @@ final class AppState: ObservableObject {
         return pieceRotations[pi] ?? 0
     }
 
+    /// Effective centroid of a piece = raw bbox center + current offset.
+    /// Stays fixed when the piece is rotated (rotation is around the raw center).
+    func effectiveCentroid(forPieceIdx pi: Int, result: UnfoldResult) -> SIMD2<Float> {
+        guard pi < result.pieces.count else { return .zero }
+        return pieceCenter(for: result.pieces[pi], result: result) + (pieceOffsets[pi] ?? .zero)
+    }
+
     /// Bbox center of a piece's raw face positions (no offsets applied).
     /// Used as the rotation origin so the piece rotates around its own center.
     func pieceCenter(for faceIds: [Int], result: UnfoldResult) -> SIMD2<Float> {
