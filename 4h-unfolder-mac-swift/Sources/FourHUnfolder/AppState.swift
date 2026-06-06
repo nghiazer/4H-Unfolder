@@ -68,7 +68,7 @@ final class AppState: ObservableObject {
         redoStack.append((edgeOverrides, flapOverrides))
         edgeOverrides = snap.edges
         flapOverrides = snap.flaps
-        Task { await unfold() }
+        Task { await unfold(); autoArrange() }
     }
 
     func redo() {
@@ -76,7 +76,7 @@ final class AppState: ObservableObject {
         undoStack.append((edgeOverrides, flapOverrides))
         edgeOverrides = snap.edges
         flapOverrides = snap.flaps
-        Task { await unfold() }
+        Task { await unfold(); autoArrange() }
     }
 
     // MARK: - Edge / flap overrides
@@ -86,20 +86,20 @@ final class AppState: ObservableObject {
         pushUndo()
         let current = edgeOverrides[meshEdgeId] ?? mesh.edges[meshEdgeId].type
         edgeOverrides[meshEdgeId] = (current == .fold) ? .cut : .fold
-        Task { await unfold() }
+        Task { await unfold(); autoArrange() }
     }
 
     func setFlapOverride(_ meshEdgeId: Int, _ override: FlapOverride?) {
         pushUndo()
         flapOverrides[meshEdgeId] = override
-        Task { await unfold() }
+        Task { await unfold(); autoArrange() }
     }
 
     func clearEdgeOverrides() {
         pushUndo()
         edgeOverrides.removeAll()
         flapOverrides.removeAll()
-        Task { await unfold() }
+        Task { await unfold(); autoArrange() }
     }
 
     /// Cycles through faces one at a time. Repeated calls advance the selection.
@@ -445,6 +445,7 @@ final class AppState: ObservableObject {
             }
 
             await unfold()
+            autoArrange()
         } catch {
             errorMessage = error.localizedDescription
             isLoading = false
