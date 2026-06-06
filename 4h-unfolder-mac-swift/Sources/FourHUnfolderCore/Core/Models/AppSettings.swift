@@ -116,6 +116,20 @@ struct AppSettings: Codable, Equatable {
         var displayUnit: String = "mm"
         var themeMode: String = "system"
         var skipOrientationDialog: Bool = false
+
+        /// Units the OBJ/PDO mesh was authored in. Applied as a multiplier
+        /// that converts mesh coordinates to millimetres before unfolding.
+        var meshUnits: String = "mm"   // "mm" | "cm" | "m" | "in"
+
+        /// Scale factor that converts one OBJ unit → mm.
+        var meshScaleToMm: Float {
+            switch meshUnits {
+            case "cm": return 10
+            case "m":  return 1000
+            case "in": return 25.4
+            default:   return 1       // mm (no conversion)
+            }
+        }
     }
 
     var print:   PrintSettings   = PrintSettings()

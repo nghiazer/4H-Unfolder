@@ -16,7 +16,7 @@ struct UnfoldEngine {
         var dihedralAngles: [Int: Float]   // meshEdgeId → degrees
     }
 
-    func unfold(mesh: Mesh, foldEdgeIds: Set<Int>) -> Result {
+    func unfold(mesh: Mesh, foldEdgeIds: Set<Int>, meshScaleMm: Float = 1) -> Result {
         guard mesh.isValid else { return Result(faces: [], dihedralAngles: [:]) }
 
         // Build fold adjacency: faceId → [(neighborFaceId, sharedMeshEdge)]
@@ -41,8 +41,8 @@ struct UnfoldEngine {
 
         // Process each connected component
         for startFace in 0..<mesh.faces.count where placed[startFace] == nil {
-            placeRoot(faceId: startFace, mesh: mesh, placed: &placed)
-            bfs(from: startFace, mesh: mesh, foldAdj: foldAdj, placed: &placed)
+            placeRoot(faceId: startFace, mesh: mesh, placed: &placed, meshScaleMm: meshScaleMm)
+            bfs(from: startFace, mesh: mesh, foldAdj: foldAdj, placed: &placed, meshScaleMm: meshScaleMm)
         }
 
         // Assemble result
@@ -109,15 +109,15 @@ struct UnfoldEngine {
 
     // MARK: - Root face placement
 
-    private func placeRoot(faceId: Int, mesh: Mesh, placed: inout [Int: PlacedFace]) {
+    private func placeRoot(faceId: Int, mesh: Mesh, placed: inout [Int: PlacedFace], meshScaleMm: Float) {
         let f  = mesh.faces[faceId]
         let pA = mesh.vertices[f.a].position
         let pB = mesh.vertices[f.b].position
         let pC = mesh.vertices[f.c].position
 
-        let abLen = simd_length(pB - pA)
-        let acLen = simd_length(pC - pA)
-        let bcLen = simd_length(pC - pB)
+        let abLen = simd_length(pB - pA) * meshScaleMm
+        let acLen = simd_length(pC - pA) * meshScaleMm
+        let bcLen = simd_length(pC - pB) * meshScaleMm
 
         // A at origin, B along X axis
         let v0 = SIMD2<Float>(0, 0)
@@ -134,7 +134,8 @@ struct UnfoldEngine {
         from start: Int,
         mesh: Mesh,
         foldAdj: [Int: [(neighbor: Int, edgeId: Int)]],
-        placed: inout [Int: PlacedFace]
+        placed: inout [Int: PlacedFace],
+        meshScaleMm: Float
     ) {
         var queue = [start]
         while !queue.isEmpty {
@@ -164,9 +165,9 @@ struct UnfoldEngine {
                 guard let apexId = childFace.nonSharedVertex(sv1Id: sv1Id, sv2Id: sv2Id) else { continue }
                 let apexPos3D = mesh.vertices[apexId].position
 
-                // Distances from apex to shared vertices (in 3D = preserved in 2D)
-                let da = simd_length(apexPos3D - mesh.vertices[sv1Id].position)
-                let db = simd_length(apexPos3D - mesh.vertices[sv2Id].position)
+                // Distances from apex to shared vertices (scaled to mm)
+                let da = simd_length(apexPos3D - mesh.vertices[sv1Id].position) * meshScaleMm
+                let db = simd_length(apexPos3D - mesh.vertices[sv2Id].position) * meshScaleMm
 
                 // Reconstruct apex on opposite side from parent centroid
                 let apex2D = reconstructApex(

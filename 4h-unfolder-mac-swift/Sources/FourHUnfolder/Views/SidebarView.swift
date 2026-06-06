@@ -11,6 +11,15 @@ struct SidebarView: View {
                 Button("Open Mesh…") { appState.openMeshFilePicker() }
                     .buttonStyle(.borderless).foregroundStyle(Color.accentColor)
             }
+            NamedSection("Mesh") {
+                Picker("Units", selection: $appState.settings.general.meshUnits) {
+                    Text("mm").tag("mm")
+                    Text("cm").tag("cm")
+                    Text("m").tag("m")
+                    Text("in").tag("in")
+                }
+                .help("Set the unit used in the OBJ/PDO file. Affects real-world size of the unfolded pattern.")
+            }
             NamedSection("Unfold Settings") {
                 rowField("Tab Height",
                          value: $appState.settings.print.glueTabDepthMm,

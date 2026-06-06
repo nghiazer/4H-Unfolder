@@ -216,7 +216,7 @@ final class AppState: ObservableObject {
             mesh = loaded
             sourceMeshURL = url
             textureCache = buildTextureCache(mesh: loaded, sourceURL: url)
-            await unfold()
+            isLoading = false
         } catch {
             errorMessage = error.localizedDescription
             isLoading = false
@@ -232,7 +232,8 @@ final class AppState: ObservableObject {
             mesh: mesh,
             edgeOverrides: edgeOverrides,
             flapOverrides: flapOverrides,
-            settings: settings.print
+            settings: settings.print,
+            meshScaleMm: settings.general.meshScaleToMm
         )
         pieceOffsets = [:]
         isLoading = false

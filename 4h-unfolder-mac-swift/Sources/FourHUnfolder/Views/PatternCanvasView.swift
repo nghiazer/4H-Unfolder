@@ -403,11 +403,14 @@ struct PatternCanvasView: View {
             return
         }
 
+        // SwiftUI withCGContext provides a top-left-origin context (y increases downward).
+        // UVs stored in mesh.uvs are already in top-left convention (1-v_obj), so ta.y is
+        // already the correct image pixel coordinate. No extra Y-flip is needed — applying
+        // one would double-flip and produce upside-down textures.
         cg.saveGState()
         cg.addPath(cgTriangle(sa, sb, sc))
         cg.clip()
-        let imageFlip = CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: h)
-        cg.concatenate(imageFlip.concatenating(xf))
+        cg.concatenate(xf)
         cg.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
         cg.restoreGState()
     }
