@@ -2,7 +2,7 @@
 
 Native macOS port of 4H-Unfolder, built with Swift 5.9 + SwiftUI + SceneKit (Metal). Unfolds 3D meshes into 2D printable papercraft patterns.
 
-> **Status: v0.0.0.1-alpha** — core pipeline complete, Phases 1–10 done, 87 unit tests passing.
+> **Status: v0.0.0.5-alpha** — Phases 1–12 complete, 87 unit tests passing.
 > See [PROGRESS.md](PROGRESS.md) for detailed phase tracking.
 
 ---
@@ -12,7 +12,7 @@ Native macOS port of 4H-Unfolder, built with Swift 5.9 + SwiftUI + SceneKit (Met
 Pre-built ad-hoc signed bundle (macOS 13+, no installer needed):
 
 ```
-publish/mac/v0.0.0.1-alpha/4H-Unfolder_v0.0.0.1-alpha_mac.zip
+publish/mac/v0.0.0.5-alpha/4H-Unfolder_v0.0.0.5-alpha_mac.zip
 ```
 
 > **First launch**: Right-click `4H Unfolder.app` → **Open** (Gatekeeper bypass for unsigned builds).
@@ -25,14 +25,16 @@ publish/mac/v0.0.0.1-alpha/4H-Unfolder_v0.0.0.1-alpha_mac.zip
 | Category | Feature |
 |----------|---------|
 | **Import** | OBJ (+ MTL material + UV textures), PDO v3 (binary, embedded zlib textures) |
-| **Unfold** | Kruskal MST on face-adjacency dual graph → BFS face placement in paper-space mm |
-| **2D Canvas** | Zoom/pan, click edge to toggle fold ↔ cut, tap face to select, drag piece to reposition |
+| **Unfold** | Kruskal MST on face-adjacency dual graph → BFS face placement in paper-space mm; setup dialog for real-world target size |
+| **2D Canvas** | Zoom/pan, click edge to toggle fold ↔ cut, join/disjoin edges with preview arrow, drag piece to reposition, rotate handle on selection |
+| **Multi-select** | Lasso rubber-band selection (Shift = additive); right-drag to pan |
+| **Group** | Group/Ungroup selected pieces — grouped pieces move and rotate together; persisted in .4hu |
 | **3D Viewport** | SceneKit (Metal), multi-material, UV texture mapping, face selection highlight |
 | **Glue Tabs** | Trapezoid / Rectangle / Triangle shapes; 10 FlapMode variants per edge |
 | **Overlap** | Spatial grid + AABB + SAT detection |
 | **Layout** | Auto-arrange pieces on page; paper size picker (A4/A3/A2/A1/Letter/Legal); portrait/landscape |
 | **Export** | SVG (vector) and PDF (Core Graphics), grayscale option |
-| **Project** | Save/load `.4hu` ZIP bundle — mesh + overrides + piece positions (cross-platform with Windows) |
+| **Project** | Save/load `.4hu` ZIP bundle — mesh + overrides + piece positions + groups (cross-platform with Windows) |
 | **Undo/Redo** | Lightweight snapshot of edge/flap overrides |
 | **Preferences** | 4-tab window — General, Print, Canvas, 3D View |
 
@@ -71,8 +73,8 @@ swift build -c release        # optimised release
 
 ```bash
 cd 4h-unfolder-mac-swift
-./scripts/build-release.sh v0.0.0.1-alpha
-# → publish/mac/v0.0.0.1-alpha/4H-Unfolder_v0.0.0.1-alpha_mac.zip
+./scripts/build-release.sh v0.0.0.5-alpha
+# → publish/mac/v0.0.0.5-alpha/4H-Unfolder_v0.0.0.5-alpha_mac.zip
 ```
 
 ### Tests
@@ -98,6 +100,23 @@ Open in Xcode → **Product → Test (⌘U)**. All 87 tests must pass before rel
 
 ---
 
+## 2D Canvas Controls
+
+| Input | Action |
+|-------|--------|
+| Scroll wheel | Zoom in / out |
+| Right-drag | Pan canvas |
+| Left-click edge | Toggle fold ↔ cut (Edit Edges mode) |
+| Left-click face | Select piece |
+| Left-drag on face | Move piece (+ group members) |
+| Left-drag on rotate handle (↺) | Rotate selected piece / group around centroid |
+| Left-drag on empty space | Rubber-band lasso selection |
+| Shift + lasso | Additive selection |
+| Left-click cut edge (once) | Preview join arrow |
+| Left-click (second) | Confirm join |
+
+---
+
 ## Project Structure
 
 ```
@@ -118,7 +137,7 @@ Open in Xcode → **Product → Test (⌘U)**. All 87 tests must pass before rel
 │       ├── App.swift                ← @main, native menus, Settings scene (⌘,)
 │       ├── AppState.swift           ← @MainActor ObservableObject, undo stack
 │       └── Views/                   ← MainView, SidebarView, SceneKitView,
-│                                       PatternCanvasView, PreferencesView
+│                                       PatternCanvasView, UnfoldSetupSheet, PreferencesView
 └── Tests/FourHUnfolderTests/        ← 87 XCTest cases (8 files)
 ```
 

@@ -9,7 +9,7 @@ Papercraft / pepakura unfolder — loads 3D meshes (`.obj`, `.pdo`) and unfolds 
 | Platform | Stack | Version | Status |
 |----------|-------|---------|--------|
 | **Windows** | WPF · .NET 8 · C# | v0.1.0.A | Production |
-| **macOS** | Swift 5.9 · SwiftUI · SceneKit · Metal | v0.0.0.1-alpha | Alpha |
+| **macOS** | Swift 5.9 · SwiftUI · SceneKit · Metal | v0.0.0.5-alpha | Alpha |
 
 ---
 
@@ -42,14 +42,14 @@ Papercraft / pepakura unfolder — loads 3D meshes (`.obj`, `.pdo`) and unfolds 
 ## Features
 
 - **3D Mesh Import** — `.obj` (Wavefront OBJ + MTL + UV textures) and Pepakura `.pdo` v3
-- **Auto-Unfold** — Kruskal MST on face-adjacency dual graph → BFS face placement
-- **Edge Control** — click any edge to toggle fold ↔ cut; per-edge FlapMode (10 variants)
+- **Auto-Unfold** — Kruskal MST on face-adjacency dual graph → BFS face placement; real-world target size dialog
+- **Edge Control** — click any edge to toggle fold ↔ cut; join/disjoin edges with preview arrow; per-edge FlapMode (10 variants)
 - **Glue Tabs** — Trapezoid / Rectangle / Triangle shapes, alternate-flap mode
-- **Interactive 2D Canvas** — zoom/pan, piece drag (non-destructive), grid snap
+- **Interactive 2D Canvas** — zoom/pan, lasso multi-select (Shift = additive), piece drag, piece rotate (handle), right-drag pan, group/ungroup
 - **UV Texture Rendering** — affine UV-mapped triangle fill in both 3D (SceneKit) and 2D canvas
 - **3D Viewer** — SceneKit (Metal), multi-material, UV textures, face selection highlight
 - **Export** — SVG (vector) and PDF (print-ready), grayscale option
-- **Project Bundles** — `.4hu` self-contained ZIP (mesh + textures + overrides + piece positions), cross-platform
+- **Project Bundles** — `.4hu` self-contained ZIP (mesh + textures + overrides + piece positions + groups), cross-platform
 - **Undo / Redo** — lightweight override snapshots
 - **Preferences** — 4-tab settings window (macOS) / settings panel (Windows)
 
@@ -104,7 +104,7 @@ cd 4h-unfolder-mac-swift
 swift build -c release
 
 # Build distributable .app bundle + ZIP:
-./scripts/build-release.sh v0.0.0.1-alpha
+./scripts/build-release.sh v0.0.0.5-alpha
 ```
 
 See [4h-unfolder-mac-swift/README.md](4h-unfolder-mac-swift/README.md) and [PROGRESS.md](4h-unfolder-mac-swift/PROGRESS.md) for full documentation.
@@ -115,7 +115,7 @@ See [4h-unfolder-mac-swift/README.md](4h-unfolder-mac-swift/README.md) and [PROG
 
 | Version | Platform | Download |
 |---------|----------|---------|
-| v0.0.0.1-alpha | macOS 13+ | `publish/mac/v0.0.0.1-alpha/4H-Unfolder_v0.0.0.1-alpha_mac.zip` |
+| v0.0.0.5-alpha | macOS 13+ | `publish/mac/v0.0.0.5-alpha/4H-Unfolder_v0.0.0.5-alpha_mac.zip` |
 | v0.1.0.A | Windows 10+ | `publish/win/v0.1.0.A/` |
 
 ---

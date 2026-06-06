@@ -9,7 +9,7 @@ swift build                  # debug
 swift build -c release       # release
 
 # Publish build (creates .app bundle + ZIP):
-./scripts/build-release.sh v0.0.0.1-alpha
+./scripts/build-release.sh v0.0.0.5-alpha
 
 # Tests — must use Xcode (swift test fails, XCTest needs full SDK):
 # Product → Test (⌘U) or Test Navigator (⌘5)
@@ -33,6 +33,8 @@ swift build -c release       # release
 | 10 | Tech debt sprint — `includeGlueTabs` typo fix, `selectAll()` impl, `pieceOffsets` project persistence, 10 new unit tests | ✅ Done | `5965900` |
 | CR | Cross-review — fix 7 CRITICAL/HIGH/MEDIUM issues (force-unwraps, CGContext leak, epsilon, temp-dir defer, isFinite guard) + 16 new tests | ✅ Done | `9ad99d7` `078ff78` |
 | PUB | Release packaging — `Resources/Info.plist` (file types .obj/.pdo/.4hu), `scripts/build-release.sh` (ad-hoc signed .app + ZIP) | ✅ Done | `ef4b3d1` |
+| 11 | Canvas UX sprint I — Unfold setup dialog (real-world size), scroll-wheel zoom, multi-page canvas, dynamic page grid expansion, canvas mode system (Edit Edges / Edit Flaps / Rotate Pivot), flap direction fix, auto-unfold-on-load removed | ✅ Done | `7a30ce1` `81f8d61` |
+| 12 | Canvas UX sprint II — Smart join/disjoin (preview arrow + position-aware reposition), lasso multi-select (Shift = additive), right-drag pan, Group/Ungroup pieces (persisted in .4hu), rotate handle on selected piece/group | ✅ Done | `c60ce99` `b50aeff` `67092db` |
 
 ---
 
@@ -44,6 +46,7 @@ swift build -c release       # release
 | PDO mesh loading (v3) | ✅ | ✅ |
 | Kruskal MST unfold pipeline | ✅ | ✅ |
 | Edge toggle fold ↔ cut | ✅ | ✅ |
+| Join / disjoin edges with preview | ✅ | ✅ |
 | Glue tabs (Trapezoid / Rectangle / Triangle) | ✅ | ✅ |
 | 10 FlapMode variants per edge | ✅ | ✅ |
 | Overlap detection (spatial grid + SAT) | ✅ | ✅ |
@@ -53,16 +56,21 @@ swift build -c release       # release
 | Undo / redo (edge + flap overrides) | ✅ | ✅ |
 | Interactive 2D canvas (zoom, pan, tap) | ✅ | ✅ |
 | Per-piece manual drag | ✅ | ✅ |
+| Piece rotate (handle drag) | ✅ | ✅ |
+| Lasso multi-select (Shift = additive) | ✅ | ✅ |
+| Group / Ungroup pieces | ✅ | ✅ |
+| Right-drag pan | N/A | ✅ |
 | Auto-arrange pieces on paper | ✅ | ✅ |
 | Paper size picker (A4/A3/A2/A1/Letter/Legal) | ✅ | ✅ |
 | Portrait / Landscape toggle | ✅ | ✅ |
-| pieceOffsets persisted in .4hu bundle | ✅ | ✅ |
+| pieceOffsets + userGroups persisted in .4hu | ✅ | ✅ |
 | UV texture in 3D viewport | ✅ | ✅ |
 | UV texture fill in 2D canvas | ✅ | ✅ |
 | Preferences window (4 tabs) | ✅ | ✅ |
 | Drag-and-drop mesh onto app window | ✅ | ✅ |
 | File associations (.obj / .pdo / .4hu in Info.plist) | ✅ | ✅ |
 | Select all / cycle faces | ✅ | ✅ |
+| Unfold setup dialog (real-world target size) | N/A | ✅ |
 | Native macOS menus (⌘O, ⌘S, ⌘U …) | N/A | ✅ |
 | Status bar (face count, pieces, overlaps) | N/A | ✅ |
 | UV texture in SVG / PDF export | ✅ | ❌ Not planned |
@@ -74,12 +82,29 @@ swift build -c release       # release
 
 ## Known Issues / Tech Debt
 
-All issues from Phases 1–10 and the cross-review audit have been resolved.
-
 | ID | Priority | Description |
 |----|----------|-------------|
-| CQ-M-1 | 🟢 Low | PatternCanvasView is ~470 lines — consider splitting into CanvasRenderer + CanvasHelpers sub-files when adding more render layers |
-| PERF | 🟢 Low | SVG/PDF export does not include UV texture rendering — solid fill only |
+| TD-M-1 | 🟡 Med | `SVGExporter` write uses `try?` — silent failure. Should use `do/catch` and surface `errorMessage` (matches PDF export pattern). |
+| TD-M-2 | 🟡 Med | `PatternCanvasView` is ~1 100 lines — split into `CanvasRenderer.swift` (draw* functions) + `CanvasHelpers.swift` (geometry/hit-test) when adding more layers |
+| TD-M-3 | 🟢 Low | `.onDrop` in `MainView` accepts any file URL before `loadMesh` validates the extension — user sees an error message on bad drop but no early rejection UI |
+| TD-M-4 | 🟢 Low | `@testable import FourHUnfolderCore` used in all production view files; works because `Package.swift` sets `-enable-testing` on the library target, but semantically wrong. Resolve by making public API `public` and switching to plain `import`. |
+| PERF | 🟢 Low | SVG/PDF export does not render UV texture — solid fill only |
+
+---
+
+## Cross-Review Audit (2026-06-07)
+
+Findings from automated cross-review after Phase 12:
+
+| # | Severity | Finding | Action |
+|---|----------|---------|--------|
+| CR2-1 | 🟡 Med | `SVGExporter`: `try? svg.write(...)` silently swallows write errors | → TD-M-1 |
+| CR2-2 | 🟡 Med | `PatternCanvasView` exceeds 1 000 lines, hard to navigate | → TD-M-2 |
+| CR2-3 | 🟢 Low | `.onDrop` accepts any URL without early type check | → TD-M-3 |
+| CR2-4 | 🟢 Low | `@testable import` in production — intentional but semantically wrong | → TD-M-4 |
+| CR2-5 | 🟢 Low | Forced unwraps (`min()!`, `max()!`) guarded by `.isEmpty` checks — safe in current flow, but fragile if code is restructured | Monitor — not fixing to avoid churn |
+| CR2-6 | 🟢 Low | SceneKit init uses `view.scene!`, `camNode.camera!` etc — standard SceneKit init pattern, nil is impossible after `SCNScene()` | No action |
+| CR2-7 | 🟢 Low | `_ = pi` in `drawSelection` to suppress unused-loop-var warning | No action — loop variable needed for group lookup |
 
 ---
 
@@ -129,7 +154,8 @@ All issues from Phases 1–10 and the cross-review audit have been resolved.
 │           ├── MainView.swift            ← NavigationSplitView + status bar + onDrop
 │           ├── SidebarView.swift         ← Settings form
 │           ├── SceneKitView.swift        ← Metal 3D viewport (multi-material UV)
-│           ├── PatternCanvasView.swift   ← 9-layer SwiftUI Canvas + piece drag
+│           ├── PatternCanvasView.swift   ← 9-layer SwiftUI Canvas + all 2D interactions
+│           ├── UnfoldSetupSheet.swift    ← Target-size dialog (mm per model unit)
 │           └── PreferencesView.swift     ← 4-tab Preferences (General/Print/Canvas/3D)
 └── Tests/FourHUnfolderTests/             ← 87 XCTest cases
     ├── Helpers/TestMeshBuilders.swift
