@@ -1,9 +1,47 @@
 import SwiftUI
+import AppKit
 import CoreGraphics
 import simd
 // FourHUnfolderCore is compiled with -enable-testing (see Package.swift) so
 // internal symbols remain accessible here without a full public API surface.
 @testable import FourHUnfolderCore
+
+// MARK: - Scroll wheel monitor (NSEvent-based, main-thread safe)
+//
+// SwiftUI's MagnificationGesture handles trackpad pinch but not mouse scroll
+// wheel. This class installs a local event monitor that fires only when the
+// mouse is inside the canvas, enabling scroll-to-zoom for mouse users.
+
+private final class CanvasScrollMonitor: ObservableObject {
+    private var monitor: Any?
+
+    // Set by PatternCanvasView before starting.
+    var isHovering  = false
+    var hoverPoint: CGPoint = .zero   // canvas-local SwiftUI coords (top-left origin)
+    var onScroll: ((_ delta: CGFloat, _ at: CGPoint) -> Void)?
+
+    func start() {
+        guard monitor == nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            guard let self, self.isHovering, !event.hasPreciseScrollingDeltas || event.scrollingDeltaY != 0 else {
+                return event
+            }
+            // For trackpad precise scrolling (hasPreciseScrollingDeltas == true) the
+            // two-finger pan is already handled by DragGesture; only non-precise
+            // (mouse wheel) or explicit scroll-wheel events should zoom.
+            if !event.hasPreciseScrollingDeltas {
+                self.onScroll?(event.scrollingDeltaY, self.hoverPoint)
+            }
+            return event   // don't consume — let SwiftUI keep getting the event
+        }
+    }
+
+    func stop() {
+        if let m = monitor { NSEvent.removeMonitor(m); monitor = nil }
+    }
+
+    deinit { stop() }
+}
 
 // MARK: - 2D interactive pattern canvas
 //
@@ -39,6 +77,12 @@ struct PatternCanvasView: View {
     @State private var prevDragTranslation: CGSize = .zero
     @GestureState private var liveMag: CGFloat = 1.0
 
+    // Scroll-wheel zoom support
+    @StateObject private var scrollMonitor = CanvasScrollMonitor()
+    @State private var isHovering = false
+    @State private var hoverPoint: CGPoint = .zero
+    @State private var latestCanvasSize: CGSize = .zero
+
     private var v2d: AppSettings.View2DSettings { appState.settings.view2D }
 
     // MARK: - Body
@@ -66,12 +110,26 @@ struct PatternCanvasView: View {
                     .onTapGesture { pt in
                         handleTap(at: pt, result: result, canvasSize: geo.size)
                     }
+                    .onContinuousHover { phase in
+                        switch phase {
+                        case .active(let loc):
+                            isHovering = true
+                            hoverPoint = loc
+                            scrollMonitor.isHovering = true
+                            scrollMonitor.hoverPoint = loc
+                        case .ended:
+                            isHovering = false
+                            scrollMonitor.isHovering = false
+                        }
+                    }
                     .overlay(alignment: .bottomTrailing) { zoomBadge }
                     .overlay(alignment: .topLeading)     { statusBadge(result: result) }
                 } else {
                     emptyState
                 }
             }
+            .onAppear { latestCanvasSize = geo.size }
+            .onChange(of: geo.size) { latestCanvasSize = $0 }
         }
         .onChange(of: appState.mesh?.name ?? "") { _ in
             zoom = 1.0; pan = .zero; basePan = .zero
@@ -79,6 +137,36 @@ struct PatternCanvasView: View {
         .onChange(of: appState.fitToWindowTrigger) { _ in
             zoom = 1.0; pan = .zero; basePan = .zero
         }
+        .onAppear {
+            scrollMonitor.onScroll = { [weak scrollMonitor] delta, _ in
+                guard scrollMonitor != nil else { return }
+                handleScrollZoom(delta: delta, cursorPt: hoverPoint, canvasSize: latestCanvasSize)
+            }
+            scrollMonitor.start()
+        }
+        .onDisappear { scrollMonitor.stop() }
+    }
+
+    // MARK: - Scroll wheel zoom (mouse)
+    //
+    // Zoom is centered on the cursor so the model point under the cursor
+    // remains stationary after the zoom is applied.
+    private func handleScrollZoom(delta: CGFloat, cursorPt: CGPoint, canvasSize: CGSize) {
+        // ~10% zoom per scroll tick (delta ≈ ±3 per mouse wheel click)
+        let factor = exp(delta * 0.04)
+        let newZoom = clampZoom(zoom * factor)
+        let actualFactor = newZoom / zoom
+        // Pan adjustment so cursor stays fixed:
+        // cursorFromCenter = cursor - (size/2)
+        // newPan = cursorFromCenter * (1 - f) + oldPan * f
+        let cx = cursorPt.x - canvasSize.width  / 2
+        let cy = cursorPt.y - canvasSize.height / 2
+        pan = CGSize(
+            width:  cx * (1 - actualFactor) + pan.width  * actualFactor,
+            height: cy * (1 - actualFactor) + pan.height * actualFactor
+        )
+        basePan = pan
+        zoom    = newZoom
     }
 
     // MARK: - Gestures
@@ -180,18 +268,60 @@ struct PatternCanvasView: View {
 
     // MARK: - Rendering layers
 
-    // 1. White paper background (pattern bounding box + 5 mm padding)
+    // 1. Page grid — draw one page rectangle per printed page, based on paper
+    //    size from settings. Pages start at model origin (0,0) and extend to
+    //    cover the full bounding box. If content is not auto-arranged, a single
+    //    page is shown and additional pages are added as needed.
     private func drawPaper(_ ctx: GraphicsContext, result: UnfoldResult, xf: CGAffineTransform) {
-        let bb  = result.boundingBox
-        let pad: CGFloat = 5
-        let r = CGRect(x: CGFloat(bb.min.x) - pad,
-                       y: CGFloat(bb.min.y) - pad,
-                       width: CGFloat(bb.max.x - bb.min.x) + 2 * pad,
-                       height: CGFloat(bb.max.y - bb.min.y) + 2 * pad)
-            .applying(xf)
-        ctx.fill(Path(roundedRect: r, cornerRadius: 4), with: .color(.white))
-        ctx.stroke(Path(roundedRect: r, cornerRadius: 4),
-                   with: .color(.black.opacity(0.12)), lineWidth: 1)
+        let paper = appState.settings.print.effectivePaper
+        let pageW = CGFloat(paper.widthMm)
+        let pageH = CGFloat(paper.heightMm)
+
+        let bb    = result.boundingBox
+        // Page grid origin sits at (0,0); pages extend toward positive x/y.
+        // Ensure at least one page always visible even if content is at negative coords.
+        let contentMaxX = max(CGFloat(bb.max.x), pageW)
+        let contentMaxY = max(CGFloat(bb.max.y), pageH)
+        let contentMinX = min(CGFloat(bb.min.x), 0)
+        let contentMinY = min(CGFloat(bb.min.y), 0)
+
+        let numCols = max(1, Int(ceil((contentMaxX - contentMinX) / pageW)))
+        let numRows = max(1, Int(ceil((contentMaxY - contentMinY) / pageH)))
+
+        // Shadow: draw slightly-offset dark rect first
+        let shadowOff: CGFloat = 2
+        for row in 0..<numRows {
+            for col in 0..<numCols {
+                let x = contentMinX + CGFloat(col) * pageW
+                let y = contentMinY + CGFloat(row) * pageH
+                let shadow = CGRect(x: x, y: y, width: pageW, height: pageH)
+                    .applying(xf).offsetBy(dx: shadowOff, dy: shadowOff)
+                ctx.fill(Path(shadow), with: .color(.black.opacity(0.08)))
+            }
+        }
+
+        // Page fill + border
+        for row in 0..<numRows {
+            for col in 0..<numCols {
+                let x = contentMinX + CGFloat(col) * pageW
+                let y = contentMinY + CGFloat(row) * pageH
+                let pageRect = CGRect(x: x, y: y, width: pageW, height: pageH).applying(xf)
+                ctx.fill(Path(pageRect), with: .color(.white))
+                ctx.stroke(Path(pageRect), with: .color(.black.opacity(0.18)), lineWidth: 0.7)
+
+                // Page number label in top-left corner (small, subdued)
+                if numCols * numRows > 1 {
+                    let pageNum = row * numCols + col + 1
+                    let labelPt = CGPoint(x: pageRect.minX + 4, y: pageRect.minY + 2)
+                    ctx.draw(
+                        Text("p\(pageNum)")
+                            .font(.system(size: 9))
+                            .foregroundColor(Color.black.opacity(0.25)),
+                        at: CGPoint(x: labelPt.x + 10, y: labelPt.y + 6)
+                    )
+                }
+            }
+        }
     }
 
     // 2. Grid lines at v2d.gridSizeMm intervals

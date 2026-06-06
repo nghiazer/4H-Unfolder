@@ -176,12 +176,12 @@ struct MainView: View {
 
             // Undo / Redo
             Button { appState.undo() } label: {
-                Image(systemName: "arrow.uturn.backward")
+                Label("Undo", systemImage: "arrow.uturn.backward")
             }
             .help("Undo edge override (⌘Z)")
 
             Button { appState.redo() } label: {
-                Image(systemName: "arrow.uturn.forward")
+                Label("Redo", systemImage: "arrow.uturn.forward")
             }
             .help("Redo (⌘⇧Z)")
         }
