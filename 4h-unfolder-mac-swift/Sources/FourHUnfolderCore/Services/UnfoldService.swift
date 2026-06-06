@@ -10,7 +10,8 @@ actor UnfoldService {
         mesh: Mesh,
         edgeOverrides: [Int: EdgeType],
         flapOverrides: [Int: FlapOverride],
-        settings: AppSettings.PrintSettings
+        settings: AppSettings.PrintSettings,
+        meshScaleMm: Float = 1
     ) -> UnfoldResult {
 
         // 1. Build face-adjacency dual graph
@@ -30,7 +31,7 @@ actor UnfoldService {
         EdgeMarker().mark(mesh: mesh, foldEdgeIds: foldEdgeIds)
 
         // 5. BFS unfold → paper-space 2D positions + dihedral angles
-        let engineResult = UnfoldEngine().unfold(mesh: mesh, foldEdgeIds: foldEdgeIds)
+        let engineResult = UnfoldEngine().unfold(mesh: mesh, foldEdgeIds: foldEdgeIds, meshScaleMm: meshScaleMm)
 
         // 6. Generate glue tabs with per-edge FlapMode overrides
         let tabs = GlueTabGenerator().generate(

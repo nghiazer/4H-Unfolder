@@ -1,9 +1,47 @@
 import SwiftUI
+import AppKit
 import CoreGraphics
 import simd
 // FourHUnfolderCore is compiled with -enable-testing (see Package.swift) so
 // internal symbols remain accessible here without a full public API surface.
 @testable import FourHUnfolderCore
+
+// MARK: - Scroll wheel monitor (NSEvent-based, main-thread safe)
+//
+// SwiftUI's MagnificationGesture handles trackpad pinch but not mouse scroll
+// wheel. This class installs a local event monitor that fires only when the
+// mouse is inside the canvas, enabling scroll-to-zoom for mouse users.
+
+private final class CanvasScrollMonitor: ObservableObject {
+    private var monitor: Any?
+
+    // Set by PatternCanvasView before starting.
+    var isHovering  = false
+    var hoverPoint: CGPoint = .zero   // canvas-local SwiftUI coords (top-left origin)
+    var onScroll: ((_ delta: CGFloat, _ at: CGPoint) -> Void)?
+
+    func start() {
+        guard monitor == nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            guard let self, self.isHovering, !event.hasPreciseScrollingDeltas || event.scrollingDeltaY != 0 else {
+                return event
+            }
+            // For trackpad precise scrolling (hasPreciseScrollingDeltas == true) the
+            // two-finger pan is already handled by DragGesture; only non-precise
+            // (mouse wheel) or explicit scroll-wheel events should zoom.
+            if !event.hasPreciseScrollingDeltas {
+                self.onScroll?(event.scrollingDeltaY, self.hoverPoint)
+            }
+            return event   // don't consume — let SwiftUI keep getting the event
+        }
+    }
+
+    func stop() {
+        if let m = monitor { NSEvent.removeMonitor(m); monitor = nil }
+    }
+
+    deinit { stop() }
+}
 
 // MARK: - 2D interactive pattern canvas
 //
@@ -39,6 +77,21 @@ struct PatternCanvasView: View {
     @State private var prevDragTranslation: CGSize = .zero
     @GestureState private var liveMag: CGFloat = 1.0
 
+    // Rotate-pivot state machine (mirrors C# _rotatePtPhase)
+    @State private var pivotPhase: Int = 0           // 0=pick pivot, 1=pick handle, 2=rotating
+    @State private var pivotPieceIdx: Int? = nil
+    @State private var pivotRawPos: SIMD2<Float> = .zero   // chosen pivot vertex (raw coords)
+    @State private var pivotFixedMm: SIMD2<Float> = .zero  // effective pivot pos in mm at phase 2 start
+    @State private var pivotScreenPt: CGPoint = .zero      // screen position of pivot (fixed during drag)
+    @State private var handleInitialAngle: Float = 0       // atan2 of handle screen pos at phase 2 start
+    @State private var pieceInitialRot: Float = 0          // piece rotation at phase 2 start
+
+    // Scroll-wheel zoom support
+    @StateObject private var scrollMonitor = CanvasScrollMonitor()
+    @State private var isHovering = false
+    @State private var hoverPoint: CGPoint = .zero
+    @State private var latestCanvasSize: CGSize = .zero
+
     private var v2d: AppSettings.View2DSettings { appState.settings.view2D }
 
     // MARK: - Body
@@ -60,11 +113,26 @@ struct PatternCanvasView: View {
                         if v2d.showFaceNumbers { drawFaceLabels(ctx, result: result, xf: xf) }
                         if v2d.showFoldAngles  { drawFoldAngles(ctx, result: result, xf: xf) }
                         drawSelection(ctx, result: result, xf: xf)
+                        if appState.canvasMode == .rotatePivot {
+                            drawVertexDots(ctx, result: result, xf: xf)
+                        }
                     }
                     .gesture(magnifyGesture)
                     .gesture(makeUnifiedDragGesture(result: result, canvasSize: geo.size))
                     .onTapGesture { pt in
                         handleTap(at: pt, result: result, canvasSize: geo.size)
+                    }
+                    .onContinuousHover { phase in
+                        switch phase {
+                        case .active(let loc):
+                            isHovering = true
+                            hoverPoint = loc
+                            scrollMonitor.isHovering = true
+                            scrollMonitor.hoverPoint = loc
+                        case .ended:
+                            isHovering = false
+                            scrollMonitor.isHovering = false
+                        }
                     }
                     .overlay(alignment: .bottomTrailing) { zoomBadge }
                     .overlay(alignment: .topLeading)     { statusBadge(result: result) }
@@ -72,6 +140,8 @@ struct PatternCanvasView: View {
                     emptyState
                 }
             }
+            .onAppear { latestCanvasSize = geo.size }
+            .onChange(of: geo.size) { latestCanvasSize = $0 }
         }
         .onChange(of: appState.mesh?.name ?? "") { _ in
             zoom = 1.0; pan = .zero; basePan = .zero
@@ -79,6 +149,39 @@ struct PatternCanvasView: View {
         .onChange(of: appState.fitToWindowTrigger) { _ in
             zoom = 1.0; pan = .zero; basePan = .zero
         }
+        .onChange(of: appState.canvasMode) { _ in
+            resetPivotState()
+        }
+        .onAppear {
+            scrollMonitor.onScroll = { [weak scrollMonitor] delta, _ in
+                guard scrollMonitor != nil else { return }
+                handleScrollZoom(delta: delta, cursorPt: hoverPoint, canvasSize: latestCanvasSize)
+            }
+            scrollMonitor.start()
+        }
+        .onDisappear { scrollMonitor.stop() }
+    }
+
+    // MARK: - Scroll wheel zoom (mouse)
+    //
+    // Zoom is centered on the cursor so the model point under the cursor
+    // remains stationary after the zoom is applied.
+    private func handleScrollZoom(delta: CGFloat, cursorPt: CGPoint, canvasSize: CGSize) {
+        // ~10% zoom per scroll tick (delta ≈ ±3 per mouse wheel click)
+        let factor = exp(delta * 0.04)
+        let newZoom = clampZoom(zoom * factor)
+        let actualFactor = newZoom / zoom
+        // Pan adjustment so cursor stays fixed:
+        // cursorFromCenter = cursor - (size/2)
+        // newPan = cursorFromCenter * (1 - f) + oldPan * f
+        let cx = cursorPt.x - canvasSize.width  / 2
+        let cy = cursorPt.y - canvasSize.height / 2
+        pan = CGSize(
+            width:  cx * (1 - actualFactor) + pan.width  * actualFactor,
+            height: cy * (1 - actualFactor) + pan.height * actualFactor
+        )
+        basePan = pan
+        zoom    = newZoom
     }
 
     // MARK: - Gestures
@@ -89,59 +192,81 @@ struct PatternCanvasView: View {
             .onEnded { zoom = clampZoom(zoom * $0) }
     }
 
-    // Combined pan + piece-drag gesture.
-    // On first movement: hit-test start location to decide mode.
-    // Piece-drag mode: only moves the piece, canvas stays still.
-    // Pan mode: only pans the canvas, no piece moves.
+    // Combined drag gesture — handles pan, piece-drag, and pivot rotation (phase 2).
+    // Decision is made on first movement using hit-test of start location.
     private func makeUnifiedDragGesture(result: UnfoldResult, canvasSize: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 2)
             .onChanged { val in
-                if dragPieceIdx == nil && !isPieceDrag {
-                    let xf  = modelToScreen(size: canvasSize, result: result)
-                    let inv = xf.inverted()
-                    let startModel = val.startLocation.applying(inv)
-                    let mp = SIMD2<Float>(Float(startModel.x), Float(startModel.y))
-                    var found = false
-                    for face in result.faces {
-                        let (ev0, ev1, ev2) = effectiveVerts(face, result: result)
-                        if pointInTriangle(mp, ev0, ev1, ev2),
-                           let pi = appState.pieceIndex(forFaceId: face.faceId, result: result) {
-                            dragPieceIdx = pi
-                            isPieceDrag  = true
-                            prevDragTranslation = .zero
-                            found = true
-                            break
-                        }
-                    }
-                    if !found { isPieceDrag = false }
+                let xf    = modelToScreen(size: canvasSize, result: result)
+                let scale = currentScale(canvasSize: canvasSize, result: result)
+
+                // ── Rotate pivot phase 2: mouse drag rotates piece ──────────
+                if appState.canvasMode == .rotatePivot && pivotPhase == 2,
+                   let pi = pivotPieceIdx {
+                    let dx = Float(val.location.x - CGFloat(pivotScreenPt.x))
+                    let dy = Float(val.location.y - CGFloat(pivotScreenPt.y))
+                    let currentAngle = atan2(dy, dx)
+                    var delta = currentAngle - handleInitialAngle
+                    while delta >  Float.pi { delta -= 2 * Float.pi }
+                    while delta < -Float.pi { delta += 2 * Float.pi }
+
+                    let newRot = pieceInitialRot + delta * 180 / Float.pi
+                    appState.pieceRotations[pi] = newRot
+
+                    // Recompute offset so pivot stays fixed in mm space
+                    let faceIds = result.pieces[pi]
+                    let center  = appState.pieceCenter(for: faceIds, result: result)
+                    let rotated = rotate2D(pivotRawPos, around: center, degrees: newRot)
+                    appState.pieceOffsets[pi] = pivotFixedMm - rotated
+                    appState.recomputePagesForOffsets()
+                    return
                 }
 
-                if isPieceDrag, let pi = dragPieceIdx {
-                    let delta = CGSize(
-                        width:  val.translation.width  - prevDragTranslation.width,
-                        height: val.translation.height - prevDragTranslation.height
-                    )
-                    let bb = result.boundingBox
-                    let pw = CGFloat(bb.max.x - bb.min.x)
-                    let ph = CGFloat(bb.max.y - bb.min.y)
-                    let scale = min(canvasSize.width  / max(1, pw),
-                                    canvasSize.height / max(1, ph)) * fitScalePadding * zoom * liveMag
-                    let dmm = SIMD2<Float>(Float(delta.width / scale), Float(delta.height / scale))
-                    appState.pieceOffsets[pi, default: .zero] += dmm
-                    prevDragTranslation = val.translation
-                } else if !isPieceDrag {
-                    pan = CGSize(
-                        width:  basePan.width  + val.translation.width,
-                        height: basePan.height + val.translation.height
-                    )
+                // ── Piece drag or canvas pan (editEdge / editFlap modes) ────
+                if appState.canvasMode != .rotatePivot {
+                    if dragPieceIdx == nil && !isPieceDrag {
+                        let inv  = xf.inverted()
+                        let spt  = val.startLocation.applying(inv)
+                        let mp   = SIMD2<Float>(Float(spt.x), Float(spt.y))
+                        var found = false
+                        for face in result.faces {
+                            let (ev0, ev1, ev2) = effectiveVerts(face, result: result)
+                            if pointInTriangle(mp, ev0, ev1, ev2),
+                               let pi = appState.pieceIndex(forFaceId: face.faceId, result: result) {
+                                dragPieceIdx = pi; isPieceDrag = true
+                                prevDragTranslation = .zero; found = true; break
+                            }
+                        }
+                        if !found { isPieceDrag = false }
+                    }
+
+                    if isPieceDrag, let pi = dragPieceIdx {
+                        let delta = CGSize(width:  val.translation.width  - prevDragTranslation.width,
+                                          height: val.translation.height - prevDragTranslation.height)
+                        let dmm = SIMD2<Float>(Float(delta.width / scale), Float(delta.height / scale))
+                        appState.pieceOffsets[pi, default: .zero] += dmm
+                        prevDragTranslation = val.translation
+                        appState.recomputePagesForOffsets()
+                    } else if !isPieceDrag {
+                        pan = CGSize(width:  basePan.width  + val.translation.width,
+                                     height: basePan.height + val.translation.height)
+                    }
+                } else {
+                    // rotatePivot mode but phase != 2 → pan canvas
+                    if !isPieceDrag {
+                        pan = CGSize(width:  basePan.width  + val.translation.width,
+                                     height: basePan.height + val.translation.height)
+                    }
                 }
             }
             .onEnded { val in
+                if appState.canvasMode == .rotatePivot && pivotPhase == 2 {
+                    // End of rotation drag → commit, stay in phase 2 for further adjustments
+                    return
+                }
                 if !isPieceDrag {
-                    pan = CGSize(
-                        width:  basePan.width  + val.translation.width,
-                        height: basePan.height + val.translation.height
-                    )
+                    pan = CGSize(width:  basePan.width  + val.translation.width,
+                                 height: basePan.height + val.translation.height)
                     basePan = pan
                 }
                 dragPieceIdx = nil
@@ -150,48 +275,188 @@ struct PatternCanvasView: View {
             }
     }
 
-    // MARK: - Tap handler
+    /// Uniform mm-per-pixel scale used by both drag conversion and modelToScreen.
+    private func currentScale(canvasSize: CGSize, result: UnfoldResult) -> CGFloat {
+        let bb = result.boundingBox
+        let pw = CGFloat(bb.max.x - bb.min.x)
+        let ph = CGFloat(bb.max.y - bb.min.y)
+        let fitScale = min(canvasSize.width / max(1, pw), canvasSize.height / max(1, ph)) * fitScalePadding
+        return fitScale * zoom * liveMag
+    }
+
+    // MARK: - Tap handler (mode-aware)
 
     private func handleTap(at point: CGPoint, result: UnfoldResult, canvasSize: CGSize) {
         let xf = modelToScreen(size: canvasSize, result: result)
 
-        // Priority 1: edge hit within 8-pt threshold → toggle fold/cut
-        if let (_, ei, face) = nearestEdge(at: point, result: result, xf: xf) {
+        switch appState.canvasMode {
+
+        case .editEdge:
+            // Priority 1: edge hit → toggle fold/cut
+            if let (_, ei, face) = nearestEdge(at: point, result: result, xf: xf) {
+                let meshEdgeId = face.meshEdgeId(ei)
+                if meshEdgeId >= 0 { appState.toggleEdge(meshEdgeId); return }
+            }
+            // Priority 2: face under tap → select
+            let inv = xf.inverted()
+            let mpt = point.applying(inv)
+            let mp = SIMD2<Float>(Float(mpt.x), Float(mpt.y))
+            for face in result.faces {
+                let (ev0, ev1, ev2) = effectiveVerts(face, result: result)
+                if pointInTriangle(mp, ev0, ev1, ev2) { appState.selectedFaceId = face.faceId; return }
+            }
+            appState.selectedFaceId = nil
+
+        case .editFlap:
+            // Apply selected flap mode to nearest edge
+            guard let (_, ei, face) = nearestEdge(at: point, result: result, xf: xf) else { return }
             let meshEdgeId = face.meshEdgeId(ei)
-            if meshEdgeId >= 0 {
-                appState.toggleEdge(meshEdgeId)
-                return
+            guard meshEdgeId >= 0 else { return }
+            let isBoundary = face.edgeIsBoundary(ei)
+            let mode = isBoundary ? appState.selectedBorderFlapMode : appState.selectedInnerFlapMode
+            let override = mode == .default ? nil : FlapOverride(mode: mode, primaryFaceId: face.faceId)
+            appState.setFlapOverride(meshEdgeId, override)
+
+        case .rotatePivot:
+            handlePivotTap(at: point, result: result, xf: xf)
+        }
+    }
+
+    // MARK: - Pivot tap state machine
+
+    private func handlePivotTap(at point: CGPoint, result: UnfoldResult, xf: CGAffineTransform) {
+        let inv = xf.inverted()
+        let mpt = point.applying(inv)
+        let mp  = SIMD2<Float>(Float(mpt.x), Float(mpt.y))
+
+        // Find nearest vertex dot within hit threshold (12 pt screen)
+        let threshold: Float = 12 / Float(zoom)
+        var bestDist = Float.infinity
+        var bestVertex: SIMD2<Float>? = nil
+        var bestPieceIdx: Int? = nil
+
+        for face in result.faces {
+            guard let pi = appState.pieceIndex(forFaceId: face.faceId, result: result) else { continue }
+            let (ev0, ev1, ev2) = effectiveVerts(face, result: result)
+            for v in [ev0, ev1, ev2] {
+                let d = simd_length(v - mp)
+                if d < bestDist && d < threshold { bestDist = d; bestVertex = v; bestPieceIdx = pi }
             }
         }
 
-        // Priority 2: face under tap → select
-        let inv = xf.inverted()
-        let modelPt = point.applying(inv)
-        let mp = SIMD2<Float>(Float(modelPt.x), Float(modelPt.y))
-        for face in result.faces {
-            let (ev0, ev1, ev2) = effectiveVerts(face, result: result)
-            if pointInTriangle(mp, ev0, ev1, ev2) {
-                appState.selectedFaceId = face.faceId
+        guard let vertex = bestVertex, let pi = bestPieceIdx else {
+            // Tap on empty area → reset pivot
+            resetPivotState()
+            return
+        }
+
+        // Reverse-map effective vertex back to raw coords for this piece
+        let rawVertex = effectiveToRaw(vertex, pieceIdx: pi, result: result)
+
+        if pivotPhase == 0 {
+            // Phase 0 → 1: set pivot
+            pivotRawPos  = rawVertex
+            pivotPieceIdx = pi
+            pivotPhase   = 1
+
+        } else if pivotPhase == 1 {
+            guard let pivotPi = pivotPieceIdx, pi == pivotPi else {
+                // Tapped a vertex on a different piece → change pivot piece
+                pivotRawPos   = rawVertex
+                pivotPieceIdx = pi
                 return
             }
+            // Check if tapping pivot again → deselect
+            let rawDistToPivot = simd_length(rawVertex - pivotRawPos)
+            if rawDistToPivot < 0.1 { resetPivotState(); return }
+
+            // Phase 1 → 2: set handle, begin rotation
+            let faceIds = result.pieces[pi]
+            let center  = appState.pieceCenter(for: faceIds, result: result)
+            let curRot  = appState.pieceRotations[pi] ?? 0
+            let off     = appState.pieceOffsets[pi] ?? .zero
+
+            // Compute effective handle pos in screen coords
+            let effHandle = rotate2D(rawVertex, around: center, degrees: curRot) + off
+            let handleSc  = CGPoint(x: CGFloat(effHandle.x), y: CGFloat(effHandle.y)).applying(xf)
+
+            // Compute effective pivot pos (for keeping it fixed during drag)
+            let effPivot  = rotate2D(pivotRawPos, around: center, degrees: curRot) + off
+            pivotFixedMm  = effPivot
+            pivotScreenPt = CGPoint(x: CGFloat(effPivot.x), y: CGFloat(effPivot.y)).applying(xf)
+
+            handleInitialAngle = Float(atan2(Double(handleSc.y) - Double(pivotScreenPt.y),
+                                             Double(handleSc.x) - Double(pivotScreenPt.x)))
+            pieceInitialRot = curRot
+            pivotPhase = 2
         }
-        appState.selectedFaceId = nil
+    }
+
+    private func resetPivotState() {
+        pivotPhase    = 0
+        pivotPieceIdx = nil
+        pivotRawPos   = .zero
+        pivotFixedMm  = .zero
+    }
+
+    /// Reverse-map an effective (rendered) vertex back to its raw (pre-rotation, pre-offset) coord.
+    private func effectiveToRaw(_ v: SIMD2<Float>, pieceIdx pi: Int, result: UnfoldResult) -> SIMD2<Float> {
+        let off    = appState.pieceOffsets[pi] ?? .zero
+        let rot    = appState.pieceRotations[pi] ?? 0
+        let faceIds = result.pieces[pi]
+        let center = appState.pieceCenter(for: faceIds, result: result)
+        // v = rotate2D(raw, center, rot) + off → raw = rotate2D(v - off - center, _, -rot) + center
+        let vLocal = (v - off) - center
+        let rad    = -rot * Float.pi / 180
+        let (cosR, sinR) = (cos(rad), sin(rad))
+        return center + SIMD2(vLocal.x*cosR - vLocal.y*sinR, vLocal.x*sinR + vLocal.y*cosR)
     }
 
     // MARK: - Rendering layers
 
-    // 1. White paper background (pattern bounding box + 5 mm padding)
+    // 1. Page grid — draw pages based on appState.pagesWide / pagesTall.
+    //    Page count is fixed by autoArrange(); dragging pieces does NOT add pages.
+    //    Pages are separated by pageSep (= margin) and start at model origin (0,0).
     private func drawPaper(_ ctx: GraphicsContext, result: UnfoldResult, xf: CGAffineTransform) {
-        let bb  = result.boundingBox
-        let pad: CGFloat = 5
-        let r = CGRect(x: CGFloat(bb.min.x) - pad,
-                       y: CGFloat(bb.min.y) - pad,
-                       width: CGFloat(bb.max.x - bb.min.x) + 2 * pad,
-                       height: CGFloat(bb.max.y - bb.min.y) + 2 * pad)
-            .applying(xf)
-        ctx.fill(Path(roundedRect: r, cornerRadius: 4), with: .color(.white))
-        ctx.stroke(Path(roundedRect: r, cornerRadius: 4),
-                   with: .color(.black.opacity(0.12)), lineWidth: 1)
+        let paper   = appState.settings.print.effectivePaper
+        let pageW   = CGFloat(paper.widthMm)
+        let pageH   = CGFloat(paper.heightMm)
+        let pageSep = CGFloat(appState.settings.print.marginMm)
+
+        let numCols = max(1, appState.pagesWide)
+        let numRows = max(1, appState.pagesTall)
+
+        // Shadow pass
+        for row in 0..<numRows {
+            for col in 0..<numCols {
+                let x = CGFloat(col) * (pageW + pageSep)
+                let y = CGFloat(row) * (pageH + pageSep)
+                let shadow = CGRect(x: x, y: y, width: pageW, height: pageH)
+                    .applying(xf).offsetBy(dx: 2, dy: 2)
+                ctx.fill(Path(shadow), with: .color(.black.opacity(0.08)))
+            }
+        }
+
+        // Page fill + border + label
+        for row in 0..<numRows {
+            for col in 0..<numCols {
+                let x = CGFloat(col) * (pageW + pageSep)
+                let y = CGFloat(row) * (pageH + pageSep)
+                let pageRect = CGRect(x: x, y: y, width: pageW, height: pageH).applying(xf)
+                ctx.fill(Path(pageRect), with: .color(.white))
+                ctx.stroke(Path(pageRect), with: .color(.black.opacity(0.18)), lineWidth: 0.7)
+
+                if numCols * numRows > 1 {
+                    let pageNum = row * numCols + col + 1
+                    ctx.draw(
+                        Text("p\(pageNum)")
+                            .font(.system(size: 9))
+                            .foregroundColor(Color.black.opacity(0.25)),
+                        at: CGPoint(x: pageRect.minX + 14, y: pageRect.minY + 6)
+                    )
+                }
+            }
+        }
     }
 
     // 2. Grid lines at v2d.gridSizeMm intervals
@@ -273,11 +538,14 @@ struct PatternCanvasView: View {
             return
         }
 
+        // SwiftUI withCGContext provides a top-left-origin context (y increases downward).
+        // UVs stored in mesh.uvs are already in top-left convention (1-v_obj), so ta.y is
+        // already the correct image pixel coordinate. No extra Y-flip is needed — applying
+        // one would double-flip and produce upside-down textures.
         cg.saveGState()
         cg.addPath(cgTriangle(sa, sb, sc))
         cg.clip()
-        let imageFlip = CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: h)
-        cg.concatenate(imageFlip.concatenating(xf))
+        cg.concatenate(xf)
         cg.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
         cg.restoreGState()
     }
@@ -468,17 +736,79 @@ struct PatternCanvasView: View {
         return (fi, ei, result.faces[fi])
     }
 
-    // MARK: - Effective vertex helpers (apply per-piece drag offset)
+    // MARK: - Effective vertex helpers (apply per-piece rotation then offset)
 
     private func effectiveVerts(_ face: UnfoldedFace, result: UnfoldResult)
         -> (SIMD2<Float>, SIMD2<Float>, SIMD2<Float>) {
         let off = appState.offset(forFaceId: face.faceId, result: result)
-        return (face.v0 + off, face.v1 + off, face.v2 + off)
+        let rot = appState.rotation(forFaceId: face.faceId, result: result)
+        guard abs(rot) > 0.001,
+              let pi = appState.pieceIndex(forFaceId: face.faceId, result: result),
+              pi < result.pieces.count else {
+            return (face.v0 + off, face.v1 + off, face.v2 + off)
+        }
+        let center = appState.pieceCenter(for: result.pieces[pi], result: result)
+        return (
+            rotate2D(face.v0, around: center, degrees: rot) + off,
+            rotate2D(face.v1, around: center, degrees: rot) + off,
+            rotate2D(face.v2, around: center, degrees: rot) + off
+        )
     }
 
     private func effectiveTabPolygon(_ tab: GlueTab, result: UnfoldResult) -> [SIMD2<Float>] {
         let off = appState.offset(forFaceId: tab.faceId, result: result)
-        return tab.polygon.map { $0 + off }
+        let rot = appState.rotation(forFaceId: tab.faceId, result: result)
+        guard abs(rot) > 0.001,
+              let pi = appState.pieceIndex(forFaceId: tab.faceId, result: result),
+              pi < result.pieces.count else {
+            return tab.polygon.map { $0 + off }
+        }
+        let center = appState.pieceCenter(for: result.pieces[pi], result: result)
+        return tab.polygon.map { rotate2D($0, around: center, degrees: rot) + off }
+    }
+
+    // MARK: - Vertex dots (rotate-pivot mode)
+
+    private func drawVertexDots(_ ctx: GraphicsContext, result: UnfoldResult, xf: CGAffineTransform) {
+        let dotR: CGFloat = 5
+        var seen = Set<SIMD2<Int32>>()
+
+        for face in result.faces {
+            guard let pi = appState.pieceIndex(forFaceId: face.faceId, result: result) else { continue }
+            let (ev0, ev1, ev2) = effectiveVerts(face, result: result)
+            for ev in [ev0, ev1, ev2] {
+                let key = SIMD2<Int32>(Int32(ev.x * 100), Int32(ev.y * 100))
+                guard seen.insert(key).inserted else { continue }
+
+                let sc  = screenPt(ev, xf: xf)
+                let r   = CGRect(x: sc.x - dotR, y: sc.y - dotR, width: dotR*2, height: dotR*2)
+                let dot = Path(ellipseIn: r)
+
+                // Color: red = selected pivot, yellow = hover, white = default
+                let isHovered = hypot(hoverPoint.x - sc.x, hoverPoint.y - sc.y) < dotR * 2
+
+                let isPivot: Bool = {
+                    guard pivotPhase >= 1, let pivotPi = pivotPieceIdx, pivotPi == pi else { return false }
+                    let rawEv = effectiveToRaw(ev, pieceIdx: pi, result: result)
+                    return simd_length(rawEv - pivotRawPos) < 0.1
+                }()
+
+                let fill: Color = isPivot ? .red : (isHovered ? Color(red: 1, green: 0.87, blue: 0.3) : Color.white.opacity(0.85))
+                let stroke: Color = isPivot ? Color(red: 0.7, green: 0, blue: 0) : Color.gray.opacity(0.6)
+
+                ctx.fill(dot, with: .color(fill))
+                ctx.stroke(dot, with: .color(stroke), lineWidth: 1)
+            }
+        }
+    }
+
+    // MARK: - Rotation math helper
+
+    private func rotate2D(_ v: SIMD2<Float>, around center: SIMD2<Float>, degrees: Float) -> SIMD2<Float> {
+        let rad = degrees * Float.pi / 180
+        let (cosR, sinR) = (cos(rad), sin(rad))
+        let d = v - center
+        return center + SIMD2(d.x*cosR - d.y*sinR, d.x*sinR + d.y*cosR)
     }
 
     // MARK: - Geometry helpers

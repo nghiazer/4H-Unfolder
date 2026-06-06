@@ -54,6 +54,13 @@ struct MainView: View {
             $0.name.isEmpty ? "4H Unfolder" : $0.name
         } ?? "4H Unfolder")
         .toolbar { toolbarItems }
+        .sheet(isPresented: $appState.showUnfoldSetup) {
+            if let mesh = appState.mesh {
+                UnfoldSetupSheet(mesh: mesh) { scale in
+                    appState.unfoldAndArrange(scaleMmPerUnit: scale)
+                }
+            }
+        }
         // Accept .obj / .pdo / .4hu dragged onto the window
         .onDrop(of: [UTType.fileURL], isTargeted: $isDropTarget) { providers in
             guard let provider = providers.first else { return false }
@@ -127,12 +134,38 @@ struct MainView: View {
 
             // Unfold
             Button {
-                Task { await appState.unfold() }
+                appState.showUnfoldSetup = true
             } label: {
-                Label("Unfold", systemImage: "triangle.bottomhalf.pattern.checkered")
+                Label("Unfold", systemImage: "scissors")
             }
             .disabled(appState.mesh == nil || appState.isLoading)
-            .help("Run unfold pipeline (⌘U)")
+            .help("Unfold mesh into 2D pattern (⌘U)")
+
+            Divider()
+
+            // Canvas mode: Edit Edges / Edit Flaps / Rotate Pivot (mutually exclusive)
+            Button { appState.canvasMode = .editEdge } label: {
+                Label("Edit Edges", systemImage: "pencil.tip")
+            }
+            .background(appState.canvasMode == .editEdge ? Color.accentColor.opacity(0.15) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 4))
+            .help("Edit Edges: click edges to toggle fold/cut (⌘1)")
+
+            Button { appState.canvasMode = .editFlap } label: {
+                Label("Edit Flaps", systemImage: "square.on.square")
+            }
+            .disabled(appState.unfoldResult == nil)
+            .background(appState.canvasMode == .editFlap ? Color.accentColor.opacity(0.15) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 4))
+            .help("Edit Flaps: click edges to set glue tab override (⌘2)")
+
+            Button { appState.canvasMode = .rotatePivot } label: {
+                Label("Rotate Pivot", systemImage: "arrow.triangle.2.circlepath")
+            }
+            .disabled(appState.unfoldResult == nil)
+            .background(appState.canvasMode == .rotatePivot ? Color.accentColor.opacity(0.15) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 4))
+            .help("Rotate Pivot: click vertex as pivot, then another as handle (⌘3)")
 
             Divider()
 
@@ -176,12 +209,12 @@ struct MainView: View {
 
             // Undo / Redo
             Button { appState.undo() } label: {
-                Image(systemName: "arrow.uturn.backward")
+                Label("Undo", systemImage: "arrow.uturn.backward")
             }
             .help("Undo edge override (⌘Z)")
 
             Button { appState.redo() } label: {
-                Image(systemName: "arrow.uturn.forward")
+                Label("Redo", systemImage: "arrow.uturn.forward")
             }
             .help("Redo (⌘⇧Z)")
         }

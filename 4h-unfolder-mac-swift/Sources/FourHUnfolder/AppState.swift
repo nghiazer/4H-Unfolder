@@ -6,6 +6,14 @@ import ImageIO
 // internal symbols remain accessible here without a full public API surface.
 @testable import FourHUnfolderCore
 
+// MARK: - Canvas interaction mode
+
+enum CanvasMode: Equatable {
+    case editEdge     // default: click edges to toggle fold/cut
+    case editFlap     // click edges to apply selected FlapMode override
+    case rotatePivot  // click vertices to pick pivot → handle → live rotate
+}
+
 @MainActor
 final class AppState: ObservableObject {
     @Published var mesh: Mesh?
@@ -20,6 +28,22 @@ final class AppState: ObservableObject {
     @Published var textureCache: [Int: CGImage] = [:]
     /// Piece-index (index in result.pieces) → cumulative drag offset in mm
     @Published var pieceOffsets: [Int: SIMD2<Float>] = [:]
+    /// Piece-index → rotation in degrees around piece bbox center
+    @Published var pieceRotations: [Int: Float] = [:]
+    /// Scale factor used for the last unfold (mm per model unit). Set by UnfoldSetupSheet.
+    @Published var meshScaleMmPerUnit: Float = 1.0
+    /// Controls whether the Unfold Setup sheet is visible.
+    @Published var showUnfoldSetup = false
+    /// Number of page columns in the current layout (set by autoArrange).
+    @Published var pagesWide: Int = 1
+    /// Number of page rows in the current layout (set by autoArrange).
+    @Published var pagesTall: Int = 1
+    /// Active canvas interaction mode.
+    @Published var canvasMode: CanvasMode = .editEdge
+    /// Selected FlapMode for inner (cut) edges in editFlap mode.
+    @Published var selectedInnerFlapMode: FlapMode = .default
+    /// Selected FlapMode for border edges in editFlap mode.
+    @Published var selectedBorderFlapMode: FlapMode = .default
 
     /// URL of the file the current mesh was loaded from (needed for project save).
     private(set) var sourceMeshURL: URL?
@@ -44,7 +68,7 @@ final class AppState: ObservableObject {
         redoStack.append((edgeOverrides, flapOverrides))
         edgeOverrides = snap.edges
         flapOverrides = snap.flaps
-        Task { await unfold() }
+        Task { await unfold(); autoArrange() }
     }
 
     func redo() {
@@ -52,7 +76,7 @@ final class AppState: ObservableObject {
         undoStack.append((edgeOverrides, flapOverrides))
         edgeOverrides = snap.edges
         flapOverrides = snap.flaps
-        Task { await unfold() }
+        Task { await unfold(); autoArrange() }
     }
 
     // MARK: - Edge / flap overrides
@@ -62,20 +86,20 @@ final class AppState: ObservableObject {
         pushUndo()
         let current = edgeOverrides[meshEdgeId] ?? mesh.edges[meshEdgeId].type
         edgeOverrides[meshEdgeId] = (current == .fold) ? .cut : .fold
-        Task { await unfold() }
+        Task { await unfold(); autoArrange() }
     }
 
     func setFlapOverride(_ meshEdgeId: Int, _ override: FlapOverride?) {
         pushUndo()
         flapOverrides[meshEdgeId] = override
-        Task { await unfold() }
+        Task { await unfold(); autoArrange() }
     }
 
     func clearEdgeOverrides() {
         pushUndo()
         edgeOverrides.removeAll()
         flapOverrides.removeAll()
-        Task { await unfold() }
+        Task { await unfold(); autoArrange() }
     }
 
     /// Cycles through faces one at a time. Repeated calls advance the selection.
@@ -101,6 +125,22 @@ final class AppState: ObservableObject {
     func offset(forFaceId fid: Int, result: UnfoldResult) -> SIMD2<Float> {
         guard let pi = pieceIndex(forFaceId: fid, result: result) else { return .zero }
         return pieceOffsets[pi] ?? .zero
+    }
+
+    func rotation(forFaceId fid: Int, result: UnfoldResult) -> Float {
+        guard let pi = pieceIndex(forFaceId: fid, result: result) else { return 0 }
+        return pieceRotations[pi] ?? 0
+    }
+
+    /// Bbox center of a piece's raw face positions (no offsets applied).
+    /// Used as the rotation origin so the piece rotates around its own center.
+    func pieceCenter(for faceIds: [Int], result: UnfoldResult) -> SIMD2<Float> {
+        let faceSet = Set(faceIds)
+        let faces = result.faces.filter { faceSet.contains($0.faceId) }
+        guard !faces.isEmpty else { return .zero }
+        let allX = faces.flatMap { [$0.v0.x, $0.v1.x, $0.v2.x] }
+        let allY = faces.flatMap { [$0.v0.y, $0.v1.y, $0.v2.y] }
+        return SIMD2((allX.min()! + allX.max()!) / 2, (allY.min()! + allY.max()!) / 2)
     }
 
     // MARK: - Texture cache (materialId → CGImage)
@@ -142,50 +182,120 @@ final class AppState: ObservableObject {
         return FileManager.default.fileExists(atPath: rel.path) ? rel : nil
     }
 
+    // MARK: - Dynamic page expansion (called after each piece drag)
+
+    /// Recomputes pagesWide/pagesTall from current effective piece positions.
+    /// Called from PatternCanvasView after each drag update so that dragging a
+    /// piece beyond the current page boundary adds a new page, while dragging
+    /// it back removes the no-longer-needed page.
+    func recomputePagesForOffsets() {
+        guard let result = unfoldResult else { return }
+        let paper = settings.print.effectivePaper
+        let pageW = Float(paper.widthMm)
+        let pageH = Float(paper.heightMm)
+        let sep   = Float(settings.print.marginMm)
+
+        var maxX: Float = 0
+        var maxY: Float = 0
+        for face in result.faces {
+            let off = offset(forFaceId: face.faceId, result: result)
+            for v in [face.v0 + off, face.v1 + off, face.v2 + off] {
+                maxX = max(maxX, v.x)
+                maxY = max(maxY, v.y)
+            }
+        }
+
+        let newCols = max(1, Int(ceil(maxX / (pageW + sep))))
+        let newRows = max(1, Int(ceil(maxY / (pageH + sep))))
+        if newCols != pagesWide { pagesWide = newCols }
+        if newRows != pagesTall { pagesTall = newRows }
+    }
+
     // MARK: - Auto-arrange pieces on paper
 
+    /// Packs all pieces into a multi-page grid.
+    /// Pages expand to the right (up to maxPageCols columns), then wrap to a new page row.
     func autoArrange() {
         guard var result = unfoldResult else { return }
-        let paper  = settings.print.effectivePaper
-        let margin = Float(settings.print.marginMm)
-        let pageW  = Float(paper.widthMm)
+        let paper   = settings.print.effectivePaper
+        let margin  = Float(settings.print.marginMm)
+        let pageW   = Float(paper.widthMm)
+        let pageH   = Float(paper.heightMm)
+        let pageSep = margin          // gap between adjacent pages
+        let maxCols = 4               // max page columns before starting a new page row
+
+        // Sort pieces largest-area first so big pieces get prime positions
+        let sortedPieces = result.pieces.sorted { lhs, rhs in
+            func area(_ faceIds: [Int]) -> Float {
+                let faces = result.faces.filter { faceIds.contains($0.faceId) }
+                guard !faces.isEmpty else { return 0 }
+                let xs = faces.flatMap { [$0.v0.x, $0.v1.x, $0.v2.x] }
+                let ys = faces.flatMap { [$0.v0.y, $0.v1.y, $0.v2.y] }
+                return (xs.max()! - xs.min()!) * (ys.max()! - ys.min()!)
+            }
+            return area(lhs) > area(rhs)
+        }
 
         var newFaces = result.faces
         var newTabs  = result.tabs
-        var curX: Float = margin
-        var curY: Float = margin
-        var rowH: Float = 0
 
-        for faceIds in result.pieces {
-            let faceSet   = Set(faceIds)
+        var localX: Float = margin
+        var localY: Float = margin
+        var rowH:   Float = 0
+        var pageCol = 0, pageRow = 0
+        var newPagesWide = 1, newPagesTall = 1
+
+        for faceIds in sortedPieces {
+            let faceSet    = Set(faceIds)
             let pieceFaces = result.faces.filter { faceSet.contains($0.faceId) }
             guard !pieceFaces.isEmpty else { continue }
 
             let allX = pieceFaces.flatMap { [$0.v0.x, $0.v1.x, $0.v2.x] }
             let allY = pieceFaces.flatMap { [$0.v0.y, $0.v1.y, $0.v2.y] }
-            let minX = allX.min()!, maxX = allX.max()!
-            let minY = allY.min()!, maxY = allY.max()!
-            let w = maxX - minX, h = maxY - minY
+            let minX = allX.min()!, minY = allY.min()!
+            let w = allX.max()! - minX, h = allY.max()! - minY
 
-            if curX + w > pageW - margin && curX > margin {
-                curX = margin; curY += rowH + margin; rowH = 0
+            // Wrap to next row within the current page when horizontal space runs out
+            if localX > margin && localX + w > pageW - margin {
+                localX = margin
+                localY += rowH + margin
+                rowH = 0
             }
 
-            let off = SIMD2<Float>(curX - minX, curY - minY)
+            // Advance to the next page column when vertical space on this page runs out
+            if localY > margin && localY + h > pageH - margin {
+                pageCol += 1
+                if pageCol >= maxCols {   // hit column limit → start a new page row
+                    pageCol = 0
+                    pageRow += 1
+                }
+                localX = margin; localY = margin; rowH = 0
+            }
+
+            // Absolute position in mm across the full multi-page canvas
+            let absX = Float(pageCol) * (pageW + pageSep) + localX
+            let absY = Float(pageRow) * (pageH + pageSep) + localY
+            let off  = SIMD2<Float>(absX - minX, absY - minY)
+
             for i in newFaces.indices where faceSet.contains(newFaces[i].faceId) {
                 newFaces[i] = newFaces[i].translated(by: off)
             }
             for i in newTabs.indices where faceSet.contains(newTabs[i].faceId) {
                 newTabs[i] = newTabs[i].translated(by: off)
             }
-            curX += w + margin
+
+            localX += w + margin
             rowH = max(rowH, h)
+            newPagesWide = max(newPagesWide, pageCol + 1)
+            newPagesTall = max(newPagesTall, pageRow + 1)
         }
 
         result.faces = newFaces
         result.tabs  = newTabs
         unfoldResult = result
         pieceOffsets = [:]
+        pagesWide    = newPagesWide
+        pagesTall    = newPagesTall
     }
 
     // MARK: - Mesh file operations
@@ -211,12 +321,14 @@ final class AppState: ObservableObject {
         flapOverrides = [:]
         undoStack = []
         redoStack = []
+        pagesWide = 1
+        pagesTall = 1
         do {
             let loaded = try await loader.load(from: url)
             mesh = loaded
             sourceMeshURL = url
             textureCache = buildTextureCache(mesh: loaded, sourceURL: url)
-            await unfold()
+            isLoading = false
         } catch {
             errorMessage = error.localizedDescription
             isLoading = false
@@ -232,10 +344,21 @@ final class AppState: ObservableObject {
             mesh: mesh,
             edgeOverrides: edgeOverrides,
             flapOverrides: flapOverrides,
-            settings: settings.print
+            settings: settings.print,
+            meshScaleMm: meshScaleMmPerUnit
         )
-        pieceOffsets = [:]
+        pieceOffsets   = [:]
+        pieceRotations = [:]
         isLoading = false
+    }
+
+    /// Called by UnfoldSetupSheet on confirm: stores scale, runs unfold, then auto-arranges.
+    func unfoldAndArrange(scaleMmPerUnit: Float) {
+        meshScaleMmPerUnit = scaleMmPerUnit
+        Task {
+            await unfold()
+            autoArrange()
+        }
     }
 
     // MARK: - Project save / load (.4hu bundle)
@@ -322,6 +445,7 @@ final class AppState: ObservableObject {
             }
 
             await unfold()
+            autoArrange()
         } catch {
             errorMessage = error.localizedDescription
             isLoading = false
