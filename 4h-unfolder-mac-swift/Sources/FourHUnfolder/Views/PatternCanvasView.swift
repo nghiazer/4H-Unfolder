@@ -217,6 +217,7 @@ struct PatternCanvasView: View {
                     let dmm = SIMD2<Float>(Float(delta.width / scale), Float(delta.height / scale))
                     appState.pieceOffsets[pi, default: .zero] += dmm
                     prevDragTranslation = val.translation
+                    appState.recomputePagesForOffsets()
                 } else if !isPieceDrag {
                     pan = CGSize(
                         width:  basePan.width  + val.translation.width,

@@ -150,6 +150,35 @@ final class AppState: ObservableObject {
         return FileManager.default.fileExists(atPath: rel.path) ? rel : nil
     }
 
+    // MARK: - Dynamic page expansion (called after each piece drag)
+
+    /// Recomputes pagesWide/pagesTall from current effective piece positions.
+    /// Called from PatternCanvasView after each drag update so that dragging a
+    /// piece beyond the current page boundary adds a new page, while dragging
+    /// it back removes the no-longer-needed page.
+    func recomputePagesForOffsets() {
+        guard let result = unfoldResult else { return }
+        let paper = settings.print.effectivePaper
+        let pageW = Float(paper.widthMm)
+        let pageH = Float(paper.heightMm)
+        let sep   = Float(settings.print.marginMm)
+
+        var maxX: Float = 0
+        var maxY: Float = 0
+        for face in result.faces {
+            let off = offset(forFaceId: face.faceId, result: result)
+            for v in [face.v0 + off, face.v1 + off, face.v2 + off] {
+                maxX = max(maxX, v.x)
+                maxY = max(maxY, v.y)
+            }
+        }
+
+        let newCols = max(1, Int(ceil(maxX / (pageW + sep))))
+        let newRows = max(1, Int(ceil(maxY / (pageH + sep))))
+        if newCols != pagesWide { pagesWide = newCols }
+        if newRows != pagesTall { pagesTall = newRows }
+    }
+
     // MARK: - Auto-arrange pieces on paper
 
     /// Packs all pieces into a multi-page grid.
