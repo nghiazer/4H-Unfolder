@@ -102,6 +102,124 @@ final class AppState: ObservableObject {
         Task { await unfold(); autoArrange() }
     }
 
+    // MARK: - Smart edge operations (editEdge mode — position-aware)
+
+    /// Fold → cut (disjoin). After unfold, keeps all pieces at their old display
+    /// positions and nudges the newly separated piece away slightly.
+    func splitEdge(_ meshEdgeId: Int) {
+        guard let mesh, meshEdgeId < mesh.edges.count else { return }
+        guard let result = unfoldResult else { return }
+        pushUndo()
+        let oldCentroids   = captureEffectiveCentroids(result: result)
+        let oldFaceSets    = result.pieces.map { Set($0) }
+        edgeOverrides[meshEdgeId] = .cut
+        Task {
+            await unfold()
+            repositionAfterSplit(oldFaceSets: oldFaceSets, oldCentroids: oldCentroids)
+        }
+    }
+
+    /// Cut → fold (join). After unfold, keeps the merged piece near the anchor
+    /// piece's old display position (anchor = the piece the user wants to stay put).
+    func joinEdge(_ meshEdgeId: Int, anchorFaceId: Int) {
+        guard let mesh, meshEdgeId < mesh.edges.count else { return }
+        guard let result = unfoldResult else { return }
+        pushUndo()
+        let oldCentroids = captureEffectiveCentroids(result: result)
+        let oldFaceSets  = result.pieces.map { Set($0) }
+        edgeOverrides[meshEdgeId] = .fold
+        Task {
+            await unfold()
+            repositionAfterJoin(oldFaceSets: oldFaceSets, oldCentroids: oldCentroids,
+                                anchorFaceId: anchorFaceId)
+        }
+    }
+
+    // MARK: - Reposition helpers
+
+    /// Effective centroid (raw face positions + pieceOffset) per old piece index.
+    private func captureEffectiveCentroids(result: UnfoldResult) -> [SIMD2<Float>] {
+        result.pieces.enumerated().map { (pi, faceIds) in
+            let faceSet = Set(faceIds)
+            let off = pieceOffsets[pi] ?? .zero
+            let faces = result.faces.filter { faceSet.contains($0.faceId) }
+            guard !faces.isEmpty else { return .zero }
+            let xs = faces.flatMap { [$0.v0.x + off.x, $0.v1.x + off.x, $0.v2.x + off.x] }
+            let ys = faces.flatMap { [$0.v0.y + off.y, $0.v1.y + off.y, $0.v2.y + off.y] }
+            return SIMD2((xs.min()! + xs.max()!) / 2, (ys.min()! + ys.max()!) / 2)
+        }
+    }
+
+    /// Bbox centroid of a piece's raw face positions (no offset).
+    private func rawCentroid(forPieceIdx pi: Int, result: UnfoldResult) -> SIMD2<Float> {
+        let faceSet = Set(result.pieces[pi])
+        let faces = result.faces.filter { faceSet.contains($0.faceId) }
+        guard !faces.isEmpty else { return .zero }
+        let xs = faces.flatMap { [$0.v0.x, $0.v1.x, $0.v2.x] }
+        let ys = faces.flatMap { [$0.v0.y, $0.v1.y, $0.v2.y] }
+        return SIMD2((xs.min()! + xs.max()!) / 2, (ys.min()! + ys.max()!) / 2)
+    }
+
+    private func repositionAfterSplit(oldFaceSets: [Set<Int>], oldCentroids: [SIMD2<Float>]) {
+        guard let result = unfoldResult else { return }
+        for (newPi, newFaceIds) in result.pieces.enumerated() {
+            let newSet  = Set(newFaceIds)
+            let newRaw  = rawCentroid(forPieceIdx: newPi, result: result)
+
+            // Find best-matching old piece (most shared faces)
+            var bestOldPi = 0; var bestShared = 0
+            for (oldPi, oldSet) in oldFaceSets.enumerated() {
+                let shared = newSet.intersection(oldSet).count
+                if shared > bestShared { bestShared = shared; bestOldPi = oldPi }
+            }
+
+            let targetCent = oldCentroids[bestOldPi]
+            let oldSet = oldFaceSets[bestOldPi]
+
+            // "Minor" split: this piece is a sub-piece AND another new piece matched
+            // the same old piece with even more faces (i.e. THIS is the separated chunk).
+            let isMinorSplit = newSet.count < oldSet.count &&
+                result.pieces.enumerated().contains { (otherPi, otherIds) in
+                    otherPi != newPi && Set(otherIds).intersection(oldSet).count > bestShared
+                }
+
+            if isMinorSplit {
+                // Push the separated piece 30mm right+down so it's visibly distinct
+                pieceOffsets[newPi] = targetCent + SIMD2<Float>(30, 30) - newRaw
+            } else {
+                pieceOffsets[newPi] = targetCent - newRaw
+            }
+        }
+        recomputePagesForOffsets()
+    }
+
+    private func repositionAfterJoin(oldFaceSets: [Set<Int>], oldCentroids: [SIMD2<Float>],
+                                     anchorFaceId: Int) {
+        guard let result = unfoldResult else { return }
+        // Find old piece that contained the anchor face → its centroid is the target
+        let anchorOldPi = oldFaceSets.firstIndex { $0.contains(anchorFaceId) } ?? 0
+        let anchorTargetCent = oldCentroids[anchorOldPi]
+
+        for (newPi, newFaceIds) in result.pieces.enumerated() {
+            let newSet = Set(newFaceIds)
+            let newRaw = rawCentroid(forPieceIdx: newPi, result: result)
+
+            if newSet.contains(anchorFaceId) {
+                // Merged piece: snap to anchor's old position
+                pieceOffsets[newPi] = anchorTargetCent - newRaw
+            } else {
+                // Unrelated piece: restore to its own old position
+                var bestOldPi = 0; var bestShared = 0
+                for (oldPi, oldSet) in oldFaceSets.enumerated() {
+                    let shared = newSet.intersection(oldSet).count
+                    if shared > bestShared { bestShared = shared; bestOldPi = oldPi }
+                }
+                pieceOffsets[newPi] = oldCentroids[bestOldPi] - newRaw
+            }
+        }
+        recomputePagesForOffsets()
+    }
+
     /// Cycles through faces one at a time. Repeated calls advance the selection.
     func selectAll() {
         guard let result = unfoldResult, !result.faces.isEmpty else { return }

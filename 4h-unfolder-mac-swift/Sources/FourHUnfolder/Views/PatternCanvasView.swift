@@ -43,6 +43,15 @@ private final class CanvasScrollMonitor: ObservableObject {
     deinit { stop() }
 }
 
+// MARK: - Join preview state
+
+private struct JoinPreviewState {
+    let meshEdgeId: Int
+    let pieceIdxA: Int
+    let pieceIdxB: Int
+    var anchorPieceIdx: Int   // the piece that "stays"; updated by hover
+}
+
 // MARK: - 2D interactive pattern canvas
 //
 // Rendering layers (draw order):
@@ -76,6 +85,9 @@ struct PatternCanvasView: View {
     @State private var isPieceDrag: Bool = false
     @State private var prevDragTranslation: CGSize = .zero
     @GestureState private var liveMag: CGFloat = 1.0
+
+    // Join preview (editEdge mode, cut edge clicked once)
+    @State private var joinPreview: JoinPreviewState? = nil
 
     // Rotate-pivot state machine (mirrors C# _rotatePtPhase)
     @State private var pivotPhase: Int = 0           // 0=pick pivot, 1=pick handle, 2=rotating
@@ -116,6 +128,9 @@ struct PatternCanvasView: View {
                         if appState.canvasMode == .rotatePivot {
                             drawVertexDots(ctx, result: result, xf: xf)
                         }
+                        if appState.canvasMode == .editEdge, joinPreview != nil {
+                            drawJoinPreview(ctx, result: result, xf: xf)
+                        }
                     }
                     .gesture(magnifyGesture)
                     .gesture(makeUnifiedDragGesture(result: result, canvasSize: geo.size))
@@ -129,6 +144,7 @@ struct PatternCanvasView: View {
                             hoverPoint = loc
                             scrollMonitor.isHovering = true
                             scrollMonitor.hoverPoint = loc
+                            updateJoinAnchor(at: loc, result: result, canvasSize: geo.size)
                         case .ended:
                             isHovering = false
                             scrollMonitor.isHovering = false
@@ -151,6 +167,7 @@ struct PatternCanvasView: View {
         }
         .onChange(of: appState.canvasMode) { _ in
             resetPivotState()
+            joinPreview = nil
         }
         .onAppear {
             scrollMonitor.onScroll = { [weak scrollMonitor] delta, _ in
@@ -292,12 +309,34 @@ struct PatternCanvasView: View {
         switch appState.canvasMode {
 
         case .editEdge:
-            // Priority 1: edge hit → toggle fold/cut
+            // If join preview is active, ANY click confirms the pending join.
+            if let jp = joinPreview {
+                guard jp.anchorPieceIdx < result.pieces.count else { joinPreview = nil; return }
+                let anchorFaceId = result.pieces[jp.anchorPieceIdx].first ?? -1
+                joinPreview = nil
+                appState.joinEdge(jp.meshEdgeId, anchorFaceId: anchorFaceId)
+                return
+            }
+
+            // No preview active — hit-test edges.
             if let (_, ei, face) = nearestEdge(at: point, result: result, xf: xf) {
                 let meshEdgeId = face.meshEdgeId(ei)
-                if meshEdgeId >= 0 { appState.toggleEdge(meshEdgeId); return }
+                guard meshEdgeId >= 0 else {
+                    appState.selectedFaceId = nil; return
+                }
+
+                if face.edgeIsFold(ei) {
+                    // Fold edge → disjoin (smart reposition, no autoArrange)
+                    appState.splitEdge(meshEdgeId)
+                } else if !face.edgeIsBoundary(ei) {
+                    // Cut edge → start join preview
+                    startJoinPreview(meshEdgeId: meshEdgeId, clickedFace: face, result: result,
+                                     at: point, xf: xf)
+                }
+                return
             }
-            // Priority 2: face under tap → select
+
+            // No edge hit — face select (or deselect on empty area).
             let inv = xf.inverted()
             let mpt = point.applying(inv)
             let mp = SIMD2<Float>(Float(mpt.x), Float(mpt.y))
@@ -397,6 +436,106 @@ struct PatternCanvasView: View {
         pivotPieceIdx = nil
         pivotRawPos   = .zero
         pivotFixedMm  = .zero
+    }
+
+    // MARK: - Join preview helpers
+
+    private func startJoinPreview(meshEdgeId: Int, clickedFace: UnfoldedFace,
+                                   result: UnfoldResult, at point: CGPoint, xf: CGAffineTransform) {
+        guard let piA = appState.pieceIndex(forFaceId: clickedFace.faceId, result: result) else { return }
+
+        // Find the other piece that shares this cut edge
+        var piB: Int? = nil
+        outer: for otherFace in result.faces {
+            guard otherFace.faceId != clickedFace.faceId else { continue }
+            for oi in 0..<3 where otherFace.meshEdgeId(oi) == meshEdgeId {
+                if let pi = appState.pieceIndex(forFaceId: otherFace.faceId, result: result),
+                   pi != piA { piB = pi; break outer }
+            }
+        }
+        guard let piB else { return }   // same piece (shouldn't happen for cut edges)
+
+        // Initial anchor = whichever piece center is closer to the tap point
+        let inv = xf.inverted()
+        let mpt = point.applying(inv)
+        let mp  = SIMD2<Float>(Float(mpt.x), Float(mpt.y))
+        let offA = appState.pieceOffsets[piA] ?? .zero
+        let offB = appState.pieceOffsets[piB] ?? .zero
+        let centA = appState.pieceCenter(for: result.pieces[piA], result: result) + offA
+        let centB = appState.pieceCenter(for: result.pieces[piB], result: result) + offB
+        let initialAnchor = simd_length(mp - centA) <= simd_length(mp - centB) ? piA : piB
+        joinPreview = JoinPreviewState(meshEdgeId: meshEdgeId, pieceIdxA: piA, pieceIdxB: piB,
+                                        anchorPieceIdx: initialAnchor)
+    }
+
+    /// Called on every hover update: recomputes which piece is the anchor based on mouse proximity.
+    private func updateJoinAnchor(at loc: CGPoint, result: UnfoldResult, canvasSize: CGSize) {
+        guard var jp = joinPreview,
+              jp.pieceIdxA < result.pieces.count,
+              jp.pieceIdxB < result.pieces.count else { return }
+        let xf  = modelToScreen(size: canvasSize, result: result)
+        let inv = xf.inverted()
+        let mpt = loc.applying(inv)
+        let mp  = SIMD2<Float>(Float(mpt.x), Float(mpt.y))
+        let offA = appState.pieceOffsets[jp.pieceIdxA] ?? .zero
+        let offB = appState.pieceOffsets[jp.pieceIdxB] ?? .zero
+        let centA = appState.pieceCenter(for: result.pieces[jp.pieceIdxA], result: result) + offA
+        let centB = appState.pieceCenter(for: result.pieces[jp.pieceIdxB], result: result) + offB
+        let newAnchor = simd_length(mp - centA) <= simd_length(mp - centB) ? jp.pieceIdxA : jp.pieceIdxB
+        if newAnchor != jp.anchorPieceIdx { jp.anchorPieceIdx = newAnchor; joinPreview = jp }
+    }
+
+    // MARK: - Join preview rendering
+
+    private func drawJoinPreview(_ ctx: GraphicsContext, result: UnfoldResult, xf: CGAffineTransform) {
+        guard let jp = joinPreview,
+              jp.pieceIdxA < result.pieces.count,
+              jp.pieceIdxB < result.pieces.count else { return }
+
+        let offA = appState.pieceOffsets[jp.pieceIdxA] ?? .zero
+        let offB = appState.pieceOffsets[jp.pieceIdxB] ?? .zero
+        let centA = appState.pieceCenter(for: result.pieces[jp.pieceIdxA], result: result) + offA
+        let centB = appState.pieceCenter(for: result.pieces[jp.pieceIdxB], result: result) + offB
+        let scA = screenPt(centA, xf: xf)
+        let scB = screenPt(centB, xf: xf)
+
+        // anchor = stays, moving = will be joined to anchor
+        let anchorSc = jp.anchorPieceIdx == jp.pieceIdxA ? scA : scB
+        let movingSc = jp.anchorPieceIdx == jp.pieceIdxA ? scB : scA
+
+        // Dashed connector line
+        var line = Path(); line.move(to: movingSc); line.addLine(to: anchorSc)
+        ctx.stroke(line, with: .color(Color.accentColor.opacity(0.55)),
+                   style: StrokeStyle(lineWidth: 1.5, dash: [6, 3]))
+
+        // Arrowhead at anchor (pointing inward from moving → anchor direction)
+        let dx = anchorSc.x - movingSc.x, dy = anchorSc.y - movingSc.y
+        let len = hypot(dx, dy)
+        if len > 2 {
+            let nx = dx / len, ny = dy / len
+            let arrowLen: CGFloat = 13, angle: CGFloat = 0.42
+            var arrow = Path()
+            arrow.move(to: anchorSc)
+            arrow.addLine(to: CGPoint(x: anchorSc.x - arrowLen*(nx*cos(angle) - ny*sin(angle)),
+                                      y: anchorSc.y - arrowLen*(nx*sin(angle) + ny*cos(angle))))
+            arrow.move(to: anchorSc)
+            arrow.addLine(to: CGPoint(x: anchorSc.x - arrowLen*(nx*cos(-angle) - ny*sin(-angle)),
+                                      y: anchorSc.y - arrowLen*(nx*sin(-angle) + ny*cos(-angle))))
+            ctx.stroke(arrow, with: .color(Color.accentColor), lineWidth: 2)
+        }
+
+        // Anchor dot (filled — this piece stays)
+        let r: CGFloat = 6
+        let anchorDot = Path(ellipseIn: CGRect(x: anchorSc.x-r, y: anchorSc.y-r, width: r*2, height: r*2))
+        ctx.fill(anchorDot, with: .color(Color.accentColor.opacity(0.85)))
+
+        // Moving dot (hollow — this piece moves)
+        let movingDot = Path(ellipseIn: CGRect(x: movingSc.x-r, y: movingSc.y-r, width: r*2, height: r*2))
+        ctx.stroke(movingDot, with: .color(Color.accentColor), lineWidth: 2)
+
+        // Hint text
+        let mid = CGPoint(x: (anchorSc.x + movingSc.x)/2, y: (anchorSc.y + movingSc.y)/2 - 16)
+        ctx.draw(Text("Click to confirm join").font(.caption2).foregroundColor(.secondary), at: mid)
     }
 
     /// Reverse-map an effective (rendered) vertex back to its raw (pre-rotation, pre-offset) coord.
