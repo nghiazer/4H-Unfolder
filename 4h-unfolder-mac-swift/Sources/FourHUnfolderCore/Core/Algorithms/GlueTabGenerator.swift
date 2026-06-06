@@ -135,10 +135,10 @@ struct GlueTabGenerator {
         guard edgeLen > GeometryConstants.degenerateTab else { return nil }
 
         let dir  = (p1 - p0) / edgeLen
-        // Perpendicular pointing toward face interior (inward)
+        // Perpendicular pointing away from face interior (outward)
         let rawPerp = dir.perp
-        let inward  = simd_dot(rawPerp, face.centroid - p0) > 0 ? rawPerp : -rawPerp
-        let perp    = inward
+        let outward = simd_dot(rawPerp, face.centroid - p0) > 0 ? -rawPerp : rawPerp
+        let perp    = outward
 
         switch shape {
         case .trapezoid:
