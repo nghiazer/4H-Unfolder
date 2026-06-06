@@ -268,56 +268,45 @@ struct PatternCanvasView: View {
 
     // MARK: - Rendering layers
 
-    // 1. Page grid — draw one page rectangle per printed page, based on paper
-    //    size from settings. Pages start at model origin (0,0) and extend to
-    //    cover the full bounding box. If content is not auto-arranged, a single
-    //    page is shown and additional pages are added as needed.
+    // 1. Page grid — draw pages based on appState.pagesWide / pagesTall.
+    //    Page count is fixed by autoArrange(); dragging pieces does NOT add pages.
+    //    Pages are separated by pageSep (= margin) and start at model origin (0,0).
     private func drawPaper(_ ctx: GraphicsContext, result: UnfoldResult, xf: CGAffineTransform) {
-        let paper = appState.settings.print.effectivePaper
-        let pageW = CGFloat(paper.widthMm)
-        let pageH = CGFloat(paper.heightMm)
+        let paper   = appState.settings.print.effectivePaper
+        let pageW   = CGFloat(paper.widthMm)
+        let pageH   = CGFloat(paper.heightMm)
+        let pageSep = CGFloat(appState.settings.print.marginMm)
 
-        let bb    = result.boundingBox
-        // Page grid origin sits at (0,0); pages extend toward positive x/y.
-        // Ensure at least one page always visible even if content is at negative coords.
-        let contentMaxX = max(CGFloat(bb.max.x), pageW)
-        let contentMaxY = max(CGFloat(bb.max.y), pageH)
-        let contentMinX = min(CGFloat(bb.min.x), 0)
-        let contentMinY = min(CGFloat(bb.min.y), 0)
+        let numCols = max(1, appState.pagesWide)
+        let numRows = max(1, appState.pagesTall)
 
-        let numCols = max(1, Int(ceil((contentMaxX - contentMinX) / pageW)))
-        let numRows = max(1, Int(ceil((contentMaxY - contentMinY) / pageH)))
-
-        // Shadow: draw slightly-offset dark rect first
-        let shadowOff: CGFloat = 2
+        // Shadow pass
         for row in 0..<numRows {
             for col in 0..<numCols {
-                let x = contentMinX + CGFloat(col) * pageW
-                let y = contentMinY + CGFloat(row) * pageH
+                let x = CGFloat(col) * (pageW + pageSep)
+                let y = CGFloat(row) * (pageH + pageSep)
                 let shadow = CGRect(x: x, y: y, width: pageW, height: pageH)
-                    .applying(xf).offsetBy(dx: shadowOff, dy: shadowOff)
+                    .applying(xf).offsetBy(dx: 2, dy: 2)
                 ctx.fill(Path(shadow), with: .color(.black.opacity(0.08)))
             }
         }
 
-        // Page fill + border
+        // Page fill + border + label
         for row in 0..<numRows {
             for col in 0..<numCols {
-                let x = contentMinX + CGFloat(col) * pageW
-                let y = contentMinY + CGFloat(row) * pageH
+                let x = CGFloat(col) * (pageW + pageSep)
+                let y = CGFloat(row) * (pageH + pageSep)
                 let pageRect = CGRect(x: x, y: y, width: pageW, height: pageH).applying(xf)
                 ctx.fill(Path(pageRect), with: .color(.white))
                 ctx.stroke(Path(pageRect), with: .color(.black.opacity(0.18)), lineWidth: 0.7)
 
-                // Page number label in top-left corner (small, subdued)
                 if numCols * numRows > 1 {
                     let pageNum = row * numCols + col + 1
-                    let labelPt = CGPoint(x: pageRect.minX + 4, y: pageRect.minY + 2)
                     ctx.draw(
                         Text("p\(pageNum)")
                             .font(.system(size: 9))
                             .foregroundColor(Color.black.opacity(0.25)),
-                        at: CGPoint(x: labelPt.x + 10, y: labelPt.y + 6)
+                        at: CGPoint(x: pageRect.minX + 14, y: pageRect.minY + 6)
                     )
                 }
             }

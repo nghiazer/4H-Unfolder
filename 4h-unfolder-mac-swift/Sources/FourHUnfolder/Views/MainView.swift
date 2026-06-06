@@ -136,10 +136,10 @@ struct MainView: View {
             Button {
                 appState.showUnfoldSetup = true
             } label: {
-                Label("Unfold", systemImage: "triangle.bottomhalf.pattern.checkered")
+                Label("Unfold", systemImage: "scissors")
             }
             .disabled(appState.mesh == nil || appState.isLoading)
-            .help("Run unfold pipeline (⌘U)")
+            .help("Unfold mesh into 2D pattern (⌘U)")
 
             Divider()
 

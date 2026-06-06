@@ -24,6 +24,10 @@ final class AppState: ObservableObject {
     @Published var meshScaleMmPerUnit: Float = 1.0
     /// Controls whether the Unfold Setup sheet is visible.
     @Published var showUnfoldSetup = false
+    /// Number of page columns in the current layout (set by autoArrange).
+    @Published var pagesWide: Int = 1
+    /// Number of page rows in the current layout (set by autoArrange).
+    @Published var pagesTall: Int = 1
 
     /// URL of the file the current mesh was loaded from (needed for project save).
     private(set) var sourceMeshURL: URL?
@@ -148,48 +152,89 @@ final class AppState: ObservableObject {
 
     // MARK: - Auto-arrange pieces on paper
 
+    /// Packs all pieces into a multi-page grid.
+    /// Pages expand to the right (up to maxPageCols columns), then wrap to a new page row.
     func autoArrange() {
         guard var result = unfoldResult else { return }
-        let paper  = settings.print.effectivePaper
-        let margin = Float(settings.print.marginMm)
-        let pageW  = Float(paper.widthMm)
+        let paper   = settings.print.effectivePaper
+        let margin  = Float(settings.print.marginMm)
+        let pageW   = Float(paper.widthMm)
+        let pageH   = Float(paper.heightMm)
+        let pageSep = margin          // gap between adjacent pages
+        let maxCols = 4               // max page columns before starting a new page row
+
+        // Sort pieces largest-area first so big pieces get prime positions
+        let sortedPieces = result.pieces.sorted { lhs, rhs in
+            func area(_ faceIds: [Int]) -> Float {
+                let faces = result.faces.filter { faceIds.contains($0.faceId) }
+                guard !faces.isEmpty else { return 0 }
+                let xs = faces.flatMap { [$0.v0.x, $0.v1.x, $0.v2.x] }
+                let ys = faces.flatMap { [$0.v0.y, $0.v1.y, $0.v2.y] }
+                return (xs.max()! - xs.min()!) * (ys.max()! - ys.min()!)
+            }
+            return area(lhs) > area(rhs)
+        }
 
         var newFaces = result.faces
         var newTabs  = result.tabs
-        var curX: Float = margin
-        var curY: Float = margin
-        var rowH: Float = 0
 
-        for faceIds in result.pieces {
-            let faceSet   = Set(faceIds)
+        var localX: Float = margin
+        var localY: Float = margin
+        var rowH:   Float = 0
+        var pageCol = 0, pageRow = 0
+        var newPagesWide = 1, newPagesTall = 1
+
+        for faceIds in sortedPieces {
+            let faceSet    = Set(faceIds)
             let pieceFaces = result.faces.filter { faceSet.contains($0.faceId) }
             guard !pieceFaces.isEmpty else { continue }
 
             let allX = pieceFaces.flatMap { [$0.v0.x, $0.v1.x, $0.v2.x] }
             let allY = pieceFaces.flatMap { [$0.v0.y, $0.v1.y, $0.v2.y] }
-            let minX = allX.min()!, maxX = allX.max()!
-            let minY = allY.min()!, maxY = allY.max()!
-            let w = maxX - minX, h = maxY - minY
+            let minX = allX.min()!, minY = allY.min()!
+            let w = allX.max()! - minX, h = allY.max()! - minY
 
-            if curX + w > pageW - margin && curX > margin {
-                curX = margin; curY += rowH + margin; rowH = 0
+            // Wrap to next row within the current page when horizontal space runs out
+            if localX > margin && localX + w > pageW - margin {
+                localX = margin
+                localY += rowH + margin
+                rowH = 0
             }
 
-            let off = SIMD2<Float>(curX - minX, curY - minY)
+            // Advance to the next page column when vertical space on this page runs out
+            if localY > margin && localY + h > pageH - margin {
+                pageCol += 1
+                if pageCol >= maxCols {   // hit column limit → start a new page row
+                    pageCol = 0
+                    pageRow += 1
+                }
+                localX = margin; localY = margin; rowH = 0
+            }
+
+            // Absolute position in mm across the full multi-page canvas
+            let absX = Float(pageCol) * (pageW + pageSep) + localX
+            let absY = Float(pageRow) * (pageH + pageSep) + localY
+            let off  = SIMD2<Float>(absX - minX, absY - minY)
+
             for i in newFaces.indices where faceSet.contains(newFaces[i].faceId) {
                 newFaces[i] = newFaces[i].translated(by: off)
             }
             for i in newTabs.indices where faceSet.contains(newTabs[i].faceId) {
                 newTabs[i] = newTabs[i].translated(by: off)
             }
-            curX += w + margin
+
+            localX += w + margin
             rowH = max(rowH, h)
+            newPagesWide = max(newPagesWide, pageCol + 1)
+            newPagesTall = max(newPagesTall, pageRow + 1)
         }
 
         result.faces = newFaces
         result.tabs  = newTabs
         unfoldResult = result
         pieceOffsets = [:]
+        pagesWide    = newPagesWide
+        pagesTall    = newPagesTall
     }
 
     // MARK: - Mesh file operations
@@ -215,6 +260,8 @@ final class AppState: ObservableObject {
         flapOverrides = [:]
         undoStack = []
         redoStack = []
+        pagesWide = 1
+        pagesTall = 1
         do {
             let loaded = try await loader.load(from: url)
             mesh = loaded
