@@ -54,6 +54,13 @@ struct MainView: View {
             $0.name.isEmpty ? "4H Unfolder" : $0.name
         } ?? "4H Unfolder")
         .toolbar { toolbarItems }
+        .sheet(isPresented: $appState.showUnfoldSetup) {
+            if let mesh = appState.mesh {
+                UnfoldSetupSheet(mesh: mesh) { scale in
+                    appState.unfoldAndArrange(scaleMmPerUnit: scale)
+                }
+            }
+        }
         // Accept .obj / .pdo / .4hu dragged onto the window
         .onDrop(of: [UTType.fileURL], isTargeted: $isDropTarget) { providers in
             guard let provider = providers.first else { return false }
@@ -127,7 +134,7 @@ struct MainView: View {
 
             // Unfold
             Button {
-                Task { await appState.unfold() }
+                appState.showUnfoldSetup = true
             } label: {
                 Label("Unfold", systemImage: "triangle.bottomhalf.pattern.checkered")
             }

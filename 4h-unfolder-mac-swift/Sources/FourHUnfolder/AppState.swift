@@ -20,6 +20,10 @@ final class AppState: ObservableObject {
     @Published var textureCache: [Int: CGImage] = [:]
     /// Piece-index (index in result.pieces) → cumulative drag offset in mm
     @Published var pieceOffsets: [Int: SIMD2<Float>] = [:]
+    /// Scale factor used for the last unfold (mm per model unit). Set by UnfoldSetupSheet.
+    @Published var meshScaleMmPerUnit: Float = 1.0
+    /// Controls whether the Unfold Setup sheet is visible.
+    @Published var showUnfoldSetup = false
 
     /// URL of the file the current mesh was loaded from (needed for project save).
     private(set) var sourceMeshURL: URL?
@@ -233,10 +237,19 @@ final class AppState: ObservableObject {
             edgeOverrides: edgeOverrides,
             flapOverrides: flapOverrides,
             settings: settings.print,
-            meshScaleMm: settings.general.meshScaleToMm
+            meshScaleMm: meshScaleMmPerUnit
         )
         pieceOffsets = [:]
         isLoading = false
+    }
+
+    /// Called by UnfoldSetupSheet on confirm: stores scale, runs unfold, then auto-arranges.
+    func unfoldAndArrange(scaleMmPerUnit: Float) {
+        meshScaleMmPerUnit = scaleMmPerUnit
+        Task {
+            await unfold()
+            autoArrange()
+        }
     }
 
     // MARK: - Project save / load (.4hu bundle)
