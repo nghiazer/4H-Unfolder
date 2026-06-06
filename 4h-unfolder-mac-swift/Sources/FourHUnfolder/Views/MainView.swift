@@ -143,6 +143,32 @@ struct MainView: View {
 
             Divider()
 
+            // Canvas mode: Edit Edges / Edit Flaps / Rotate Pivot (mutually exclusive)
+            Button { appState.canvasMode = .editEdge } label: {
+                Label("Edit Edges", systemImage: "pencil.tip")
+            }
+            .background(appState.canvasMode == .editEdge ? Color.accentColor.opacity(0.15) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 4))
+            .help("Edit Edges: click edges to toggle fold/cut (⌘1)")
+
+            Button { appState.canvasMode = .editFlap } label: {
+                Label("Edit Flaps", systemImage: "square.on.square")
+            }
+            .disabled(appState.unfoldResult == nil)
+            .background(appState.canvasMode == .editFlap ? Color.accentColor.opacity(0.15) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 4))
+            .help("Edit Flaps: click edges to set glue tab override (⌘2)")
+
+            Button { appState.canvasMode = .rotatePivot } label: {
+                Label("Rotate Pivot", systemImage: "arrow.triangle.2.circlepath")
+            }
+            .disabled(appState.unfoldResult == nil)
+            .background(appState.canvasMode == .rotatePivot ? Color.accentColor.opacity(0.15) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 4))
+            .help("Rotate Pivot: click vertex as pivot, then another as handle (⌘3)")
+
+            Divider()
+
             // Export SVG
             Button {
                 Task { await appState.exportSVG() }

@@ -6,6 +6,14 @@ import ImageIO
 // internal symbols remain accessible here without a full public API surface.
 @testable import FourHUnfolderCore
 
+// MARK: - Canvas interaction mode
+
+enum CanvasMode: Equatable {
+    case editEdge     // default: click edges to toggle fold/cut
+    case editFlap     // click edges to apply selected FlapMode override
+    case rotatePivot  // click vertices to pick pivot → handle → live rotate
+}
+
 @MainActor
 final class AppState: ObservableObject {
     @Published var mesh: Mesh?
@@ -20,6 +28,8 @@ final class AppState: ObservableObject {
     @Published var textureCache: [Int: CGImage] = [:]
     /// Piece-index (index in result.pieces) → cumulative drag offset in mm
     @Published var pieceOffsets: [Int: SIMD2<Float>] = [:]
+    /// Piece-index → rotation in degrees around piece bbox center
+    @Published var pieceRotations: [Int: Float] = [:]
     /// Scale factor used for the last unfold (mm per model unit). Set by UnfoldSetupSheet.
     @Published var meshScaleMmPerUnit: Float = 1.0
     /// Controls whether the Unfold Setup sheet is visible.
@@ -28,6 +38,12 @@ final class AppState: ObservableObject {
     @Published var pagesWide: Int = 1
     /// Number of page rows in the current layout (set by autoArrange).
     @Published var pagesTall: Int = 1
+    /// Active canvas interaction mode.
+    @Published var canvasMode: CanvasMode = .editEdge
+    /// Selected FlapMode for inner (cut) edges in editFlap mode.
+    @Published var selectedInnerFlapMode: FlapMode = .default
+    /// Selected FlapMode for border edges in editFlap mode.
+    @Published var selectedBorderFlapMode: FlapMode = .default
 
     /// URL of the file the current mesh was loaded from (needed for project save).
     private(set) var sourceMeshURL: URL?
@@ -109,6 +125,22 @@ final class AppState: ObservableObject {
     func offset(forFaceId fid: Int, result: UnfoldResult) -> SIMD2<Float> {
         guard let pi = pieceIndex(forFaceId: fid, result: result) else { return .zero }
         return pieceOffsets[pi] ?? .zero
+    }
+
+    func rotation(forFaceId fid: Int, result: UnfoldResult) -> Float {
+        guard let pi = pieceIndex(forFaceId: fid, result: result) else { return 0 }
+        return pieceRotations[pi] ?? 0
+    }
+
+    /// Bbox center of a piece's raw face positions (no offsets applied).
+    /// Used as the rotation origin so the piece rotates around its own center.
+    func pieceCenter(for faceIds: [Int], result: UnfoldResult) -> SIMD2<Float> {
+        let faceSet = Set(faceIds)
+        let faces = result.faces.filter { faceSet.contains($0.faceId) }
+        guard !faces.isEmpty else { return .zero }
+        let allX = faces.flatMap { [$0.v0.x, $0.v1.x, $0.v2.x] }
+        let allY = faces.flatMap { [$0.v0.y, $0.v1.y, $0.v2.y] }
+        return SIMD2((allX.min()! + allX.max()!) / 2, (allY.min()! + allY.max()!) / 2)
     }
 
     // MARK: - Texture cache (materialId → CGImage)
@@ -315,7 +347,8 @@ final class AppState: ObservableObject {
             settings: settings.print,
             meshScaleMm: meshScaleMmPerUnit
         )
-        pieceOffsets = [:]
+        pieceOffsets   = [:]
+        pieceRotations = [:]
         isLoading = false
     }
 

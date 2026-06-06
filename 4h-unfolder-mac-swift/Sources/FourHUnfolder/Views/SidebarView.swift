@@ -54,6 +54,16 @@ struct SidebarView: View {
                 Toggle("Show Fold Angles",  isOn: $appState.settings.view2D.showFoldAngles)
                 Toggle("Show Glue Tabs",    isOn: $appState.settings.view2D.showGlueTabs)
             }
+            if appState.canvasMode == .editFlap && appState.unfoldResult != nil {
+                NamedSection("Edit Flap") {
+                    editFlapSection
+                }
+            }
+            if appState.canvasMode == .rotatePivot {
+                NamedSection("Rotate Pivot") {
+                    rotatePivotHint
+                }
+            }
             if let result = appState.unfoldResult {
                 NamedSection("Pattern") {
                     infoRow("Faces",  "\(result.faces.count)")
@@ -71,6 +81,73 @@ struct SidebarView: View {
         }
         .formStyle(.grouped)
         .onChange(of: appState.settings, perform: { $0.save() })
+    }
+
+    // MARK: - Edit Flap panel
+
+    private static let innerOptions: [(FlapMode, String)] = [
+        (.switchPosition,  "Switch Flap Position"),
+        (.onOn_ThisSide,   "ON-ON (This Side)"),
+        (.offOn_OtherSide, "OFF-ON (Other Side)"),
+        (.offOff_NoFlap,   "OFF-OFF (No Flap)"),
+        (.onOn_BothSides,  "ON-ON (Both Sides)"),
+        (.default,         "Do Nothing"),
+    ]
+
+    private static let borderOptions: [(FlapMode, String)] = [
+        (.default,             "Do Nothing"),
+        (.border_MountainFold, "Flap + Mountain Fold"),
+        (.border_ValleyFold,   "Flap + Valley Fold"),
+        (.border_NoFold,       "Flap without Fold"),
+        (.border_NoFlap,       "No Flap"),
+    ]
+
+    @ViewBuilder
+    private var editFlapSection: some View {
+        Text("Click an edge on the canvas to apply the selected override.")
+            .font(.caption).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        Divider()
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Inner Edge (cut)").font(.caption).foregroundStyle(.secondary)
+            Picker("", selection: $appState.selectedInnerFlapMode) {
+                ForEach(Self.innerOptions, id: \.0) { mode, label in
+                    Text(label).tag(mode)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+        }
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Border Edge (mesh boundary)").font(.caption).foregroundStyle(.secondary)
+            Picker("", selection: $appState.selectedBorderFlapMode) {
+                ForEach(Self.borderOptions, id: \.0) { mode, label in
+                    Text(label).tag(mode)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+        }
+        Button("Reset All Flap Overrides") {
+            appState.pushUndo()
+            appState.flapOverrides.removeAll()
+            Task { await appState.unfold(); appState.autoArrange() }
+        }
+        .buttonStyle(.borderless).foregroundStyle(.red)
+        .font(.caption)
+    }
+
+    @ViewBuilder
+    private var rotatePivotHint: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label("Phase 1", systemImage: "1.circle").font(.caption).foregroundStyle(.secondary)
+            Text("Click a vertex dot to set the pivot (red).").font(.caption2)
+            Label("Phase 2", systemImage: "2.circle").font(.caption).foregroundStyle(.secondary)
+            Text("Click another vertex to start rotating.").font(.caption2)
+            Label("Phase 3", systemImage: "3.circle").font(.caption).foregroundStyle(.secondary)
+            Text("Drag to rotate. Click empty space to reset.").font(.caption2)
+        }
+        .padding(.vertical, 2)
     }
 
     // MARK: - Sub-views
