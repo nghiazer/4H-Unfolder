@@ -169,6 +169,24 @@ struct MainView: View {
 
             Divider()
 
+            // Group / Ungroup selected pieces
+            Button { appState.groupSelected() } label: {
+                Label("Group", systemImage: "rectangle.3.group")
+            }
+            .disabled(appState.selectedPieceIndices.count < 2)
+            .help("Group selected pieces — move together when dragged")
+
+            Button { appState.ungroupSelected() } label: {
+                Label("Ungroup", systemImage: "rectangle.3.group.fill")
+            }
+            .disabled(!appState.selectedPieceIndices.contains {
+                guard let result = appState.unfoldResult, $0 < result.pieces.count else { return false }
+                return appState.userGroups[result.pieces[$0].min() ?? -1] != nil
+            })
+            .help("Remove group assignment from selected pieces")
+
+            Divider()
+
             // Export SVG
             Button {
                 Task { await appState.exportSVG() }

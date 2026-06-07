@@ -34,6 +34,12 @@ final class AppState: ObservableObject {
     @Published var meshScaleMmPerUnit: Float = 1.0
     /// Controls whether the Unfold Setup sheet is visible.
     @Published var showUnfoldSetup = false
+    /// Piece indices (index in result.pieces) that are currently selected in the 2D canvas.
+    @Published var selectedPieceIndices: Set<Int> = []
+    /// minFaceId of piece → userGroupId. Stable key across re-unfold; persisted in .4hu.
+    @Published var userGroups: [Int: Int] = [:]
+    /// Counter for assigning new user group IDs.
+    @Published var nextUserGroupId: Int = 1
     /// Number of page columns in the current layout (set by autoArrange).
     @Published var pagesWide: Int = 1
     /// Number of page rows in the current layout (set by autoArrange).
@@ -95,11 +101,158 @@ final class AppState: ObservableObject {
         Task { await unfold(); autoArrange() }
     }
 
+    // MARK: - Piece selection & grouping
+
+    func clearSelection() { selectedPieceIndices = [] }
+
+    /// Assigns a new shared group ID to all currently selected pieces.
+    func groupSelected() {
+        guard let result = unfoldResult, selectedPieceIndices.count >= 2 else { return }
+        let gid = nextUserGroupId; nextUserGroupId += 1
+        for pi in selectedPieceIndices {
+            guard pi < result.pieces.count, let minFid = result.pieces[pi].min() else { continue }
+            userGroups[minFid] = gid
+        }
+    }
+
+    /// Removes the group assignment from all currently selected pieces.
+    func ungroupSelected() {
+        guard let result = unfoldResult else { return }
+        for pi in selectedPieceIndices {
+            guard pi < result.pieces.count, let minFid = result.pieces[pi].min() else { continue }
+            userGroups.removeValue(forKey: minFid)
+        }
+    }
+
+    /// Returns the userGroupId for a piece at the given index (keyed by its minFaceId).
+    func userGroupId(forPieceIdx pi: Int, result: UnfoldResult) -> Int? {
+        guard pi < result.pieces.count, let minFid = result.pieces[pi].min() else { return nil }
+        return userGroups[minFid]
+    }
+
     func clearEdgeOverrides() {
         pushUndo()
         edgeOverrides.removeAll()
         flapOverrides.removeAll()
         Task { await unfold(); autoArrange() }
+    }
+
+    // MARK: - Smart edge operations (editEdge mode — position-aware)
+
+    /// Fold → cut (disjoin). After unfold, keeps all pieces at their old display
+    /// positions and nudges the newly separated piece away slightly.
+    func splitEdge(_ meshEdgeId: Int) {
+        guard let mesh, meshEdgeId < mesh.edges.count else { return }
+        guard let result = unfoldResult else { return }
+        pushUndo()
+        let oldCentroids   = captureEffectiveCentroids(result: result)
+        let oldFaceSets    = result.pieces.map { Set($0) }
+        edgeOverrides[meshEdgeId] = .cut
+        Task {
+            await unfold()
+            repositionAfterSplit(oldFaceSets: oldFaceSets, oldCentroids: oldCentroids)
+        }
+    }
+
+    /// Cut → fold (join). After unfold, keeps the merged piece near the anchor
+    /// piece's old display position (anchor = the piece the user wants to stay put).
+    func joinEdge(_ meshEdgeId: Int, anchorFaceId: Int) {
+        guard let mesh, meshEdgeId < mesh.edges.count else { return }
+        guard let result = unfoldResult else { return }
+        pushUndo()
+        let oldCentroids = captureEffectiveCentroids(result: result)
+        let oldFaceSets  = result.pieces.map { Set($0) }
+        edgeOverrides[meshEdgeId] = .fold
+        Task {
+            await unfold()
+            repositionAfterJoin(oldFaceSets: oldFaceSets, oldCentroids: oldCentroids,
+                                anchorFaceId: anchorFaceId)
+        }
+    }
+
+    // MARK: - Reposition helpers
+
+    /// Effective centroid (raw face positions + pieceOffset) per old piece index.
+    private func captureEffectiveCentroids(result: UnfoldResult) -> [SIMD2<Float>] {
+        result.pieces.enumerated().map { (pi, faceIds) in
+            let faceSet = Set(faceIds)
+            let off = pieceOffsets[pi] ?? .zero
+            let faces = result.faces.filter { faceSet.contains($0.faceId) }
+            guard !faces.isEmpty else { return .zero }
+            let xs = faces.flatMap { [$0.v0.x + off.x, $0.v1.x + off.x, $0.v2.x + off.x] }
+            let ys = faces.flatMap { [$0.v0.y + off.y, $0.v1.y + off.y, $0.v2.y + off.y] }
+            return SIMD2((xs.min()! + xs.max()!) / 2, (ys.min()! + ys.max()!) / 2)
+        }
+    }
+
+    /// Bbox centroid of a piece's raw face positions (no offset).
+    private func rawCentroid(forPieceIdx pi: Int, result: UnfoldResult) -> SIMD2<Float> {
+        let faceSet = Set(result.pieces[pi])
+        let faces = result.faces.filter { faceSet.contains($0.faceId) }
+        guard !faces.isEmpty else { return .zero }
+        let xs = faces.flatMap { [$0.v0.x, $0.v1.x, $0.v2.x] }
+        let ys = faces.flatMap { [$0.v0.y, $0.v1.y, $0.v2.y] }
+        return SIMD2((xs.min()! + xs.max()!) / 2, (ys.min()! + ys.max()!) / 2)
+    }
+
+    private func repositionAfterSplit(oldFaceSets: [Set<Int>], oldCentroids: [SIMD2<Float>]) {
+        guard let result = unfoldResult else { return }
+        for (newPi, newFaceIds) in result.pieces.enumerated() {
+            let newSet  = Set(newFaceIds)
+            let newRaw  = rawCentroid(forPieceIdx: newPi, result: result)
+
+            // Find best-matching old piece (most shared faces)
+            var bestOldPi = 0; var bestShared = 0
+            for (oldPi, oldSet) in oldFaceSets.enumerated() {
+                let shared = newSet.intersection(oldSet).count
+                if shared > bestShared { bestShared = shared; bestOldPi = oldPi }
+            }
+
+            let targetCent = oldCentroids[bestOldPi]
+            let oldSet = oldFaceSets[bestOldPi]
+
+            // "Minor" split: this piece is a sub-piece AND another new piece matched
+            // the same old piece with even more faces (i.e. THIS is the separated chunk).
+            let isMinorSplit = newSet.count < oldSet.count &&
+                result.pieces.enumerated().contains { (otherPi, otherIds) in
+                    otherPi != newPi && Set(otherIds).intersection(oldSet).count > bestShared
+                }
+
+            if isMinorSplit {
+                // Push the separated piece 30mm right+down so it's visibly distinct
+                pieceOffsets[newPi] = targetCent + SIMD2<Float>(30, 30) - newRaw
+            } else {
+                pieceOffsets[newPi] = targetCent - newRaw
+            }
+        }
+        recomputePagesForOffsets()
+    }
+
+    private func repositionAfterJoin(oldFaceSets: [Set<Int>], oldCentroids: [SIMD2<Float>],
+                                     anchorFaceId: Int) {
+        guard let result = unfoldResult else { return }
+        // Find old piece that contained the anchor face → its centroid is the target
+        let anchorOldPi = oldFaceSets.firstIndex { $0.contains(anchorFaceId) } ?? 0
+        let anchorTargetCent = oldCentroids[anchorOldPi]
+
+        for (newPi, newFaceIds) in result.pieces.enumerated() {
+            let newSet = Set(newFaceIds)
+            let newRaw = rawCentroid(forPieceIdx: newPi, result: result)
+
+            if newSet.contains(anchorFaceId) {
+                // Merged piece: snap to anchor's old position
+                pieceOffsets[newPi] = anchorTargetCent - newRaw
+            } else {
+                // Unrelated piece: restore to its own old position
+                var bestOldPi = 0; var bestShared = 0
+                for (oldPi, oldSet) in oldFaceSets.enumerated() {
+                    let shared = newSet.intersection(oldSet).count
+                    if shared > bestShared { bestShared = shared; bestOldPi = oldPi }
+                }
+                pieceOffsets[newPi] = oldCentroids[bestOldPi] - newRaw
+            }
+        }
+        recomputePagesForOffsets()
     }
 
     /// Cycles through faces one at a time. Repeated calls advance the selection.
@@ -130,6 +283,13 @@ final class AppState: ObservableObject {
     func rotation(forFaceId fid: Int, result: UnfoldResult) -> Float {
         guard let pi = pieceIndex(forFaceId: fid, result: result) else { return 0 }
         return pieceRotations[pi] ?? 0
+    }
+
+    /// Effective centroid of a piece = raw bbox center + current offset.
+    /// Stays fixed when the piece is rotated (rotation is around the raw center).
+    func effectiveCentroid(forPieceIdx pi: Int, result: UnfoldResult) -> SIMD2<Float> {
+        guard pi < result.pieces.count else { return .zero }
+        return pieceCenter(for: result.pieces[pi], result: result) + (pieceOffsets[pi] ?? .zero)
     }
 
     /// Bbox center of a piece's raw face positions (no offsets applied).
@@ -290,12 +450,13 @@ final class AppState: ObservableObject {
             newPagesTall = max(newPagesTall, pageRow + 1)
         }
 
-        result.faces = newFaces
-        result.tabs  = newTabs
-        unfoldResult = result
-        pieceOffsets = [:]
-        pagesWide    = newPagesWide
-        pagesTall    = newPagesTall
+        result.faces         = newFaces
+        result.tabs          = newTabs
+        unfoldResult         = result
+        pieceOffsets         = [:]
+        pagesWide            = newPagesWide
+        pagesTall            = newPagesTall
+        selectedPieceIndices = []
     }
 
     // MARK: - Mesh file operations
@@ -323,6 +484,9 @@ final class AppState: ObservableObject {
         redoStack = []
         pagesWide = 1
         pagesTall = 1
+        selectedPieceIndices = []
+        userGroups = [:]
+        nextUserGroupId = 1
         do {
             let loaded = try await loader.load(from: url)
             mesh = loaded
@@ -347,8 +511,9 @@ final class AppState: ObservableObject {
             settings: settings.print,
             meshScaleMm: meshScaleMmPerUnit
         )
-        pieceOffsets   = [:]
-        pieceRotations = [:]
+        pieceOffsets         = [:]
+        pieceRotations       = [:]
+        selectedPieceIndices = []   // clear selection; userGroups kept (stable by minFaceId)
         isLoading = false
     }
 
@@ -398,6 +563,7 @@ final class AppState: ObservableObject {
         let snap        = settings
         let meshSnap    = sourceMeshURL
         let offsetsSnap = pieceOffsets
+        let groupsSnap  = userGroups
         do {
             try await Task.detached(priority: .utility) {
                 try ProjectSerializer().save(
@@ -406,6 +572,7 @@ final class AppState: ObservableObject {
                     flapOverrides: flapOv,
                     settings: snap,
                     pieceOffsets: offsetsSnap,
+                    userGroups: groupsSnap,
                     to: url
                 )
             }.value
@@ -443,6 +610,11 @@ final class AppState: ObservableObject {
                       kv.value[0].isFinite, kv.value[1].isFinite else { return }
                 d[pi] = SIMD2<Float>(kv.value[0], kv.value[1])
             }
+            userGroups = state.userGroups.reduce(into: [Int: Int]()) { d, kv in
+                guard let k = Int(kv.key) else { return }
+                d[k] = kv.value
+            }
+            nextUserGroupId = (userGroups.values.max() ?? 0) + 1
 
             await unfold()
             autoArrange()
