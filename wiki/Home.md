@@ -37,9 +37,7 @@ This wiki is for **how to use the app** and **long-form explanations**. Quick re
 
 ### Wiki pages
 - ✅ Home · Quick Start · Installation · FAQ
-- ✅ [Editing Edges & Flaps](Editing-Edges-and-Flaps)
-- ✅ [Export & Printing](Export-and-Printing)
+- ✅ [Editing Edges & Flaps](Editing-Edges-and-Flaps) · [Export & Printing](Export-and-Printing)
 - ✅ [**The Unfold Algorithm**](The-Unfold-Algorithm) (flagship deep-dive)
-- ⬜ Project Files (`.4hu`)
-- ⬜ Architecture Overview
-- ⬜ Cross-Platform Parity · Roadmap · Glossary
+- ✅ [Project Files (`.4hu`)](Project-Files) · [Architecture Overview](Architecture-Overview)
+- ✅ [Cross-Platform Parity](Cross-Platform-Parity) · [Roadmap](Roadmap) · [Glossary](Glossary)
