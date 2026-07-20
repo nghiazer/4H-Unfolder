@@ -11,19 +11,19 @@ public class GlueTabGeneratorTests
 {
     // ── helpers ───────────────────────────────────────────────────────────────
 
-    /// A simple right-angle face pointing "up" (centroid above edge 0).
+    /// A simple right-angle face: edge 0 is a border, edges 1&2 are fold (no tab).
     private static UnfoldedFace BorderFace(int meshEdgeId = 10) =>
         new(faceId: 0,
             v0: new Vector2(0, 0), v1: new Vector2(4, 0), v2: new Vector2(2, 3),
-            edgeIsFold:    [false, false, false],
-            edgeIsBoundary:[true,  false, false],          // edge 0 is a border
+            edgeIsFold:    [false, true,  true ],  // edges 1&2 fold → isolated for test
+            edgeIsBoundary:[true,  false, false],
             meshEdgeIds:   [meshEdgeId, -1, -1]);
 
-    /// A face whose edge 0 is an interior cut (not fold, not boundary).
+    /// A face whose edge 0 is an interior cut; edges 1&2 are fold (no tab).
     private static UnfoldedFace CutFace(int meshEdgeId = 20) =>
         new(faceId: 1,
             v0: new Vector2(0, 0), v1: new Vector2(4, 0), v2: new Vector2(2, 3),
-            edgeIsFold:    [false, false, false],
+            edgeIsFold:    [false, true,  true ],  // edges 1&2 fold → isolated for test
             edgeIsBoundary:[false, false, false],
             meshEdgeIds:   [meshEdgeId, -1, -1]);
 

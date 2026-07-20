@@ -29,7 +29,8 @@ public class SvgExporter : IExporter
 
     public void Export(UnfoldResult result, string filePath,
                        string? texturePath = null,
-                       IReadOnlyDictionary<int, string?>? perMaterialTextures = null)
+                       IReadOnlyDictionary<int, string?>? perMaterialTextures = null,
+                       IReadOnlyList<IReadOnlyList<Vector2>>? paddingPolygons = null)
     {
         var p = _settings.Current.Print;
 
@@ -99,6 +100,7 @@ public class SvgExporter : IExporter
         sb.AppendLine( "      .boundary { stroke:#505050;      stroke-width:0.6; fill:none; }");
         sb.AppendLine($"      .tab      {{ fill:{tabFill}; stroke:#2e7d32; stroke-width:0.6; }}");
         sb.AppendLine( "      .label    { font-family:sans-serif; font-size:8px; fill:#888; }");
+        sb.AppendLine( "      .padding  { stroke:#404040; stroke-width:0.8; stroke-dasharray:4,4; fill:none; opacity:0.7; }");
         sb.AppendLine("    </style>");
 
         // Clip paths for textured faces
@@ -191,6 +193,18 @@ public class SvgExporter : IExporter
             {
                 string pts = string.Join(" ", tab.Vertices.Select(v => Pt(v)));
                 sb.AppendLine($"  <polygon points=\"{pts}\" class=\"tab\"/>");
+            }
+        }
+
+        // ── outline padding (seam allowance guide) ─────────────────────────────
+        if (paddingPolygons != null && paddingPolygons.Count > 0)
+        {
+            sb.AppendLine("  <!-- outline padding (seam allowance) -->");
+            foreach (var poly in paddingPolygons)
+            {
+                if (poly.Count < 3) continue;
+                string pts = string.Join(" ", poly.Select(v => Pt(v)));
+                sb.AppendLine($"  <polygon points=\"{pts}\" class=\"padding\"/>");
             }
         }
 

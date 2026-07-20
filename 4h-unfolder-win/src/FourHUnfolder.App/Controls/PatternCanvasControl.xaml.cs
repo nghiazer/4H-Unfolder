@@ -11,6 +11,7 @@ using System.Windows.Shapes;
 using FourHUnfolder.App.ViewModels;
 using FourHUnfolder.Domain.Models;
 using FourHUnfolder.Domain.Settings;
+using FourHUnfolder.Geometry.Algorithms;
 
 namespace FourHUnfolder.App.Controls;
 
@@ -524,7 +525,8 @@ public partial class PatternCanvasControl : UserControl
         }
 
         // Piece outline: merged boundary polygon for a cleaner silhouette
-        var outlinePts = BuildPieceOutline(piece, _pxPerMm);
+        var outlineMm  = BuildPieceOutlineMm(piece);
+        var outlinePts = MmToPixels(outlineMm, _pxPerMm);
         if (outlinePts != null && outlinePts.Count >= 3)
         {
             var outlinePoly = new Polygon
@@ -540,6 +542,32 @@ public partial class PatternCanvasControl : UserControl
             };
             Panel.SetZIndex(outlinePoly, 2);
             container.Children.Add(outlinePoly);
+        }
+
+        // Outline padding (seam allowance guide): dashed enlarged outline for cutting margin
+        float paddingMm = (float)(_vm?.CurrentPrintSettings?.OutlinePaddingMm ?? 0.0);
+        if (paddingMm > 0f && outlineMm != null)
+        {
+            var v2list   = outlineMm.Select(p => new Vector2((float)p.X, (float)p.Y)).ToList();
+            var inflated = OutlinePaddingGenerator.Inflate(v2list, paddingMm);
+            var padPts   = inflated != null
+                ? new PointCollection(inflated.Select(v => new Point(v.X * _pxPerMm, v.Y * _pxPerMm)))
+                : null;
+            if (padPts != null && padPts.Count >= 3)
+            {
+                var padPoly = new Polygon
+                {
+                    Fill                = Brushes.Transparent,
+                    Stroke              = new SolidColorBrush(Color.FromArgb(180, 60, 60, 60)),
+                    StrokeThickness     = 0.9,
+                    StrokeDashArray     = new DoubleCollection([4, 4]),
+                    Points              = padPts,
+                    IsHitTestVisible    = false,
+                    SnapsToDevicePixels = true
+                };
+                Panel.SetZIndex(padPoly, 1);
+                container.Children.Add(padPoly);
+            }
         }
 
         // Glue tabs (conditionally shown)
@@ -1029,6 +1057,10 @@ public partial class PatternCanvasControl : UserControl
             var join = new MenuItem { Header = "🔗  Join pieces here (Cut → Fold)" };
             join.Click += (_, _) => _vm.ToggleEdge(et.MeshEdgeId);
             menu.Items.Add(join);
+
+            var joinGroup = new MenuItem { Header = "🔗🔗  Join connected cut edges" };
+            joinGroup.Click += (_, _) => _vm.JoinEdgeGroup(et.MeshEdgeId);
+            menu.Items.Add(joinGroup);
         }
 
         menu.IsOpen = true;
@@ -1642,13 +1674,12 @@ public partial class PatternCanvasControl : UserControl
 
     // ── piece outline merging ─────────────────────────────────────────────────
 
-    /// Computes the boundary polygon of a piece by collecting all non-fold edges,
-    /// chaining them into an ordered polygon path.  Returns null for degenerate pieces.
-    private static PointCollection? BuildPieceOutline(PieceViewModel piece, double pxPerMm)
+    /// Computes the boundary polygon of a piece in local mm coordinates.
+    /// Returns null for degenerate pieces.
+    private static List<Point>? BuildPieceOutlineMm(PieceViewModel piece)
     {
         if (piece.Faces.Length == 0) return null;
 
-        // Collect all non-fold edges as (p0, p1) pairs in local mm coords
         var edges = new List<(Point A, Point B)>();
         var seen  = new HashSet<int>();
 
@@ -1657,41 +1688,42 @@ public partial class PatternCanvasControl : UserControl
             Point[] verts = [fd.V0, fd.V1, fd.V2];
             for (int i = 0; i < 3; i++)
             {
-                if (fd.EdgeIsFold[i]) continue; // internal fold edge — skip
+                if (fd.EdgeIsFold[i]) continue;
                 int meshId = fd.MeshEdgeIds[i];
-                if (!seen.Add(meshId)) continue; // already added this boundary edge
+                if (!seen.Add(meshId)) continue;
                 edges.Add((verts[i], verts[(i + 1) % 3]));
             }
         }
 
         if (edges.Count == 0) return null;
 
-        // Chain edges into an ordered polygon
-        var polygon = new List<Point>();
+        var polygon   = new List<Point>();
         var remaining = new List<(Point A, Point B)>(edges);
-
         polygon.Add(remaining[0].A);
         polygon.Add(remaining[0].B);
         remaining.RemoveAt(0);
 
-        const double SnapDist = 0.001; // mm tolerance
-
-        for (int safety = 0; safety < edges.Count && remaining.Count > 0; safety++)
+        const double SnapDist = 0.001;
+        for (int guard = 0; guard < edges.Count && remaining.Count > 0; guard++)
         {
-            var tail = polygon[^1];
+            var tail  = polygon[^1];
             bool found = false;
-
             for (int k = 0; k < remaining.Count; k++)
             {
                 var (a, b) = remaining[k];
                 if (Near(tail, a, SnapDist)) { polygon.Add(b); remaining.RemoveAt(k); found = true; break; }
                 if (Near(tail, b, SnapDist)) { polygon.Add(a); remaining.RemoveAt(k); found = true; break; }
             }
-
-            if (!found) break; // open boundary (non-manifold mesh) — stop here
+            if (!found) break;
         }
 
-        return new PointCollection(polygon.Select(p => new Point(p.X * pxPerMm, p.Y * pxPerMm)));
+        return polygon.Count >= 3 ? polygon : null;
+    }
+
+    private static PointCollection? MmToPixels(List<Point>? mm, double pxPerMm)
+    {
+        if (mm == null || mm.Count < 3) return null;
+        return new PointCollection(mm.Select(p => new Point(p.X * pxPerMm, p.Y * pxPerMm)));
     }
 
     private static bool Near(Point a, Point b, double eps)

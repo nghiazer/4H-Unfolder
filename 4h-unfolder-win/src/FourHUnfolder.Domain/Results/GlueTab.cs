@@ -21,15 +21,20 @@ public sealed class GlueTab
     /// Non-null only for border-edge tabs; indicates the fold annotation style.
     public FlapMode? BorderFoldStyle { get; }
 
+    // When non-null, this is a merged tab whose outline has more than 4 vertices.
+    private readonly Vector2[]? _mergedPolygon;
+
     public GlueTab(int faceId, int localEdgeIdx,
                    Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3,
-                   FlapMode? borderFoldStyle = null)
+                   FlapMode? borderFoldStyle = null,
+                   Vector2[]? mergedPolygon = null)
     {
         FaceId          = faceId;
         LocalEdgeIdx    = localEdgeIdx;
         P0 = p0; P1 = p1; P2 = p2; P3 = p3;
         BorderFoldStyle = borderFoldStyle;
+        _mergedPolygon  = mergedPolygon;
     }
 
-    public Vector2[] Vertices => [P0, P1, P2, P3];
+    public Vector2[] Vertices => _mergedPolygon ?? [P0, P1, P2, P3];
 }

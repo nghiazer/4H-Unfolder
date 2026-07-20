@@ -55,7 +55,7 @@ public class UnfoldService
         // 4. BFS unfold
         var rawResult   = _unfoldEngine.Unfold(mesh, foldEdgeIds);
         var hasOverlaps = _overlapDetector.HasOverlaps(rawResult.Faces);
-        var tabs = _tabGenerator.Generate(
+        var rawTabs = _tabGenerator.Generate(
             rawResult.Faces,
             (float)(printSettings?.GlueTabDepthMm      ?? 5.0),
             (float)(printSettings?.GlueTabSideAngleDeg ?? 45.0),
@@ -63,6 +63,10 @@ public class UnfoldService
             printSettings?.AlternateFlaps ?? false,
             mesh,
             flapOverrides);
+
+        var tabs = (printSettings?.MergeAdjacentFlaps == true)
+            ? FlapMerger.Merge(rawResult.Faces, rawTabs)
+            : rawTabs;
 
         // Assign sequential 1-based IDs to every cut edge pair (both faces share the same ID)
         var cutEdgePairIds = new Dictionary<int, int>();
@@ -97,7 +101,7 @@ public class UnfoldService
         var faces = _pdoBuilder.Build(mesh);
 
         // Generate glue tabs on cut edges
-        var tabs = _tabGenerator.Generate(
+        var rawPdoTabs = _tabGenerator.Generate(
             faces,
             (float)(printSettings?.GlueTabDepthMm      ?? 5.0),
             (float)(printSettings?.GlueTabSideAngleDeg ?? 45.0),
@@ -105,6 +109,10 @@ public class UnfoldService
             printSettings?.AlternateFlaps ?? false,
             mesh,
             flapOverrides);
+
+        var tabs = (printSettings?.MergeAdjacentFlaps == true)
+            ? FlapMerger.Merge(faces, rawPdoTabs)
+            : rawPdoTabs;
 
         // Overlap detection (PDO layouts are always valid, but check anyway)
         var hasOverlaps = _overlapDetector.HasOverlaps(faces);

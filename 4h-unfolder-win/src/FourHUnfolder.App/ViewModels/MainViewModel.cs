@@ -16,6 +16,7 @@ using FourHUnfolder.Domain.Models;
 using FourHUnfolder.Domain.Persistence;
 using FourHUnfolder.Domain.Results;
 using FourHUnfolder.Domain.Settings;
+using FourHUnfolder.Geometry.Algorithms;
 using FourHUnfolder.Infrastructure.Exporters;
 // Alias to avoid ambiguity with FourHUnfolder.Application namespace
 using WpfApp = System.Windows.Application;
@@ -755,10 +756,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
         try
         {
             // Use current canvas layout (positions/rotations applied) instead of re-running unfold
-            var result   = BuildExportLayout();
-            // TD-22-3: pass per-material texture paths for multi-texture SVG export
-            var matPaths = GetMaterialTexturePaths();
-            _exporter.Export(result, dlg.FileName, _committedTexturePath, matPaths);
+            var result          = BuildExportLayout();
+            var matPaths        = GetMaterialTexturePaths();
+            var paddingPolygons = ComputePaddingPolygons(result);
+            _exporter.Export(result, dlg.FileName, _committedTexturePath, matPaths, paddingPolygons);
             StatusText = $"Exported to {Path.GetFileName(dlg.FileName)}";
         }
         catch (Exception ex) { Error("Export SVG failed", ex); }
@@ -1041,6 +1042,79 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 : $"Split   — edge {meshEdgeId} is now a cut.";
         }
         catch (Exception ex) { Error("Edge toggle failed", ex); }
+    }
+
+    /// Joins all cut edges that are connected (share a vertex) with the given edge.
+    public void JoinEdgeGroup(int meshEdgeId)
+    {
+        if (_currentMesh == null || _lastUnfoldResult == null) return;
+
+        var group = FindAdjacentCutEdgeGroup(meshEdgeId);
+        if (group.Count == 0) return;
+
+        PushUndoState();
+        foreach (var eid in group)
+            _edgeOverrides[eid] = EdgeType.Fold;
+        MarkDirty();
+        try
+        {
+            RerunUnfold();
+            StatusText = $"Joined group — {group.Count} edge(s) converted to fold.";
+        }
+        catch (Exception ex) { Error("Join group failed", ex); }
+    }
+
+    /// Returns the set of cut mesh edge IDs connected (via shared 2D vertices) to startEdgeId.
+    private HashSet<int> FindAdjacentCutEdgeGroup(int startEdgeId)
+    {
+        if (_lastUnfoldResult == null) return [];
+
+        const float EpsSquared = 0.01f * 0.01f;
+
+        // Build map: meshEdgeId → (vertex A, vertex B) for all current cut edges
+        var cutVerts = new Dictionary<int, (Vector2 A, Vector2 B)>();
+        foreach (var face in _lastUnfoldResult.Faces)
+        {
+            var v = face.Vertices;
+            for (int i = 0; i < 3; i++)
+            {
+                if (face.EdgeIsFold[i] || face.EdgeIsBoundary[i]) continue;
+                int eid = face.MeshEdgeIds[i];
+                if (eid >= 0 && !cutVerts.ContainsKey(eid))
+                    cutVerts[eid] = (v[i], v[(i + 1) % 3]);
+            }
+        }
+
+        if (!cutVerts.ContainsKey(startEdgeId)) return [];
+
+        // BFS through shared vertices
+        var visited = new HashSet<int> { startEdgeId };
+        var queue   = new Queue<int>();
+        queue.Enqueue(startEdgeId);
+
+        static bool NearSq(Vector2 a, Vector2 b, float epsSquared)
+        {
+            var d = a - b; return d.X * d.X + d.Y * d.Y < epsSquared;
+        }
+
+        while (queue.Count > 0)
+        {
+            var curr = queue.Dequeue();
+            var (cA, cB) = cutVerts[curr];
+
+            foreach (var (eid, (a, b)) in cutVerts)
+            {
+                if (visited.Contains(eid)) continue;
+                if (NearSq(cA, a, EpsSquared) || NearSq(cA, b, EpsSquared) ||
+                    NearSq(cB, a, EpsSquared) || NearSq(cB, b, EpsSquared))
+                {
+                    visited.Add(eid);
+                    queue.Enqueue(eid);
+                }
+            }
+        }
+
+        return visited;
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -1445,21 +1519,57 @@ public partial class MainViewModel : ObservableObject, IDisposable
                     ToCanvas(fd.V1.X, fd.V1.Y),
                     ToCanvas(fd.V2.X, fd.V2.Y),
                     fd.EdgeIsFold, fd.EdgeIsBoundary, uvCoords,
-                    fd.MaterialId));   // TD-22-3: propagate material ID to export
+                    fd.MaterialId,
+                    fd.MeshEdgeIds));  // propagate for padding polygon dedup
             }
 
             foreach (var tab in piece.GlueTabs)
             {
-                var pts = tab.Points;
-                tabs.Add(new GlueTab(tab.FaceId, tab.LocalEdgeIdx,
-                    ToCanvas(pts[0].X, pts[0].Y),
-                    ToCanvas(pts[1].X, pts[1].Y),
-                    ToCanvas(pts[2].X, pts[2].Y),
-                    ToCanvas(pts[3].X, pts[3].Y)));
+                var pts       = tab.Points;
+                var canvasPts = pts.Select(p => ToCanvas(p.X, p.Y)).ToArray();
+
+                if (canvasPts.Length > 4)
+                {
+                    // Merged tab — carry all polygon points into the export GlueTab
+                    tabs.Add(new GlueTab(tab.FaceId, tab.LocalEdgeIdx,
+                        canvasPts[0], canvasPts[1], canvasPts[2], canvasPts[3],
+                        mergedPolygon: canvasPts));
+                }
+                else
+                {
+                    tabs.Add(new GlueTab(tab.FaceId, tab.LocalEdgeIdx,
+                        canvasPts[0], canvasPts[1],
+                        canvasPts.Length > 2 ? canvasPts[2] : canvasPts[0],
+                        canvasPts.Length > 3 ? canvasPts[3] : canvasPts[0]));
+                }
             }
         }
 
         return new UnfoldResult(faces, tabs, false);
+    }
+
+    // ── outline padding ────────────────────────────────────────────────────────
+
+    /// Computes per-piece inflated boundary polygons from an export layout, using
+    /// the face→group map to group faces by piece before inflating.
+    private IReadOnlyList<IReadOnlyList<Vector2>>? ComputePaddingPolygons(UnfoldResult exportLayout)
+    {
+        float paddingMm = (float)_settingsService.Current.Print.OutlinePaddingMm;
+        if (paddingMm <= 0f || exportLayout.Faces.Count == 0) return null;
+
+        var byGroup = exportLayout.Faces
+            .GroupBy(f => _faceToGroupMap.GetValueOrDefault(f.FaceId, -1))
+            .Where(g => g.Key >= 0);
+
+        var result = new List<IReadOnlyList<Vector2>>();
+        foreach (var group in byGroup)
+        {
+            var poly = BoundaryPolygonComputer.Compute(group.ToList());
+            if (poly == null) continue;
+            var inflated = OutlinePaddingGenerator.Inflate(poly, paddingMm);
+            if (inflated != null) result.Add(inflated);
+        }
+        return result.Count > 0 ? result : null;
     }
 
     // ── auto-arrange ───────────────────────────────────────────────────────────

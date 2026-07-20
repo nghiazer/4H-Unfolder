@@ -156,9 +156,62 @@ No circular dependencies. Domain has zero external dependencies.
 | Item | Result |
 |------|--------|
 | `dotnet build 4H-Unfolder.sln` | ✅ 0 errors, 7 warnings (NuGet NU1603 only) |
-| `dotnet test` | ✅ 82 / 82 passed (+26 new: FlapOverride, GlueTabGenerator, ProjectSerializer) |
+| `dotnet test` | ✅ 95 / 95 passed (s43: +0 new tests; fixed duplicate class + test helper bug) |
 | `dotnet run --project src/FourHUnfolder.App` | ✅ App opens; all features accessible |
 | Published `4H-Unfolder.exe` **v0.1.0.A** (win-x64, self-contained) + installer | ✅ Session 40 |
+
+---
+
+## Session 43 — Changes (v0.1.1.A, tech debt cleanup)
+
+### Branch `main` — all remaining open tech debt closed
+
+**Build & Test:** 0 errors · 95/95 tests pass (duplicate `GlueTabGeneratorTests` class removed + test helpers fixed)
+
+#### Bug fix on session start
+| File | Fix |
+|------|-----|
+| `GeometryAlgorithmTests.cs` | Removed duplicate `GlueTabGeneratorTests` class (was shadowing the newer `GlueTabGeneratorTests.cs`; caused CS0101 compile error) |
+| `GlueTabGeneratorTests.cs` | Fixed helper `BorderFace`/`CutFace`: edges 1&2 were incorrectly cut instead of fold, causing 7 tests to fail (expected 0–1 tabs but got 2–3) |
+
+#### TD-38-1 — Outline Padding (Clipper2) ✅
+
+| Item | Detail |
+|------|--------|
+| NuGet | `Clipper2` v2.0.0 (angusj) added to `FourHUnfolder.Geometry.csproj` |
+| `BoundaryPolygonComputer.cs` | New static class in Geometry/Algorithms — chains non-fold edges into ordered boundary polygon; deduplicates by meshEdgeId or coord key |
+| `OutlinePaddingGenerator.cs` | New static class — inflates a polygon by `paddingMm` via `Clipper.InflatePaths(JoinType.Round, EndType.Polygon)` |
+| `AppSettings.PrintSettings.OutlinePaddingMm` | New double (default 0.0 = disabled) |
+| `IExporter.cs` | Added optional `paddingPolygons` param to `Export()` |
+| `SvgExporter.cs` | New `.padding` CSS class (dashed #404040); emits `<polygon class="padding">` per piece |
+| `PatternCanvasControl.xaml.cs` | Refactored `BuildPieceOutline` → `BuildPieceOutlineMm` + `MmToPixels`; draws dashed padding polygon when `OutlinePaddingMm > 0` |
+| `MainViewModel.cs` | `ComputePaddingPolygons(UnfoldResult)` helper; `BuildExportLayout` now passes `MeshEdgeIds`; `ExportSvg` passes padding polygons to exporter |
+| `SettingsDialog.xaml` | "Outline padding (mm)" slider + textbox in Print → Page Layout group (row 3) |
+| `SettingsViewModel.cs` | `OutlinePaddingMm` property wired in `LoadFrom`/`ToSettings` |
+
+#### TD-38-2 — Merge Adjacent Flaps ✅
+
+| Item | Detail |
+|------|--------|
+| `FlapMerger.cs` | New static class in Geometry/Algorithms — groups tabs by piece via UnionFind on fold edges; finds adjacent pairs (sharing base vertex); Clipper2 `Union` merges their polygons |
+| `GlueTab.cs` | Added `_mergedPolygon` backing field + optional `mergedPolygon` ctor param; `Vertices` returns merged polygon when present |
+| `PieceViewModel.TabData` | Added `Point[] points` constructor overload; `Create()` now uses `t.Vertices` (supports variable vertex count) |
+| `AppSettings.PrintSettings.MergeAdjacentFlaps` | New bool (default false) |
+| `UnfoldService.Unfold()` | Calls `FlapMerger.Merge()` after tab generation when setting is enabled |
+| `SettingsDialog.xaml` | "Merge adjacent flaps" checkbox (row 9 in Glue Tab section) |
+| `SettingsViewModel.cs` | `MergeAdjacentFlaps` property wired |
+
+#### TD-38-3 — Join Adjacent Isolated Edges ✅
+
+| Item | Detail |
+|------|--------|
+| `MainViewModel.FindAdjacentCutEdgeGroup(meshEdgeId)` | BFS from a given cut edge through shared 2D vertices; returns all reachable cut mesh edge IDs |
+| `MainViewModel.JoinEdgeGroup(meshEdgeId)` | Sets all edges in the group to Fold, pushes undo, re-unfolds |
+| `PatternCanvasControl.Edge_RightClick` | Added "🔗🔗 Join connected cut edges" menu item for cut edges |
+
+#### TD-36-2 — EditFlapsViewModel defaults ✅ (already done in s36)
+
+Constructor already reads `GlueTabDepthMm`/`GlueTabSideAngleDeg` from `AppSettings` via `mainVm.CurrentPrintSettings`. Closed as stale entry.
 
 ---
 
@@ -390,12 +443,12 @@ Toolbar deduplication and reorganization. No logic/domain changes — UI-only.
 | ID | Priority | Status | Description |
 |----|----------|--------|-------------|
 | **TD-36-1** | 🟡 Med | ✅ closed (s41) | Unit tests added: FlapOverride (10), GlueTabGenerator (8), ProjectSerializer (8) |
-| **TD-36-2** | 🟢 Low | 🔲 open | EditFlapsViewModel default values hardcoded (5mm / 45°); not wired to AppSettings fallback |
+| **TD-36-2** | 🟢 Low | ✅ closed (s43) | Already wired in s36: constructor reads GlueTabDepthMm/GlueTabSideAngleDeg from AppSettings |
 | **TD-36-3** | 🟢 Low | ✅ closed (s41) | FlapOverride.Deserialize now logs corrupt entries via Debug.WriteLine |
-| **TD-38-1** | 🔴 High | 🔲 open | Add Outline Padding — needs Clipper2 polygon offset library |
-| **TD-38-2** | 🔴 High | 🔲 open | Merge Adjacent Flaps — complex tab polygon union geometry |
-| **TD-38-3** | 🟡 Med | 🔲 open | Join Adjacent Isolated Edges — connectivity graph needed |
-| **Performance** | 🟢 Low | 🔲 open | O(n²) AABB+SAT overlap check; spatial grid for meshes > 2000 faces |
+| **TD-38-1** | 🔴 High | ✅ closed (s43) | Outline Padding: Clipper2Lib NuGet + OutlinePaddingGenerator + BoundaryPolygonComputer + settings + canvas dashed outline + SVG `.padding` class |
+| **TD-38-2** | 🔴 High | ✅ closed (s43) | Merge Adjacent Flaps: FlapMerger (Clipper2 union) + GlueTab.MergedPolygon + AppSettings.MergeAdjacentFlaps + Settings UI checkbox |
+| **TD-38-3** | 🟡 Med | ✅ closed (s43) | Join Adjacent Isolated Edges: FindAdjacentCutEdgeGroup (BFS) + JoinEdgeGroup in MainViewModel + "Join connected cut edges" right-click menu item |
+| **Performance** | 🟢 Low | ✅ closed (s40-old) | Spatial grid OverlapDetector (uniform bucket partition) — already done, stale entry |
 
 ---
 
@@ -448,7 +501,8 @@ Tests/                  MstAlgorithmTests (6)  UnfoldEngineTests (9)
 
 ## Recommended Next Steps
 
-1. **TD-38-1/2** — Add Outline Padding + Merge Adjacent Flaps (need Clipper2 library)
-2. **TD-38-3** — Join Adjacent Isolated Edges (connectivity graph)
-3. **TD-36-2** — Wire `EditFlapsViewModel` defaults to `AppSettings` fallback instead of hardcoded 5mm/45°
-4. **Performance** — Spatial grid for `OverlapDetector`; bottleneck on meshes > 2000 faces
+All recorded tech debt is now closed. Possible next directions:
+1. **Print-to-PDF padding** — expose `OutlinePaddingMm` in PDF export (currently SVG-only)
+2. **Test coverage** — unit tests for FlapMerger, BoundaryPolygonComputer, OutlinePaddingGenerator
+3. **Select Symmetrical Pair** (TD-38-4) — mesh symmetry detection
+4. **Split Window** (TD-38-5) — multi-viewport WPF layout

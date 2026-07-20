@@ -62,6 +62,7 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private double _glueTabSideAngleDeg = 45.0;
     [ObservableProperty] private string _glueTabShape      = "Trapezoid";
     [ObservableProperty] private bool   _alternateFlaps    = false;
+    [ObservableProperty] private bool   _mergeAdjacentFlaps = false;
     [ObservableProperty] private double _marginMm          = 10.0;
     [ObservableProperty] private double _bleedMm           = 3.0;
     [ObservableProperty] private bool   _includeGlueTabs   = true;
@@ -75,6 +76,7 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private double _printCutWidth     = 1.2;
     [ObservableProperty] private double _svgScaleFactor    = 10.0;
     [ObservableProperty] private bool   _grayscaleOutput   = false;
+    [ObservableProperty] private double _outlinePaddingMm  = 0.0;
 
     // ── Static option lists ───────────────────────────────────────────────────
     public IReadOnlyList<string> DisplayModes  { get; } = ["Solid", "SolidEdges", "Wireframe"];
@@ -136,6 +138,7 @@ public partial class SettingsViewModel : ObservableObject
         GlueTabSideAngleDeg = s.Print.GlueTabSideAngleDeg;
         GlueTabShape      = s.Print.GlueTabShape;
         AlternateFlaps    = s.Print.AlternateFlaps;
+        MergeAdjacentFlaps = s.Print.MergeAdjacentFlaps;
         MarginMm          = s.Print.MarginMm;
         BleedMm           = s.Print.BleedMm;
         IncludeGlueTabs   = s.Print.IncludeGlueTabs;
@@ -149,6 +152,7 @@ public partial class SettingsViewModel : ObservableObject
         PrintCutWidth     = s.Print.CutLineWidth;
         SvgScaleFactor    = s.Print.SvgScaleFactor;
         GrayscaleOutput   = s.Print.GrayscaleOutput;
+        OutlinePaddingMm  = s.Print.OutlinePaddingMm;
     }
 
     public AppSettings ToSettings() => new()
@@ -202,7 +206,8 @@ public partial class SettingsViewModel : ObservableObject
             GlueTabDepthMm      = GlueTabDepthMm,
             GlueTabSideAngleDeg = GlueTabSideAngleDeg,
             GlueTabShape      = GlueTabShape,
-            AlternateFlaps    = AlternateFlaps,
+            AlternateFlaps     = AlternateFlaps,
+            MergeAdjacentFlaps = MergeAdjacentFlaps,
             MarginMm          = MarginMm,
             BleedMm           = BleedMm,
             IncludeGlueTabs   = IncludeGlueTabs,
@@ -215,7 +220,8 @@ public partial class SettingsViewModel : ObservableObject
             CutLineColor      = PrintCutColor,
             CutLineWidth      = PrintCutWidth,
             SvgScaleFactor    = SvgScaleFactor,
-            GrayscaleOutput   = GrayscaleOutput
+            GrayscaleOutput   = GrayscaleOutput,
+            OutlinePaddingMm  = OutlinePaddingMm
         },
         General = new()
         {

@@ -3,12 +3,12 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![.NET 8](https://img.shields.io/badge/.NET-8.0-blueviolet)](https://dotnet.microsoft.com/download/dotnet/8.0)
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%2F11-blue)]()
-[![Tests](https://img.shields.io/badge/Tests-56%2F56%20pass-brightgreen)]()
+[![Tests](https://img.shields.io/badge/Tests-95%2F95%20pass-brightgreen)]()
 
 A Pepakura-style paper model unfolder built with **WPF / .NET 8**.  
 Load a 3-D mesh, unfold it into a printable 2-D pattern, customise the layout, and export to SVG or PDF.
 
-> Current version: **v0.1.0.A** (win-x64 self-contained EXE) — Windows 11 Fluent Design: 47 Segoe Fluent Icons glyphs across both toolbars
+> Current version: **v0.1.1.A** (win-x64 self-contained EXE) — Outline Padding, Merge Adjacent Flaps, Join Connected Cut Edges
 
 ---
 
@@ -22,8 +22,8 @@ Load a 3-D mesh, unfold it into a printable 2-D pattern, customise the layout, a
 
 | Package | Link |
 |---------|------|
-| **Installer** (recommended) | [4H-Unfolder-v0.1.0.A-setup.exe](https://github.com/NghiaZer/4H-Unfolder/releases/download/v0.1.0.A/4H-Unfolder-v0.1.0.A-setup.exe) |
-| **Portable ZIP** | [4H-Unfolder-v0.1.0.A-portable.zip](https://github.com/NghiaZer/4H-Unfolder/releases/download/v0.1.0.A/4H-Unfolder-v0.1.0.A-portable.zip) |
+| **Installer** (recommended) | [4H-Unfolder-v0.1.1.A-setup.exe](https://github.com/NghiaZer/4H-Unfolder/releases/download/v0.1.1.A/4H-Unfolder-v0.1.1.A-setup.exe) |
+| **Portable ZIP** | [4H-Unfolder-v0.1.1.A-portable.zip](https://github.com/NghiaZer/4H-Unfolder/releases/download/v0.1.1.A/4H-Unfolder-v0.1.1.A-portable.zip) |
 
 > **No runtime required** — fully self-contained win-x64 binary.  
 > Requires Windows 10 / 11 (x64).
@@ -111,7 +111,18 @@ Edge visual key:
 ### Edge-Edit mode (✏)
 - Hover any edge in the 3-D viewport → coloured tube highlight (attach = green, detach = red)
 - LMB = toggle Fold ↔ Cut; undoable
+- **Right-click a cut edge in the 2-D canvas** → context menu: Join piece / **Join connected cut edges** (batch-joins the entire chain of adjacent cut edges in one click)
 - Edge colours configurable in Settings → 3D View
+
+### Outline Padding (seam allowance)
+- Settings → Print → **Outline padding (mm)** (0 = disabled)
+- When enabled, each piece gets a dashed outer guide line at the specified offset — makes cutting easier and ensures proper fit
+- Rendered on 2-D canvas and embedded in SVG export (`.padding` CSS class)
+
+### Merge Adjacent Flaps
+- Settings → Print → **Merge adjacent flaps** checkbox
+- Glue tabs that share a corner vertex on the same piece are unioned into a single continuous polygon (Clipper2)
+- Eliminates awkward overlapping or gapped tabs at sharp piece corners
 
 ### Rotate-by-Point mode (⊙)
 - Click pivot on canvas → drag handle to rotate piece to any angle — undoable
@@ -152,7 +163,7 @@ Custom Width/Height fields are dimmed (Opacity 0.45) and locked when a fixed pre
 |-------|-----------|----------------|
 | **3D View** | Environment · Mesh, Camera & Lighting | Background · Display mode (Solid/SolidEdges/Wireframe) · Face/back-face color · Opacity · Camera FOV/clip · Edge overlay · Edge-Edit hover colors · Lighting |
 | **2D View** | Canvas & Grid Setup · Lines & Interaction · Layout & Annotations | Canvas & paper color · Grid (show/size/color) · Fold/cut line style · Edge hover + ID labels · Piece gap · Snap-to-grid · Glue tabs · Face numbers |
-| **Print** | Page Layout & Tab Geometry · Export Content Options | Margin · Bleed · SVG scale · Tab shape/angle/depth · Alternate flaps · Fold/cut line style (print) · Grayscale |
+| **Print** | Page Layout & Tab Geometry · Export Content Options | Margin · Bleed · SVG scale · **Outline padding (mm)** · Tab shape/angle/depth · **Merge adjacent flaps** · Alternate flaps · Fold/cut line style (print) · Grayscale |
 | **General** | App Preferences | Display unit (mm / inch) · **Light / Dark theme** |
 
 ### Save / Load project (`.4hu`)

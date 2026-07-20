@@ -617,8 +617,10 @@
                             <RowDefinition Height="32"/>
                             <RowDefinition Height="32"/>
                             <RowDefinition Height="32"/>
+                            <RowDefinition Height="32"/>
                             <!-- sub-head Glue Tab -->
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="32"/>
                             <RowDefinition Height="32"/>
                             <RowDefinition Height="32"/>
                             <RowDefinition Height="32"/>
@@ -649,38 +651,52 @@
                         <TextBox Grid.Row="2" Grid.Column="2" Style="{StaticResource NumericBox}"
                                  Text="{Binding SvgScaleFactor, StringFormat={}{0:F0}, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"/>
 
+                        <!-- Outline padding (seam allowance) -->
+                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Outline padding (mm)" Style="{StaticResource FieldLabel}"
+                                   ToolTip="Seam allowance: dashed outline drawn around each piece at this distance. 0 = disabled."/>
+                        <Slider Grid.Row="3" Grid.Column="1" Style="{StaticResource SettingSlider}"
+                                Minimum="0" Maximum="15"
+                                Value="{Binding OutlinePaddingMm, Mode=TwoWay}"/>
+                        <TextBox Grid.Row="3" Grid.Column="2" Style="{StaticResource NumericBox}"
+                                 Text="{Binding OutlinePaddingMm, StringFormat={}{0:F1}, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"/>
+
                         <!-- Sub-head: Glue Tab Geometry -->
-                        <TextBlock Grid.Row="3" Grid.ColumnSpan="3" Text="Glue Tab Geometry" Style="{StaticResource SubHead}"/>
+                        <TextBlock Grid.Row="4" Grid.ColumnSpan="3" Text="Glue Tab Geometry" Style="{StaticResource SubHead}"/>
 
                         <!-- Tab shape -->
-                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Tab shape" Style="{StaticResource FieldLabel}"/>
-                        <ComboBox Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2"
+                        <TextBlock Grid.Row="5" Grid.Column="0" Text="Tab shape" Style="{StaticResource FieldLabel}"/>
+                        <ComboBox Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="2"
                                   HorizontalAlignment="Left" Width="160"
                                   ItemsSource="{Binding TabShapes}"
                                   SelectedItem="{Binding GlueTabShape}"
                                   ToolTip="Trapezoid = inset corners; Rectangle = full-width; Triangle = pointed tip"/>
 
                         <!-- Tab depth -->
-                        <TextBlock Grid.Row="5" Grid.Column="0" Text="Tab depth (mm)" Style="{StaticResource FieldLabel}"/>
-                        <Slider Grid.Row="5" Grid.Column="1" Style="{StaticResource SettingSlider}"
+                        <TextBlock Grid.Row="6" Grid.Column="0" Text="Tab depth (mm)" Style="{StaticResource FieldLabel}"/>
+                        <Slider Grid.Row="6" Grid.Column="1" Style="{StaticResource SettingSlider}"
                                 Minimum="1" Maximum="20"
                                 Value="{Binding GlueTabDepthMm, Mode=TwoWay}"/>
-                        <TextBox Grid.Row="5" Grid.Column="2" Style="{StaticResource NumericBox}"
+                        <TextBox Grid.Row="6" Grid.Column="2" Style="{StaticResource NumericBox}"
                                  Text="{Binding GlueTabDepthMm, StringFormat={}{0:F1}, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"/>
 
                         <!-- Side wall angle -->
-                        <TextBlock Grid.Row="6" Grid.Column="0" Text="Side wall angle (°)" Style="{StaticResource FieldLabel}"
+                        <TextBlock Grid.Row="7" Grid.Column="0" Text="Side wall angle (°)" Style="{StaticResource FieldLabel}"
                                    ToolTip="Angle of tab side walls vs. edge. 90°=rectangle, 45°=default trapezoid, lower=sharper taper."/>
-                        <Slider Grid.Row="6" Grid.Column="1" Style="{StaticResource SettingSlider}"
+                        <Slider Grid.Row="7" Grid.Column="1" Style="{StaticResource SettingSlider}"
                                 Minimum="1" Maximum="90" TickFrequency="1"
                                 Value="{Binding GlueTabSideAngleDeg, Mode=TwoWay}"/>
-                        <TextBox Grid.Row="6" Grid.Column="2" Style="{StaticResource NumericBox}"
+                        <TextBox Grid.Row="7" Grid.Column="2" Style="{StaticResource NumericBox}"
                                  Text="{Binding GlueTabSideAngleDeg, StringFormat={}{0:F0}, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"/>
 
                         <!-- Alternate flap -->
-                        <CheckBox Grid.Row="7" Grid.ColumnSpan="3" Content="Alternate flap placement"
+                        <CheckBox Grid.Row="8" Grid.ColumnSpan="3" Content="Alternate flap placement"
                                   IsChecked="{Binding AlternateFlaps}"
                                   ToolTip="Only one face per cut edge pair gets a tab — halves the total number of tabs"/>
+
+                        <!-- Merge adjacent flaps -->
+                        <CheckBox Grid.Row="9" Grid.ColumnSpan="3" Content="Merge adjacent flaps"
+                                  IsChecked="{Binding MergeAdjacentFlaps}"
+                                  ToolTip="Union pairs of tabs that share a corner vertex into a single polygon"/>
                     </Grid>
                 </GroupBox>
 

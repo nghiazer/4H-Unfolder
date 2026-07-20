@@ -12,10 +12,10 @@
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
 
     <!-- Version — bump suffix letter for patch releases within a minor version -->
-    <Version>0.1.0.1</Version>
-    <AssemblyVersion>0.1.0.1</AssemblyVersion>
-    <FileVersion>0.1.0.1</FileVersion>
-    <InformationalVersion>0.1.0.A — Segoe Fluent Icons: full toolbar modernization to Windows 11 Fluent Design, 47 unique line-art glyphs replacing all emoji/symbols</InformationalVersion>
+    <Version>0.1.1.1</Version>
+    <AssemblyVersion>0.1.1.1</AssemblyVersion>
+    <FileVersion>0.1.1.1</FileVersion>
+    <InformationalVersion>0.1.1.A — Outline Padding (seam allowance), Merge Adjacent Flaps (Clipper2 union), Join Connected Cut Edges (BFS group join)</InformationalVersion>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\FourHUnfolder.Application\FourHUnfolder.Application.csproj" />

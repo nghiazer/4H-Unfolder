@@ -150,6 +150,13 @@ public sealed class AppSettings
         // Alternate flap placement: only one face per cut edge pair gets a tab
         public bool   AlternateFlaps      { get; set; } = false;
 
+        // Merge adjacent flaps: union pairs of glue tabs that share a corner vertex.
+        public bool   MergeAdjacentFlaps  { get; set; } = false;
+
+        // Outline padding (seam allowance): outward offset drawn around each piece outline.
+        // 0 = disabled.  Typical values: 3–7 mm.
+        public double OutlinePaddingMm    { get; set; } = 0.0;
+
         // Output quality
         public double SvgScaleFactor    { get; set; } = 10.0;  // model-mm → SVG px
         public bool   GrayscaleOutput   { get; set; } = false;
