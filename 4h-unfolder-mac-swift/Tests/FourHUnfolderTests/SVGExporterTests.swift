@@ -151,12 +151,23 @@ final class SVGExporterTests: XCTestCase {
     // MARK: - Coordinate sanity: root face at origin → polygon points near margin
 
     func testSVG_rootFace_coordsNearMargin() {
-        let mesh  = TestMesh.tetrahedron()
-        var s     = defaultSettings
+        // Use a single isolated face so bb.min = (0,0) and v0=(0,0) maps exactly to (margin, margin).
+        // A tetrahedron unfolds children that extend to negative coords, shifting the origin offset.
+        let mesh = Mesh()
+        mesh.vertices = [
+            Vertex(id: 0, position: SIMD3(0, 0, 0)),
+            Vertex(id: 1, position: SIMD3(1, 0, 0)),
+            Vertex(id: 2, position: SIMD3(0.5, Float(3.0.squareRoot() / 2.0), 0)),
+        ]
+        let e0 = mesh.getOrAddEdge(v1: 0, v2: 1, faceId: 0)
+        let e1 = mesh.getOrAddEdge(v1: 1, v2: 2, faceId: 0)
+        let e2 = mesh.getOrAddEdge(v1: 2, v2: 0, faceId: 0)
+        mesh.faces.append(Face(id: 0, a: 0, b: 1, c: 2, edgeIds: (e0, e1, e2)))
+
+        var s = defaultSettings
         s.marginMm = 10.0
-        let svg   = export(mesh, settings: s)
-        // The first polygon should have points close to (10, 10) for the root face v0=(0,0)
-        // Origin maps to (margin + 0, margin + 0) = ("10.0", "10.0")
+        let svg = export(mesh, settings: s)
+        // v0=(0,0) is at bb.min → maps to (margin, margin) = (10.0, 10.0)
         XCTAssertTrue(svg.contains("10.0,10.0") || svg.contains("10,10"),
                       "Root face v0=(0,0) must map to the margin point in SVG coordinates")
     }

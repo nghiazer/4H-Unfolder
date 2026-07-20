@@ -31,8 +31,10 @@ struct UnfoldEngine {
         for edge in mesh.edges where edge.connectsFaces {
             let nA = mesh.faceNormal(edge.faceA)
             let nB = mesh.faceNormal(edge.faceB)
-            let angle = dihedralAngle(nA: nA, nB: nB)
-            dihedralAngles[edge.id] = angle * 180 / .pi
+            let angleDeg = dihedralAngle(nA: nA, nB: nB) * 180 / .pi
+            if angleDeg > 1 { // skip coplanar edges (fan-triangulation diagonals within a quad)
+                dihedralAngles[edge.id] = angleDeg
+            }
         }
 
         // BFS state
