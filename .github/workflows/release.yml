@@ -1,0 +1,111 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-win:
+    name: Build Windows Installer
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Extract version (strip v prefix)
+        id: ver
+        shell: pwsh
+        run: |
+          $v = "${{ github.ref_name }}".TrimStart('v')
+          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Restore & Build
+        run: |
+          dotnet restore 4h-unfolder-win/4H-Unfolder.sln
+          dotnet build 4h-unfolder-win/4H-Unfolder.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test 4h-unfolder-win/tests/FourHUnfolder.Tests -c Release --no-build --verbosity normal
+
+      - name: Publish self-contained (win-x64)
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.ver.outputs.version }}"
+          dotnet publish 4h-unfolder-win/src/FourHUnfolder.App/FourHUnfolder.App.csproj `
+            -c Release -r win-x64 --self-contained `
+            -o "4h-unfolder-win/publish/v$ver"
+
+      - name: Install Inno Setup 6
+        run: choco install innosetup -y --no-progress
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.ver.outputs.version }}"
+          & ".\4h-unfolder-win\installer\build-installer.ps1" -Version $ver
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: 4h-unfolder-win/publish/4H-Unfolder-v${{ steps.ver.outputs.version }}-setup.exe
+          if-no-files-found: error
+
+  build-mac:
+    name: Build macOS App
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test
+        working-directory: 4h-unfolder-mac-swift
+        run: swift test
+
+      - name: Package release
+        working-directory: 4h-unfolder-mac-swift
+        run: |
+          chmod +x scripts/build-release.sh
+          ./scripts/build-release.sh ${{ github.ref_name }}
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-app
+          path: publish/mac/${{ github.ref_name }}/4H-Unfolder_${{ github.ref_name }}_mac.zip
+          if-no-files-found: error
+
+  create-release:
+    name: Create GitHub Release
+    needs: [build-win, build-mac]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-installer
+          path: dist/
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-app
+          path: dist/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: 4H-Unfolder ${{ github.ref_name }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-alpha') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}
+          files: dist/*
+          generate_release_notes: true

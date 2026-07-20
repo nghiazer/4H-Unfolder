@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "feat/**", "fix/**"]
+    tags-ignore: ["v*"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-test-win:
+    name: Build & Test (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore 4h-unfolder-win/4H-Unfolder.sln
+
+      - name: Build
+        run: dotnet build 4h-unfolder-win/4H-Unfolder.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test 4h-unfolder-win/tests/FourHUnfolder.Tests -c Release --no-build --verbosity normal
+
+  build-test-mac:
+    name: Build & Test (macOS)
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: 4h-unfolder-mac-swift
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: swift build
+
+      - name: Test
+        run: swift test
