@@ -157,6 +157,12 @@ public sealed class AppSettings
         // 0 = disabled.  Typical values: 3–7 mm.
         public double OutlinePaddingMm    { get; set; } = 0.0;
 
+        // Hide fold lines between near-coplanar faces (papercraft convention — cleaner
+        // patterns for fan-triangulated flat quads). Learned from osresearch/papercraft.
+        public bool   HideCoplanarFolds   { get; set; } = false;
+        // Dihedral-angle threshold (deg) below which a fold edge counts as coplanar.
+        public double CoplanarAngleDeg    { get; set; } = 1.0;
+
         // Output quality
         public double SvgScaleFactor    { get; set; } = 10.0;  // model-mm → SVG px
         public bool   GrayscaleOutput   { get; set; } = false;

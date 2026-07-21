@@ -34,12 +34,17 @@ actor UnfoldService {
         let engineResult = UnfoldEngine().unfold(mesh: mesh, foldEdgeIds: foldEdgeIds, meshScaleMm: meshScaleMm)
 
         // 6. Generate glue tabs with per-edge FlapMode overrides
-        let tabs = GlueTabGenerator().generate(
+        let rawTabs = GlueTabGenerator().generate(
             faces: engineResult.faces,
             mesh: mesh,
             settings: settings,
             flapOverrides: flapOverrides
         )
+
+        // 6b. Optionally merge adjacent tabs on the same piece (mirrors C# FlapMerger gate)
+        let tabs = settings.mergeAdjacentFlaps
+            ? FlapMerger.merge(faces: engineResult.faces, tabs: rawTabs)
+            : rawTabs
 
         // 7. SAT-based overlap detection
         let hasOverlaps = OverlapDetector().hasOverlaps(faces: engineResult.faces)

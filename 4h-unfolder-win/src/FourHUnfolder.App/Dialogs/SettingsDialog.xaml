@@ -625,6 +625,7 @@
                             <RowDefinition Height="32"/>
                             <RowDefinition Height="32"/>
                             <RowDefinition Height="32"/>
+                            <RowDefinition Height="32"/>
                         </Grid.RowDefinitions>
 
                         <!-- Page margin -->
@@ -697,6 +698,11 @@
                         <CheckBox Grid.Row="9" Grid.ColumnSpan="3" Content="Merge adjacent flaps"
                                   IsChecked="{Binding MergeAdjacentFlaps}"
                                   ToolTip="Union pairs of tabs that share a corner vertex into a single polygon"/>
+
+                        <!-- Hide coplanar fold lines -->
+                        <CheckBox Grid.Row="10" Grid.ColumnSpan="3" Content="Hide coplanar fold lines"
+                                  IsChecked="{Binding HideCoplanarFolds}"
+                                  ToolTip="Suppress fold lines between near-coplanar faces (cleaner patterns for fan-triangulated flat quads)"/>
                     </Grid>
                 </GroupBox>
 
