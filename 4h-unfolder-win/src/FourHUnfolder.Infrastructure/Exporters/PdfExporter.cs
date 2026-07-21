@@ -101,6 +101,16 @@ public class PdfExporter
                     if (isFold && !p.PrintFoldLines) continue;
                     if (!isFold && !isBoundary && !p.PrintCutLines) continue;
 
+                    // Hide fold lines between near-coplanar faces when requested.
+                    if (isFold && p.HideCoplanarFolds)
+                    {
+                        int meshEdgeId = face.MeshEdgeIds[i];
+                        if (meshEdgeId >= 0
+                            && result.EdgeDihedralAngles.TryGetValue(meshEdgeId, out var deg)
+                            && deg < p.CoplanarAngleDeg)
+                            continue;
+                    }
+
                     var va  = verts[i]; var vb = verts[(i + 1) % 3];
                     var key = EdgeKey(va, vb);
                     if (!drawn.Add(key)) continue;

@@ -477,6 +477,14 @@ public partial class PatternCanvasControl : UserControl
                 bool isFold     = fd.EdgeIsFold[i];
                 bool isBoundary = fd.EdgeIsBoundary[i];
 
+                // Hide fold lines between near-coplanar faces when requested.
+                if (isFold && _vm?.CurrentPrintSettings is { HideCoplanarFolds: true } pset
+                    && meshEdgeId >= 0
+                    && _vm.EdgeDihedralAngles is { } dihedrals
+                    && dihedrals.TryGetValue(meshEdgeId, out var cdeg)
+                    && cdeg < pset.CoplanarAngleDeg)
+                    continue;
+
                 // TD-7: boundary edges get a distinct thin dark style
                 Brush  stroke    = isBoundary ? boundBrush : (isFold ? foldBrush : cutBrush);
                 double thickness = isBoundary ? 0.6 : (isFold ? foldW : cutW);

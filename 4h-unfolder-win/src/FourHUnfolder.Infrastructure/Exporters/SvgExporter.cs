@@ -173,6 +173,16 @@ public class SvgExporter : IExporter
                 if (isFold && !p.PrintFoldLines) continue;
                 if (!isFold && !isBoundary && !p.PrintCutLines) continue;
 
+                // Hide fold lines between near-coplanar faces when requested.
+                if (isFold && p.HideCoplanarFolds)
+                {
+                    int meshEdgeId = face.MeshEdgeIds[i];
+                    if (meshEdgeId >= 0
+                        && result.EdgeDihedralAngles.TryGetValue(meshEdgeId, out var deg)
+                        && deg < p.CoplanarAngleDeg)
+                        continue;
+                }
+
                 var pa  = verts[i];
                 var pb  = verts[(i + 1) % 3];
 
