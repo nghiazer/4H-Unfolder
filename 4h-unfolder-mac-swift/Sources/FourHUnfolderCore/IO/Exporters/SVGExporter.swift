@@ -18,6 +18,15 @@ import simd
 
 struct SVGExporter {
 
+    /// True when a fold edge should be hidden because its faces are (near-)coplanar.
+    /// `edgeDihedralAngles` omits edges ≤1° (see UnfoldEngine), so an absent angle means flat.
+    static func isCoplanarFold(_ meshEdgeId: Int, result: UnfoldResult,
+                               settings: AppSettings.PrintSettings) -> Bool {
+        guard settings.hideCoplanarFolds, meshEdgeId >= 0 else { return false }
+        guard let deg = result.edgeDihedralAngles[meshEdgeId] else { return true }
+        return deg < Float(settings.coplanarAngleDeg)
+    }
+
     // MARK: - Public API
 
     static func export(result: UnfoldResult, settings: AppSettings.PrintSettings) -> String {
@@ -65,6 +74,7 @@ struct SVGExporter {
                 for ei in 0..<3 where face.edgeIsFold(ei) {
                     let mid = face.meshEdgeId(ei)
                     guard mid < 0 || drawnFolds.insert(mid).inserted else { continue }
+                    if isCoplanarFold(mid, result: result, settings: settings) { continue }
                     let (p0, p1) = (verts[ei], verts[(ei+1)%3])
                     lines.append(#"  <line x1="\#(x(p0))" y1="\#(y(p0))" x2="\#(x(p1))" y2="\#(y(p1))" stroke="\#(settings.foldLineColor)" stroke-width="\#(settings.foldLineWidth)"\#(foldDash)/>"#)
                 }

@@ -33,6 +33,21 @@ struct AppSettings: Codable, Equatable {
         var glueTabSideAngleDeg: Double = 45.0
         var alternateFlaps: Bool = false
 
+        /// Merge pairs of adjacent glue tabs (sharing a corner on the same piece) into
+        /// single polygons. Mirrors C# AppSettings.PrintSettings.MergeAdjacentFlaps.
+        var mergeAdjacentFlaps: Bool = false
+
+        /// Outward padding (mm) applied to each piece outline before export. 0 = disabled.
+        /// Mirrors C# AppSettings.PrintSettings.OutlinePaddingMm.
+        var outlinePaddingMm: Double = 0.0
+
+        /// Hide fold lines between near-coplanar faces (a papercraft convention — cleaner
+        /// patterns for models with fan-triangulated flat quads). Learned from osresearch/papercraft.
+        var hideCoplanarFolds: Bool = false
+
+        /// Dihedral-angle threshold (degrees) below which a fold edge counts as coplanar.
+        var coplanarAngleDeg: Double = 1.0
+
         var foldLineColor: String = "#4169e1"
         var foldLineWidth: Double = 0.8
         var foldLineDash: String  = "4,2"
@@ -67,6 +82,42 @@ struct AppSettings: Codable, Equatable {
             case rectangle = "Rectangle"
             case triangle  = "Triangle"
             var id: String { rawValue }
+        }
+
+        init() {}
+
+        /// Tolerant decoder: any key missing from a previously-saved settings.json falls back
+        /// to its default. Without this, adding a field (e.g. mergeAdjacentFlaps) would make
+        /// the whole decode throw, and AppSettings.load() would silently reset every setting.
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            func d<T: Decodable>(_ k: CodingKeys, _ fallback: T) -> T {
+                (try? c.decodeIfPresent(T.self, forKey: k)) ?? nil ?? fallback
+            }
+            let def = PrintSettings()
+            glueTabShape        = d(.glueTabShape, def.glueTabShape)
+            glueTabDepthMm      = d(.glueTabDepthMm, def.glueTabDepthMm)
+            glueTabSideAngleDeg = d(.glueTabSideAngleDeg, def.glueTabSideAngleDeg)
+            alternateFlaps      = d(.alternateFlaps, def.alternateFlaps)
+            mergeAdjacentFlaps  = d(.mergeAdjacentFlaps, def.mergeAdjacentFlaps)
+            outlinePaddingMm    = d(.outlinePaddingMm, def.outlinePaddingMm)
+            hideCoplanarFolds   = d(.hideCoplanarFolds, def.hideCoplanarFolds)
+            coplanarAngleDeg    = d(.coplanarAngleDeg, def.coplanarAngleDeg)
+            foldLineColor       = d(.foldLineColor, def.foldLineColor)
+            foldLineWidth       = d(.foldLineWidth, def.foldLineWidth)
+            foldLineDash        = d(.foldLineDash, def.foldLineDash)
+            cutLineColor        = d(.cutLineColor, def.cutLineColor)
+            cutLineWidth        = d(.cutLineWidth, def.cutLineWidth)
+            grayscaleOutput     = d(.grayscaleOutput, def.grayscaleOutput)
+            includeGlueTabs     = d(.includeGlueTabs, def.includeGlueTabs)
+            includePageLabel    = d(.includePageLabel, def.includePageLabel)
+            printFoldLines      = d(.printFoldLines, def.printFoldLines)
+            printCutLines       = d(.printCutLines, def.printCutLines)
+            svgScaleFactor      = d(.svgScaleFactor, def.svgScaleFactor)
+            marginMm            = d(.marginMm, def.marginMm)
+            bleedMm             = d(.bleedMm, def.bleedMm)
+            paperSize           = d(.paperSize, def.paperSize)
+            isLandscape         = d(.isLandscape, def.isLandscape)
         }
     }
 
