@@ -64,13 +64,20 @@ struct GlueTab {
 
     let borderFoldStyle: FlapMode?
 
-    var polygon: [SIMD2<Float>] { [p0, p1, p2, p3] }
+    /// When two adjacent tabs are merged (FlapMerger), the exact union outline is stored
+    /// here as an arbitrary-length polygon. `p0…p3` still hold the first four vertices for
+    /// callers that expect a quad. Mirrors C# GlueTab.MergedPolygon.
+    var mergedPolygon: [SIMD2<Float>]? = nil
+
+    /// Render outline: the merged polygon when present, otherwise the p0…p3 quad.
+    var polygon: [SIMD2<Float>] { mergedPolygon ?? [p0, p1, p2, p3] }
 
     func translated(by offset: SIMD2<Float>) -> GlueTab {
         GlueTab(faceId: faceId, localEdgeIdx: localEdgeIdx,
                 p0: p0 + offset, p1: p1 + offset,
                 p2: p2 + offset, p3: p3 + offset,
-                borderFoldStyle: borderFoldStyle)
+                borderFoldStyle: borderFoldStyle,
+                mergedPolygon: mergedPolygon?.map { $0 + offset })
     }
 }
 

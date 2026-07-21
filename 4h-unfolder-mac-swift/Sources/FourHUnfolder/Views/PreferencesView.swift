@@ -94,6 +94,7 @@ private struct PrintTab: View {
                     Text("°")
                 }
                 Toggle("Alternate Flaps", isOn: ps.alternateFlaps)
+                Toggle("Merge Adjacent Flaps", isOn: ps.mergeAdjacentFlaps)
                 Toggle("Include Glue Tabs", isOn: ps.includeGlueTabs)
             }
 
@@ -106,6 +107,14 @@ private struct PrintTab: View {
                 }
                 Toggle("Print Fold Lines", isOn: ps.printFoldLines)
                 Toggle("Print Cut Lines",  isOn: ps.printCutLines)
+                Toggle("Hide Coplanar Folds", isOn: ps.hideCoplanarFolds)
+                HStack {
+                    Text("Coplanar Threshold")
+                    Spacer()
+                    TextField("°", value: ps.coplanarAngleDeg, format: .number)
+                        .frame(width: 60).multilineTextAlignment(.trailing)
+                    Text("°")
+                }
             }
 
             Section("Layout") {

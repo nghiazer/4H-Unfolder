@@ -921,6 +921,15 @@ struct PatternCanvasView: View {
         return CGAffineTransform(a: a, b: c, c: b, d: d, tx: tx, ty: ty)
     }
 
+    /// Hide fold lines between near-coplanar faces (papercraft convention). `edgeDihedralAngles`
+    /// omits edges ≤1° (see UnfoldEngine), so an absent angle means the faces are flat.
+    private func hideCoplanarFold(_ meshEdgeId: Int, result: UnfoldResult) -> Bool {
+        let pr = appState.settings.print
+        guard pr.hideCoplanarFolds, meshEdgeId >= 0 else { return false }
+        guard let deg = result.edgeDihedralAngles[meshEdgeId] else { return true }
+        return deg < Float(pr.coplanarAngleDeg)
+    }
+
     // 4. Edges
     private func drawEdges(_ ctx: GraphicsContext, result: UnfoldResult, xf: CGAffineTransform) {
         let foldColor  = Color(hex: v2d.foldLineColor) ?? Color(red: 0.25, green: 0.40, blue: 0.87)
@@ -943,6 +952,7 @@ struct PatternCanvasView: View {
 
                 if face.edgeIsFold(ei) {
                     guard mid < 0 || drawnFolds.insert(mid).inserted else { continue }
+                    if hideCoplanarFold(mid, result: result) { continue }
                     ctx.stroke(seg, with: .color(foldColor),
                                style: StrokeStyle(lineWidth: foldW, dash: foldDash))
                 } else if !face.edgeIsBoundary(ei) {
