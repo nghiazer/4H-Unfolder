@@ -3,6 +3,20 @@ import XCTest
 
 final class KruskalMSTTests: XCTestCase {
 
+    // MARK: - Helpers
+
+    private func buildGraph(nodeCount: Int, edges: [(Int, Int, Float)]) -> DualGraph {
+        var nodes = (0..<nodeCount).map { GraphNode(faceId: $0) }
+        var graphEdges: [GraphEdge] = []
+        for (a, b, w) in edges {
+            let id = graphEdges.count
+            graphEdges.append(GraphEdge(id: id, faceA: a, faceB: b, sharedMeshEdgeId: id, weight: w))
+            nodes[a].graphEdgeIds.append(id)
+            nodes[b].graphEdgeIds.append(id)
+        }
+        return DualGraph(nodes: nodes, edges: graphEdges)
+    }
+
     func testTetrahedron_returnsNMinusOneEdges() {
         let mesh = TestMesh.tetrahedron()
         let dg   = DualGraphBuilder().build(mesh: mesh)
@@ -108,5 +122,70 @@ final class KruskalMSTTests: XCTestCase {
         XCTAssertGreaterThan(distinctResults.count, 1,
             "different tie-break seeds must be able to select a different spanning tree " +
             "among equal-weight ties — otherwise the multi-seed overlap retry can never help")
+    }
+
+    // MARK: - epsilon-based near-tie perturbation (real meshes almost never have EXACT ties)
+
+    func testTieBreakSeed_producesVariedMstsAcrossNearButNotExactTies() {
+        // Weights differ by tiny amounts (< tieEpsilonRad) but are NOT bit-identical — this is
+        // the realistic case for irregular/organic meshes, unlike the tetrahedron's contrived
+        // exact ties. Without epsilon-based perturbation, sorting by weight alone would already
+        // fully determine the order and no seed could ever change the result.
+        let eps = KruskalMSTBuilder.tieEpsilonRad
+        let g = buildGraph(nodeCount: 4, edges: [
+            (0, 1, 1.000),
+            (0, 2, 1.000 + eps * 0.2),
+            (0, 3, 1.000 + eps * 0.4),
+            (1, 2, 1.000 + eps * 0.6),
+            (1, 3, 1.000 + eps * 0.3),
+            (2, 3, 1.000 + eps * 0.1),
+        ])
+
+        let distinctResults = Set((0..<20).map { seed -> String in
+            KruskalMSTBuilder().build(graph: g, tieBreakSeed: seed)
+                .map(\.id).sorted().map(String.init).joined(separator: ",")
+        })
+
+        XCTAssertGreaterThan(distinctResults.count, 1,
+            "near-tied (but not bit-identical) edges must still be perturbable — this is the " +
+            "realistic case for irregular meshes, which almost never have exact float ties")
+    }
+
+    func testTieBreakSeed_neverAffectsWellSeparatedWeights() {
+        let g = buildGraph(nodeCount: 4, edges: [
+            (0, 1, 1), (1, 2, 2), (2, 3, 3), (0, 3, 100), (0, 2, 50),
+        ])
+
+        for seed in 0..<10 {
+            let mst = KruskalMSTBuilder().build(graph: g, tieBreakSeed: seed)
+            let totalWeight = mst.reduce(0) { $0 + $1.weight }
+            XCTAssertLessThan(totalWeight, 10,
+                "seed \(seed): well-separated weights must never be reordered by tie-break perturbation")
+        }
+    }
+
+    // MARK: - hasPotentialTies (lets UnfoldService skip a provably-futile retry loop)
+
+    func testHasPotentialTies_allTiedGraph_returnsTrue() {
+        let mesh = TestMesh.tetrahedron()
+        let dg   = DualGraphBuilder().build(mesh: mesh)
+        XCTAssertTrue(KruskalMSTBuilder.hasPotentialTies(graph: dg))
+    }
+
+    func testHasPotentialTies_nearTiedGraph_returnsTrue() {
+        let eps = KruskalMSTBuilder.tieEpsilonRad
+        let g = buildGraph(nodeCount: 4, edges: [(0, 1, 1.000), (0, 2, 1.000 + eps * 0.3), (0, 3, 5), (1, 2, 8)])
+        XCTAssertTrue(KruskalMSTBuilder.hasPotentialTies(graph: g))
+    }
+
+    func testHasPotentialTies_wellSeparatedGraph_returnsFalse() {
+        let g = buildGraph(nodeCount: 5, edges: [(0, 1, 1), (1, 2, 2), (2, 3, 3), (3, 4, 4), (0, 4, 5)])
+        XCTAssertFalse(KruskalMSTBuilder.hasPotentialTies(graph: g),
+            "no seed could ever change the MST when every edge is well outside tie-break range")
+    }
+
+    func testHasPotentialTies_emptyOrSingleEdgeGraph_returnsFalse() {
+        XCTAssertFalse(KruskalMSTBuilder.hasPotentialTies(graph: DualGraph(nodes: [], edges: [])))
+        XCTAssertFalse(KruskalMSTBuilder.hasPotentialTies(graph: buildGraph(nodeCount: 2, edges: [(0, 1, 1)])))
     }
 }

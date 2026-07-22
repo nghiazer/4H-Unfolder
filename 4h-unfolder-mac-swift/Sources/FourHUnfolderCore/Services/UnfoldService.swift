@@ -18,14 +18,19 @@ actor UnfoldService {
         meshScaleMm: Float = 1,
         seedCount: Int = 8
     ) -> UnfoldResult {
-        var (best, bestFoldIds) = unfoldOnce(
+        var (best, bestFoldIds, dualGraph) = unfoldOnce(
             mesh: mesh, edgeOverrides: edgeOverrides, flapOverrides: flapOverrides,
             settings: settings, meshScaleMm: meshScaleMm, mstTieBreakSeed: nil)
 
-        if best.hasOverlaps && seedCount > 0 {
+        // Skip the retry loop entirely when it's provably futile: if no two dual-graph edges are
+        // within KruskalMSTBuilder.tieEpsilonRad of each other, no seed can ever select a
+        // different spanning tree, so retrying would just burn full pipeline passes for zero
+        // chance of a different result (see PARITY-PROGRESS.md — empirically, irregular/organic
+        // meshes very often have zero exact ties, though near-ties within ~1° are common).
+        if best.hasOverlaps && seedCount > 0 && KruskalMSTBuilder.hasPotentialTies(graph: dualGraph) {
             var bestCount = OverlapDetector().countOverlaps(faces: best.faces)
             for seed in 0..<seedCount where bestCount > 0 {
-                let (candidate, candidateFoldIds) = unfoldOnce(
+                let (candidate, candidateFoldIds, _) = unfoldOnce(
                     mesh: mesh, edgeOverrides: edgeOverrides, flapOverrides: flapOverrides,
                     settings: settings, meshScaleMm: meshScaleMm, mstTieBreakSeed: seed)
                 let count = OverlapDetector().countOverlaps(faces: candidate.faces)
@@ -52,7 +57,7 @@ actor UnfoldService {
         settings: AppSettings.PrintSettings,
         meshScaleMm: Float,
         mstTieBreakSeed: Int?
-    ) -> (UnfoldResult, Set<Int>) {
+    ) -> (UnfoldResult, Set<Int>, DualGraph) {
 
         // 1. Build face-adjacency dual graph
         let dualGraph = DualGraphBuilder().build(mesh: mesh)
@@ -110,6 +115,6 @@ actor UnfoldService {
             edgeDihedralAngles: engineResult.dihedralAngles,
             pieces: pieces
         )
-        return (result, foldEdgeIds)
+        return (result, foldEdgeIds, dualGraph)
     }
 }
