@@ -115,7 +115,7 @@ struct SVGExporter {
         }
 
         // ── Layer 5: cut-pair number labels ──────────────────────────────────
-        if !result.cutEdgePairIds.isEmpty {
+        if settings.includeEdgeLabels && !result.cutEdgePairIds.isEmpty {
             lines.append("  <!-- cut pair labels -->")
             var drawnLabels = Set<Int>()
             for face in result.faces {

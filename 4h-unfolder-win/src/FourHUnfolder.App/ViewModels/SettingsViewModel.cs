@@ -79,6 +79,7 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private double _outlinePaddingMm  = 0.0;
     [ObservableProperty] private bool   _hideCoplanarFolds = false;
     [ObservableProperty] private double _coplanarAngleDeg  = 1.0;
+    [ObservableProperty] private bool   _includeEdgeLabels = false;
 
     // ── Static option lists ───────────────────────────────────────────────────
     public IReadOnlyList<string> DisplayModes  { get; } = ["Solid", "SolidEdges", "Wireframe"];
@@ -157,6 +158,7 @@ public partial class SettingsViewModel : ObservableObject
         OutlinePaddingMm  = s.Print.OutlinePaddingMm;
         HideCoplanarFolds = s.Print.HideCoplanarFolds;
         CoplanarAngleDeg  = s.Print.CoplanarAngleDeg;
+        IncludeEdgeLabels = s.Print.IncludeEdgeLabels;
     }
 
     public AppSettings ToSettings() => new()
@@ -227,7 +229,8 @@ public partial class SettingsViewModel : ObservableObject
             GrayscaleOutput   = GrayscaleOutput,
             OutlinePaddingMm  = OutlinePaddingMm,
             HideCoplanarFolds = HideCoplanarFolds,
-            CoplanarAngleDeg  = CoplanarAngleDeg
+            CoplanarAngleDeg  = CoplanarAngleDeg,
+            IncludeEdgeLabels = IncludeEdgeLabels
         },
         General = new()
         {

@@ -165,7 +165,7 @@ struct PatternCanvasView: View {
                         drawFaces(ctx, result: result, xf: xf)
                         drawEdges(ctx, result: result, xf: xf)
                         if v2d.showGlueTabs    { drawTabs(ctx, result: result, xf: xf) }
-                        drawCutLabels(ctx, result: result, xf: xf)
+                        if v2d.showEdgeIds     { drawCutLabels(ctx, result: result, xf: xf) }
                         if v2d.showFaceNumbers { drawFaceLabels(ctx, result: result, xf: xf) }
                         if v2d.showFoldAngles  { drawFoldAngles(ctx, result: result, xf: xf) }
                         drawSelection(ctx, result: result, xf: xf)
