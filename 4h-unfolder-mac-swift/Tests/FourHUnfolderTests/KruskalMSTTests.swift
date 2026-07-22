@@ -68,4 +68,45 @@ final class KruskalMSTTests: XCTestCase {
                 "Dihedral angle weight must be non-negative")
         }
     }
+
+    // MARK: - tieBreakSeed (GĐ3.2: used by UnfoldService's multi-seed overlap retry)
+    //
+    // A regular tetrahedron's dual graph is K4 with all-equal dihedral angles (every pair of the
+    // 4 faces is geometrically equivalent), so Kruskal ties on every one of the 6 edges — exactly
+    // the scenario the tie-break perturbation is built for.
+
+    func testTieBreakSeed_nil_matchesDefaultNoSeedParameter() {
+        let mesh = TestMesh.tetrahedron()
+        let dg   = DualGraphBuilder().build(mesh: mesh)
+
+        let withoutSeedParam = KruskalMSTBuilder().build(graph: dg)
+        let withExplicitNil  = KruskalMSTBuilder().build(graph: dg, tieBreakSeed: nil)
+
+        XCTAssertEqual(withExplicitNil.map(\.id), withoutSeedParam.map(\.id),
+                       "an explicit nil seed must match omitting the parameter entirely")
+    }
+
+    func testTieBreakSeed_alwaysReturnsValidSpanningTree() {
+        let mesh = TestMesh.tetrahedron()
+        let dg   = DualGraphBuilder().build(mesh: mesh)
+        for seed in [0, 1, 2, 5, 42] {
+            let mst = KruskalMSTBuilder().build(graph: dg, tieBreakSeed: seed)
+            XCTAssertEqual(mst.count, mesh.faces.count - 1,
+                          "seed \(seed) must still produce a valid n-1 spanning tree")
+        }
+    }
+
+    func testTieBreakSeed_producesVariedMstsAcrossEqualWeightTies() {
+        let mesh = TestMesh.tetrahedron()
+        let dg   = DualGraphBuilder().build(mesh: mesh)
+
+        let distinctResults = Set((0..<20).map { seed -> String in
+            let mst = KruskalMSTBuilder().build(graph: dg, tieBreakSeed: seed)
+            return mst.map(\.id).sorted().map(String.init).joined(separator: ",")
+        })
+
+        XCTAssertGreaterThan(distinctResults.count, 1,
+            "different tie-break seeds must be able to select a different spanning tree " +
+            "among equal-weight ties — otherwise the multi-seed overlap retry can never help")
+    }
 }

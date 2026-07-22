@@ -80,6 +80,16 @@ func signedFoldAngle(nParent: SIMD3<Float>, nChild: SIMD3<Float>, edgeDir: SIMD3
     return atan2(sinTheta, cosTheta)
 }
 
+// MARK: - Piece packing rotation (GĐ3.1: 90° trial rotation in auto-arrange)
+
+/// Rotates a point 90° within its local w×h bounding box, swapping width and height — i.e.
+/// rotating the box itself around its own local origin, not around an arbitrary pivot.
+/// `localPoint` is expected to already be relative to the box's min corner (0…boxWidth,
+/// 0…boxHeight); the result lands in the rotated box's own (0…boxHeight, 0…boxWidth) space.
+func rotated90InLocalBBox(_ localPoint: SIMD2<Float>, boxWidth: Float) -> SIMD2<Float> {
+    SIMD2(localPoint.y, boxWidth - localPoint.x)
+}
+
 // MARK: - SIMD2 convenience
 
 extension SIMD2 where Scalar == Float {
