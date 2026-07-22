@@ -2,7 +2,7 @@
 
 Native macOS port of 4H-Unfolder, built with Swift 5.9 + SwiftUI + SceneKit (Metal). Unfolds 3D meshes into 2D printable papercraft patterns.
 
-> **Status: v0.0.0.5-alpha** — Phases 1–12 complete, 87 unit tests passing.
+> **Status: v0.0.0.6-alpha** — Phases 1–12 + papercraft-parity (GĐ1–GĐ3) complete, 128 unit tests passing.
 > See [PROGRESS.md](PROGRESS.md) for detailed phase tracking.
 
 ---
@@ -12,7 +12,7 @@ Native macOS port of 4H-Unfolder, built with Swift 5.9 + SwiftUI + SceneKit (Met
 Pre-built ad-hoc signed bundle (macOS 13+, no installer needed):
 
 ```
-publish/mac/v0.0.0.5-alpha/4H-Unfolder_v0.0.0.5-alpha_mac.zip
+publish/mac/v0.0.0.6-alpha/4H-Unfolder_v0.0.0.6-alpha_mac.zip
 ```
 
 > **First launch**: Right-click `4H Unfolder.app` → **Open** (Gatekeeper bypass for unsigned builds).
@@ -30,9 +30,11 @@ publish/mac/v0.0.0.5-alpha/4H-Unfolder_v0.0.0.5-alpha_mac.zip
 | **Multi-select** | Lasso rubber-band selection (Shift = additive); right-drag to pan |
 | **Group** | Group/Ungroup selected pieces — grouped pieces move and rotate together; persisted in .4hu |
 | **3D Viewport** | SceneKit (Metal), multi-material, UV texture mapping, face selection highlight |
-| **Glue Tabs** | Trapezoid / Rectangle / Triangle shapes; 10 FlapMode variants per edge |
-| **Overlap** | Spatial grid + AABB + SAT detection |
-| **Layout** | Auto-arrange pieces on page; paper size picker (A4/A3/A2/A1/Letter/Legal); portrait/landscape |
+| **Glue Tabs** | Trapezoid / Rectangle / Triangle shapes; 10 FlapMode variants per edge; merge adjacent flaps into one polygon |
+| **Fold Lines** | Coplanar fold-line hide (configurable ~1° threshold) for cleaner patterns |
+| **Assembly Aid** | Edge-matching labels — cut-edge pair numbers on canvas + export |
+| **Overlap** | Spatial grid + AABB + SAT detection; automatic overlap-reducing retry (alternate near-minimal spanning trees) when the default unfold overlaps |
+| **Layout** | Auto-arrange pieces on page (tries 90° rotation per piece); paper size picker (A4/A3/A2/A1/Letter/Legal); portrait/landscape |
 | **Export** | SVG (vector) and PDF (Core Graphics), grayscale option |
 | **Project** | Save/load `.4hu` ZIP bundle — mesh + overrides + piece positions + groups (cross-platform with Windows) |
 | **Undo/Redo** | Lightweight snapshot of edge/flap overrides |
@@ -73,13 +75,13 @@ swift build -c release        # optimised release
 
 ```bash
 cd 4h-unfolder-mac-swift
-./scripts/build-release.sh v0.0.0.5-alpha
-# → publish/mac/v0.0.0.5-alpha/4H-Unfolder_v0.0.0.5-alpha_mac.zip
+./scripts/build-release.sh v0.0.0.6-alpha
+# → publish/mac/v0.0.0.6-alpha/4H-Unfolder_v0.0.0.6-alpha_mac.zip
 ```
 
 ### Tests
 
-Open in Xcode → **Product → Test (⌘U)**. All 87 tests must pass before release.
+Open in Xcode → **Product → Test (⌘U)**. All 128 tests must pass before release.
 
 ---
 
@@ -138,7 +140,7 @@ Open in Xcode → **Product → Test (⌘U)**. All 87 tests must pass before rel
 │       ├── AppState.swift           ← @MainActor ObservableObject, undo stack
 │       └── Views/                   ← MainView, SidebarView, SceneKitView,
 │                                       PatternCanvasView, UnfoldSetupSheet, PreferencesView
-└── Tests/FourHUnfolderTests/        ← 87 XCTest cases (8 files)
+└── Tests/FourHUnfolderTests/        ← 128 XCTest cases (12 files)
 ```
 
 ---

@@ -142,23 +142,30 @@ the exact line from `find_definition`.
 
 ---
 
-## Current branch: `feat/mac-port` (v0.0.0.1-alpha)
+## Current release: `v0.3.0.A` (Windows) / `v0.0.0.6-alpha` (macOS) — branch `main`
 
-### Windows tech debt open (session 38)
+> Public-facing plan + status live in the [wiki Roadmap](https://github.com/nghiazer/4H-Unfolder/wiki/Roadmap).
+> Full papercraft-parity plan, per-item status, and verification log: [`PARITY-PROGRESS.md`](PARITY-PROGRESS.md).
+
+### Windows tech debt open
 | ID | Priority | Description |
 |----|----------|-------------|
-| TD-38-1 | 🔴 High | Add Outline Padding — needs Clipper2 polygon offset library |
-| TD-38-2 | 🔴 High | Merge Adjacent Flaps — complex tab polygon union geometry |
-| TD-38-3 | 🟡 Med | Join Adjacent Isolated Edges — connectivity graph needed |
 | TD-38-4/5/6 | 🟢 Low | Select Symmetrical Pair / Split Window / Change Coordinates |
-
-### Windows tech debt open (session 36)
-| ID | Priority | Description |
-|----|----------|-------------|
-| TD-36-1 | 🟡 Med | No unit tests for `FlapOverride` serialization + `GlueTabGenerator` border modes |
 | TD-36-2 | 🟢 Low | `EditFlapsViewModel` hardcodes defaults (5mm/45°) — not wired to `AppSettings` fallback |
 | TD-36-3 | 🟢 Low | `FlapOverride.Deserialize`: silent-ignore on corrupt data — add warning |
-| Performance | 🟢 Low | O(n²) AABB+SAT overlap; spatial grid needed for meshes > 2000 faces |
+| Performance | 🟢 Low | O(n²) AABB+SAT overlap; spatial grid used, but the overlap-reducing retry (v0.3.0.A) multiplies unfold cost up to 9× when a mesh has an unavoidable overlap — profile meshes > 2000 faces |
+
+Resolved this release: TD-38-1 (Outline Padding), TD-38-2 (Merge Adjacent Flaps), TD-38-3 (Join
+Adjacent Isolated Edges) were already done on Windows before v0.3.0.A; TD-36-1 (FlapOverride/
+GlueTabGenerator test coverage) confirmed already covered by `FlapOverrideTests.cs` /
+`GlueTabGeneratorTests.cs`.
+
+### macOS tech debt open
+| ID | Priority | Description |
+|----|----------|-------------|
+| — | 🔴 High | Wire outline padding (`PolygonOffset`) into export/canvas — math exists, not consumed yet |
+| — | 🟡 Med | Port "join connected cut edges" from Windows |
+| — | 🟢 Low | Configurable overlap-retry budget (fixed at 8 attempts) for very large meshes |
 
 ---
 

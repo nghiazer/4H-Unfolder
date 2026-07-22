@@ -13,9 +13,9 @@ Security fixes land on the latest release of each platform.
 
 | Platform | Version | Supported |
 |----------|---------|:---------:|
-| Windows | `v0.2.0.A` (latest) | ✅ |
+| Windows | `v0.3.0.A` (latest) | ✅ |
 | Windows | older releases | ❌ |
-| macOS | `v0.0.0.5-alpha` (latest) | ✅ |
+| macOS | `v0.0.0.6-alpha` (latest) | ✅ |
 | macOS | older alphas | ❌ |
 
 Please always test against the latest release before reporting.
