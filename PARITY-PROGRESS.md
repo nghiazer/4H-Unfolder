@@ -2,7 +2,7 @@
 
 > File theo dõi nội bộ cho công cuộc học hỏi từ 2 dự án papercraft mã nguồn mở và nâng cấp
 > 4H-Unfolder. Cập nhật mỗi khi hoàn thành một hạng mục.
-> Cập nhật gần nhất: **2026-07-22**.
+> Cập nhật gần nhất: **2026-07-22** (GĐ2 hoàn thành).
 
 ## Nguồn tham chiếu
 
@@ -22,7 +22,7 @@ tế trước khi tin bảng đó.
 | Giai đoạn | Nội dung | macOS | Windows |
 |-----------|----------|:-----:|:-------:|
 | **GĐ 1** | Chất lượng pattern: flap-merge, outline-padding, coplanar-hide | 🟡 Gần xong | ✅ Xong |
-| **GĐ 2** | Hỗ trợ lắp ráp: mountain/valley*, edge-matching labels | 🚧 Đang làm | 🚧 Đang làm |
+| **GĐ 2** | Hỗ trợ lắp ráp: mountain/valley*, edge-matching labels | ✅ Xong | ✅ Xong |
 | **GĐ 3** | Layout & tương tác: repack, multi-seed start face, chế độ Edge/Face | ⬜ Chưa | ⬜ Chưa |
 | **GĐ 4** | Tiện ích I/O: PNG/trang, layer máy cắt | ⬜ Chưa | ⬜ Chưa |
 
@@ -79,32 +79,39 @@ fan-triangulated.
 
 ---
 
-## Giai đoạn 2 — Hỗ trợ lắp ráp 🚧
+## Giai đoạn 2 — Hỗ trợ lắp ráp ✅
 
 ### 2.1 Edge-matching labels
 
 **Khảo sát hiện trạng (2026-07-22) — kế hoạch ban đầu đã sai:** cả 2 nền tảng thực ra **đã có** cơ
 chế đánh số cặp cạnh (`CutEdgePairIds`/`cutEdgePairIds`, tính sẵn trong `UnfoldResult`). Việc thật
-còn thiếu là:
+còn thiếu (và nay **đã hoàn thành**) là:
 
 | Hạng mục | macOS | Windows |
 |----------|:-----:|:-------:|
-| Canvas: vẽ số cặp cạnh | ✅ có sẵn (`drawCutLabels`) nhưng **luôn bật, không theo setting** | ✅ có sẵn, đúng gate `View2D.ShowEdgeIds` |
-| Export SVG: vẽ số cặp cạnh | ✅ có sẵn nhưng **luôn bật, không có toggle riêng cho export** | ❌ **chưa có** |
-| Export PDF: vẽ số cặp cạnh | (không có PDF exporter riêng trên mac) | ❌ **chưa có** |
-| Setting `showEdgeIds` (view) | Khai báo sẵn (`View2DSettings`, default `false`) nhưng **chưa wire vào canvas** — dead setting | ✅ hoạt động đúng |
-| Setting cho export riêng | ❌ chưa có | ❌ chưa có |
+| Canvas: vẽ số cặp cạnh | ✅ có sẵn (`drawCutLabels`), **nay đã wire theo `v2d.showEdgeIds`** | ✅ có sẵn, đúng gate `View2D.ShowEdgeIds` |
+| Export SVG: vẽ số cặp cạnh | ✅ có sẵn, **nay gate bằng `includeEdgeLabels`** | ✅ **mới thêm** (`IncludeEdgeLabels`) |
+| Export PDF: vẽ số cặp cạnh | ✅ **mới gate** bằng `includeEdgeLabels` (exporter đã có sẵn, thiếu gate) | ✅ **mới thêm** (`IncludeEdgeLabels`) |
+| Setting view (canvas) | `showEdgeIds` đổi default `false→true` (giữ nguyên hành vi hiện tại), **wire vào canvas** | `ShowEdgeIds` đã đúng, không đổi |
+| Setting export (print) | `includeEdgeLabels` **mới** (default `true`, giữ hành vi export hiện tại) | `IncludeEdgeLabels` **mới** (default `false`, opt-in — khớp `MergeAdjacentFlaps`/`HideCoplanarFolds`) |
 
-Việc triển khai:
-- Windows: thêm `PrintSettings.IncludeEdgeLabels` (opt-in, default `false`) + render trong
-  `SvgExporter`/`PdfExporter` + toggle trong `SettingsDialog.xaml`.
-- macOS: wire `v2d.showEdgeIds` vào canvas (đổi default → `true` để giữ nguyên hành vi hiển thị hiện
-  tại, tránh regression); thêm `PrintSettings.includeEdgeLabels` (default `true`, giữ hành vi export
-  hiện tại) để gate SVG; thêm 2 toggle vào Preferences.
+**Phát hiện phụ khi làm (GĐ1 gap, đã fix luôn):** macOS `PDFExporter.swift` — một exporter PDF
+riêng (Core Graphics) song song với `SVGExporter.swift` mà lần trước không rà tới — **hoàn toàn
+thiếu coplanar-hide** dù GĐ1 đã làm việc này cho canvas + SVG. Đã fix: gọi lại
+`SVGExporter.isCoplanarFold(...)` (dùng chung logic, không lặp code) trong vòng lặp fold-edge của
+`PDFExporter`.
+
+Việc đã làm:
+- **Windows:** `PrintSettings.IncludeEdgeLabels` (opt-in) + render `<text class="pairlabel">` trong
+  `SvgExporter` + `gfx.DrawString` trong `PdfExporter` + checkbox `SettingsDialog.xaml` +
+  `SettingsViewModel` load/save. Test mới: `SvgEdgeLabelTests.cs` (3 test).
+- **macOS:** wire `v2d.showEdgeIds` vào `drawCutLabels` (canvas); `PrintSettings.includeEdgeLabels`
+  (+ tolerant decoder) gate cả `SVGExporter` và `PDFExporter`; fix coplanar-hide thiếu trong
+  `PDFExporter`; 2 toggle Preferences ("Show Edge IDs", "Include Edge-Matching Labels"). Test mới:
+  `EdgeLabelAndCoplanarExportTests.swift` (6 test).
 
 ### 2.2 Mountain/valley fold
-Đã có sẵn cả 2 nền tảng (người dùng xác nhận) → chỉ rà soát tùy chọn kiểu nét (liền/đứt) nếu cần,
-không phải việc bắt buộc của GĐ2.
+Đã có sẵn cả 2 nền tảng (người dùng xác nhận) → không phải việc của GĐ2, không đụng vào.
 
 ---
 
@@ -134,6 +141,9 @@ không phải việc bắt buộc của GĐ2.
 | 2026-07-21 | GĐ1 macOS: FlapMerger + ConvexPolygonUnion + PolygonOffset + coplanar-hide + tolerant settings | `swift build` ✅ · geometry swiftc runner **7/7** ✅ |
 | 2026-07-21 | GĐ1 Windows: coplanar-hide (exporters, canvas, settings, XAML) | net8.0 libs build ✅ · WPF compile (`EnableWindowsTargeting`) ✅ · **97/97** tests ✅ |
 | 2026-07-21 | Merge: `feat/parity-papercraft-phase1` → `docs/wiki` (#53) → `main` (#54) | — |
+| 2026-07-21 | `docs/parity-progress`: thêm file tiến trình này | Merge #55 → `main` |
+| 2026-07-22 | GĐ2 Windows: `IncludeEdgeLabels` (SvgExporter/PdfExporter/SettingsVM/XAML) | net8.0 libs + WPF compile ✅ · **100/100** tests ✅ (97 cũ + 3 mới) |
+| 2026-07-22 | GĐ2 macOS: wire `showEdgeIds` (canvas) + `includeEdgeLabels` (SVG+PDF gate) + fix PDFExporter coplanar-hide gap (GĐ1 sót) + 2 Preferences toggle | `swift build` ✅ · test mới type-check sạch qua swiftc + shim XCTest thủ công (xem ghi chú môi trường) |
 
 ### Lưu ý môi trường verify (máy Darwin)
 - WPF App **không chạy runtime** được trên macOS (`NETSDK1100`) — dùng `-p:EnableWindowsTargeting=true`
@@ -141,3 +151,8 @@ không phải việc bắt buộc của GĐ2.
 - .NET test cần `DOTNET_ROLL_FORWARD=Major` (chỉ có runtime 10.x; project target net8.0).
 - Swift XCTest **không** chạy từ CLI (`swift test` → thiếu module XCTest). Validate hình học bằng
   standalone `swiftc` runner; test XCTest chạy trong Xcode.
+- Để tối thiểu xác thực một file `XCTestCase` thật (không chỉ hình học thuần) khi không chạy được
+  Xcode: viết một shim module tối giản định nghĩa `XCTestCase`/`XCTAssert*` cùng chữ ký, build bằng
+  `swiftc -emit-module -module-name XCTest`, rồi `swiftc -typecheck -I <FourHUnfolderCore
+  swiftmodule dir> -I <shim dir> <test file>`. Bắt được lỗi kiểu/cú pháp thật (đã tự kiểm chứng bằng
+  cách cố tình chèn lỗi kiểu và xác nhận trình biên dịch báo lỗi) mà không cần chạy assertion thật.
