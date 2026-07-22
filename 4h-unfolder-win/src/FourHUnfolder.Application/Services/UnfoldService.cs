@@ -27,15 +27,54 @@ public class UnfoldService
     ///   User-modified edge types keyed by mesh edge ID.
     ///   These override the MST result for the named edges.
     /// </param>
+    /// <param name="seedCount">
+    ///   When the default MST (natural tie-break) produces overlaps, retry with up to this many
+    ///   alternate Kruskal tie-breaks and keep whichever candidate has the fewest overlapping face
+    ///   pairs. 0 disables retrying. Free when the default already has no overlaps (no retries run).
+    /// </param>
     public UnfoldResult Unfold(
         Mesh mesh,
         IReadOnlyDictionary<int, EdgeType>? edgeOverrides = null,
         AppSettings.PrintSettings? printSettings = null,
-        FlapOverrideDict? flapOverrides = null)
+        FlapOverrideDict? flapOverrides = null,
+        int seedCount = 8)
+    {
+        var (best, bestFoldIds) = UnfoldOnce(mesh, edgeOverrides, printSettings, flapOverrides, mstTieBreakSeed: null);
+
+        if (best.HasOverlaps && seedCount > 0)
+        {
+            int bestCount = _overlapDetector.CountOverlaps(best.Faces);
+            for (int seed = 0; seed < seedCount && bestCount > 0; seed++)
+            {
+                var (candidate, candidateFoldIds) = UnfoldOnce(mesh, edgeOverrides, printSettings, flapOverrides, mstTieBreakSeed: seed);
+                int count = _overlapDetector.CountOverlaps(candidate.Faces);
+                if (count < bestCount)
+                {
+                    best         = candidate;
+                    bestFoldIds  = candidateFoldIds;
+                    bestCount    = count;
+                }
+            }
+        }
+
+        // UnfoldOnce mutates mesh.Edges[].Type as a side effect on every call — after trying
+        // several seeds, re-stamp with the WINNING seed's fold set so the mesh's persistent state
+        // (read directly by e.g. MainViewModel.IsEdgeFold for canvas hit-testing) matches the
+        // returned result, regardless of which seed happened to run last in the loop above.
+        _edgeMarker.Mark(mesh, bestFoldIds);
+        return best;
+    }
+
+    private (UnfoldResult, HashSet<int>) UnfoldOnce(
+        Mesh mesh,
+        IReadOnlyDictionary<int, EdgeType>? edgeOverrides,
+        AppSettings.PrintSettings? printSettings,
+        FlapOverrideDict? flapOverrides,
+        int? mstTieBreakSeed)
     {
         // 1. Build dual graph + MST
         var dualGraph    = _graphBuilder.Build(mesh);
-        var mstEdges     = _mstBuilder.Build(dualGraph);
+        var mstEdges     = _mstBuilder.Build(dualGraph, mstTieBreakSeed);
         var foldEdgeIds  = new HashSet<int>(mstEdges.Select(e => e.SharedMeshEdgeId));
 
         // 2. Apply user overrides
@@ -82,7 +121,8 @@ public class UnfoldService
         foreach (var ge in dualGraph.Edges)
             dihedralAngles[ge.SharedMeshEdgeId] = ge.Weight * (180f / MathF.PI);
 
-        return new UnfoldResult(rawResult.Faces, tabs, hasOverlaps, cutEdgePairIds, dihedralAngles);
+        var result = new UnfoldResult(rawResult.Faces, tabs, hasOverlaps, cutEdgePairIds, dihedralAngles);
+        return (result, foldEdgeIds);
     }
 
     /// <summary>

@@ -108,4 +108,50 @@ public class MstAlgorithmTests
         // Kruskal picks both available edges (can't connect them)
         mst.Should().HaveCount(2);
     }
+
+    // ── tieBreakSeed (used by UnfoldService's multi-seed overlap retry) ─────────────────────
+
+    /// All-equal-weight K4 — mirrors a regular tetrahedron's dual graph, where every pair of the
+    /// 4 faces shares an edge with the same dihedral angle, so every one of the 6 edges ties.
+    private static DualGraph BuildAllTiedK4() => BuildGraph(4,
+        (0, 1, 1f), (0, 2, 1f), (0, 3, 1f), (1, 2, 1f), (1, 3, 1f), (2, 3, 1f));
+
+    [Fact]
+    public void TieBreakSeed_Null_MatchesDefaultNoSeedParameter()
+    {
+        var g = BuildAllTiedK4();
+
+        var withoutSeedParam = new KruskalMstBuilder().Build(g);
+        var withExplicitNull = new KruskalMstBuilder().Build(g, tieBreakSeed: null);
+
+        withExplicitNull.Select(e => e.Id).Should().Equal(withoutSeedParam.Select(e => e.Id),
+            "an explicit null seed must match omitting the parameter entirely");
+    }
+
+    [Fact]
+    public void TieBreakSeed_AlwaysReturnsValidSpanningTree()
+    {
+        var g = BuildAllTiedK4();
+        foreach (var seed in new[] { 0, 1, 2, 5, 42 })
+        {
+            new KruskalMstBuilder().Build(g, tieBreakSeed: seed)
+                .Should().HaveCount(3, $"seed {seed} must still produce a valid n-1 spanning tree");
+        }
+    }
+
+    [Fact]
+    public void TieBreakSeed_ProducesVariedMstsAcrossEqualWeightTies()
+    {
+        var g = BuildAllTiedK4();
+
+        var distinctResults = Enumerable.Range(0, 20)
+            .Select(seed => new KruskalMstBuilder().Build(g, tieBreakSeed: seed))
+            .Select(mst => string.Join(",", mst.Select(e => e.Id).OrderBy(id => id)))
+            .Distinct()
+            .Count();
+
+        distinctResults.Should().BeGreaterThan(1,
+            "different tie-break seeds must be able to select a different spanning tree " +
+            "among equal-weight ties — otherwise the multi-seed overlap retry can never help");
+    }
 }

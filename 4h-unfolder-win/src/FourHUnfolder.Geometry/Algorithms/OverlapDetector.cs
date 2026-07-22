@@ -20,9 +20,16 @@ public class OverlapDetector
 {
     private readonly record struct AABB(float MinX, float MaxX, float MinY, float MaxY);
 
-    public bool HasOverlaps(IReadOnlyList<UnfoldedFace> faces)
+    /// Fast yes/no check — stops at the first overlapping pair found.
+    public bool HasOverlaps(IReadOnlyList<UnfoldedFace> faces) => CountOverlaps(faces, stopAtFirst: true) > 0;
+
+    /// Total number of overlapping face pairs — scans every candidate pair (no early exit).
+    /// Used to compare candidate layouts (e.g. different MST tie-breaks) by overlap severity.
+    public int CountOverlaps(IReadOnlyList<UnfoldedFace> faces) => CountOverlaps(faces, stopAtFirst: false);
+
+    private static int CountOverlaps(IReadOnlyList<UnfoldedFace> faces, bool stopAtFirst)
     {
-        if (faces.Count < 2) return false;
+        if (faces.Count < 2) return 0;
 
         // ── Phase 0: pre-compute all AABBs + global bounds + average side ────────
         var boxes = new AABB[faces.Count];
@@ -73,6 +80,7 @@ public class OverlapDetector
         // Correctness guarantee: if two AABBs overlap they must share ≥ 1 grid cell,
         // so the spatial grid introduces no false negatives.
         var tested = new HashSet<long>(capacity: faces.Count * 2);
+        int count  = 0;
 
         foreach (var cell in grid.Values)
         {
@@ -88,11 +96,14 @@ public class OverlapDetector
                 if (!tested.Add(pairKey)) continue;
 
                 if (AABBsOverlap(boxes[i], boxes[j]) && TrianglesOverlap(faces[i], faces[j]))
-                    return true;
+                {
+                    count++;
+                    if (stopAtFirst) return count;
+                }
             }
         }
 
-        return false;
+        return count;
     }
 
     // ── AABB ─────────────────────────────────────────────────────────────────
