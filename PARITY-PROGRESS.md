@@ -2,7 +2,21 @@
 
 > File theo dõi nội bộ cho công cuộc học hỏi từ 2 dự án papercraft mã nguồn mở và nâng cấp
 > 4H-Unfolder. Cập nhật mỗi khi hoàn thành một hạng mục.
-> Cập nhật gần nhất: **2026-07-22** (GĐ2 hoàn thành).
+> Cập nhật gần nhất: **2026-07-22** (đang fix 3 finding từ cross-review GĐ1+GĐ2).
+
+## Cross-review GĐ1+GĐ2 (2026-07-22) — 3 finding đang fix
+
+Sau khi merge PR #57, review lại toàn bộ coplanar-hide (GĐ1) + edge-labels (GĐ2) một cách hoài
+nghi (không tin vào test cũ), phát hiện 3 vấn đề thật, đều xoay quanh coplanar-hide — không do GĐ2
+gây ra, sót từ GĐ1:
+
+| # | Nền tảng | Vấn đề | File |
+|---|----------|--------|------|
+| 1 | Windows | `HideCoplanarFolds` **vô hiệu lặng lẽ** với model import PDO — `TryBuildFromPdoLayout` không truyền `dihedralAngles` vào `UnfoldResult` (dict rỗng → check luôn fail) | `UnfoldService.cs:129` |
+| 2 | Windows | `CoplanarAngleDeg` **không có control UI** — chỉ có checkbox bật/tắt, ngưỡng khoá cứng 1.0° dù ViewModel hỗ trợ đủ | `SettingsDialog.xaml:702` |
+| 3 | macOS | `coplanarAngleDeg` do user đặt < 1° bị `UnfoldEngine`'s hardcoded cutoff (`angleDeg > 1`, dùng để loại bỏ nhãn góc gấp giả trên đường chéo fan-triangulation) ghi đè âm thầm | `UnfoldEngine.swift:35` |
+
+Đang fix cả 3, xem chi tiết cách fix + kết quả kiểm chứng bên dưới sau khi hoàn thành.
 
 ## Nguồn tham chiếu
 
