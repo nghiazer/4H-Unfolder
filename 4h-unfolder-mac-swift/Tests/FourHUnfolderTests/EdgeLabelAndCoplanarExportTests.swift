@@ -54,15 +54,17 @@ final class EdgeLabelAndCoplanarExportTests: XCTestCase {
         var s = defaultSettings; s.hideCoplanarFolds = true; s.printFoldLines = true
         let result = pipeline(TestMesh.flatStrip())   // all faces coplanar → fold dihedral ≈ 0
         let svg = SVGExporter.export(result: result, settings: s)
-        // Coplanar-hide guard runs per-edge; a flat strip's fold edges must all be suppressed.
-        XCTAssertFalse(svg.contains("class=\"fold\""))
+        // SVGExporter renders fold lines with an inline stroke="<foldLineColor>" attribute, not a
+        // CSS class — the coplanar-hide guard runs per-edge; a flat strip's fold edges must all
+        // be suppressed, so no line should carry the fold stroke color.
+        XCTAssertFalse(svg.contains(#"stroke="\#(s.foldLineColor)""#))
     }
 
     func testSVG_nonCoplanarFold_notHidden() {
         var s = defaultSettings; s.hideCoplanarFolds = true; s.printFoldLines = true
         let result = pipeline(TestMesh.tetrahedron())   // sharp dihedral angles
         let svg = SVGExporter.export(result: result, settings: s)
-        XCTAssertTrue(svg.contains("class=\"fold\""))
+        XCTAssertTrue(svg.contains(#"stroke="\#(s.foldLineColor)""#))
     }
 
     // MARK: - PDF: non-nil output + label/coplanar toggles change content size
