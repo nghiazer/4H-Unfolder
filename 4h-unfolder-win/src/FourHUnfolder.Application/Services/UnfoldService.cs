@@ -126,7 +126,15 @@ public class UnfoldService
                 cutEdgePairIds[edge.Id] = ++pairCounter;
         }
 
-        return new UnfoldResult(faces, tabs, hasOverlaps, cutEdgePairIds);
+        // Build meshEdgeId → dihedral angle (degrees) so HideCoplanarFolds works for PDO layouts
+        // too. This is pure mesh-topology geometry (face normals), independent of the PDO fold/cut
+        // classification above, so building a fresh dual graph here is safe and correct.
+        var dualGraph = _graphBuilder.Build(mesh);
+        var dihedralAngles = new Dictionary<int, float>();
+        foreach (var ge in dualGraph.Edges)
+            dihedralAngles[ge.SharedMeshEdgeId] = ge.Weight * (180f / MathF.PI);
+
+        return new UnfoldResult(faces, tabs, hasOverlaps, cutEdgePairIds, dihedralAngles);
     }
 
     /// Returns the connected components (pieces) for an already-marked mesh.

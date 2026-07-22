@@ -2,7 +2,31 @@
 
 > File theo dõi nội bộ cho công cuộc học hỏi từ 2 dự án papercraft mã nguồn mở và nâng cấp
 > 4H-Unfolder. Cập nhật mỗi khi hoàn thành một hạng mục.
-> Cập nhật gần nhất: **2026-07-22** (GĐ2 hoàn thành).
+> Cập nhật gần nhất: **2026-07-22** (đã fix 3 finding từ cross-review GĐ1+GĐ2, +1 root cause sâu hơn phát hiện khi viết test).
+
+## Cross-review GĐ1+GĐ2 (2026-07-22) — đã fix
+
+Sau khi merge PR #57, review lại toàn bộ coplanar-hide (GĐ1) + edge-labels (GĐ2) một cách hoài
+nghi (không tin vào test cũ), phát hiện 3 vấn đề thật, đều xoay quanh coplanar-hide — không do GĐ2
+gây ra, sót từ GĐ1. Cách fix + finding phụ phát hiện thêm khi viết test cho fix:
+
+| # | Nền tảng | Vấn đề | Cách fix |
+|---|----------|--------|----------|
+| 1 | Windows | `HideCoplanarFolds` **vô hiệu lặng lẽ** với model import PDO — `TryBuildFromPdoLayout` không truyền `dihedralAngles` vào `UnfoldResult` (dict rỗng → check luôn fail) | `UnfoldService.cs`: build lại dual graph (`_graphBuilder.Build(mesh)`, thuần hình học, không phụ thuộc fold/cut) trong `TryBuildFromPdoLayout`, populate `dihedralAngles` giống path chính |
+| 1b | Windows | **Root cause sâu hơn, lộ ra khi viết test cho fix #1:** `PdoUnfoldBuilder.Build()` chưa bao giờ truyền `meshEdgeIds` cho `UnfoldedFace` → mọi face từ PDO có `MeshEdgeIds = [-1,-1,-1]` → **cả coplanar-hide LẪN edge-labels (GĐ2) đều vô hiệu với PDO models**, bất kể fix #1 | `PdoUnfoldBuilder.cs`: thêm mảng `meshEdgeIds` từ `meshFace.EdgeIds`, truyền vào constructor |
+| 2 | Windows | `CoplanarAngleDeg` **không có control UI** — chỉ có checkbox bật/tắt, ngưỡng khoá cứng 1.0° dù ViewModel hỗ trợ đủ | Thêm Slider+TextBox trong `SettingsDialog.xaml` (row 11 mới, không đụng row khác) |
+| 3 | macOS | `coplanarAngleDeg` do user đặt < 1° bị `UnfoldEngine`'s hardcoded cutoff (`angleDeg > 1`, dùng để loại bỏ nhãn góc gấp giả trên đường chéo fan-triangulation) ghi đè âm thầm | `SVGExporter.isCoplanarFold`: clamp ngưỡng hiệu lực `max(1.0, coplanarAngleDeg)` — không đụng `UnfoldEngine` (tránh phá `testCube_dihedralAngles_allNinety` vốn dựa vào cutoff này) + caption UX trong Preferences |
+
+**Bài học lặp lại:** viết test THẬT (không phải hand-built `UnfoldResult` bỏ qua pipeline) cho fix #1 đã
+**tự bắt được finding 1b** ngay khi chạy — nếu chỉ test qua `SvgExporter` với `UnfoldedFace` tự dựng
+(như cách viết test GĐ2 trước đó), sẽ không bao giờ lộ ra vì `meshEdgeIds` tự dựng luôn hợp lệ. Luôn
+đi qua đúng pipeline thật (`UnfoldService`/`PdoUnfoldBuilder`) khi test một code path cụ thể.
+
+Kiểm chứng: Windows **104/104 test** (100 cũ + 3 mới `UnfoldServicePdoDihedralTests.cs` + 1 mới
+`PdoUnfoldBuilderTests.cs`), build 0 lỗi (`EnableWindowsTargeting`). macOS: build ✅, 4 test mới
+trong `EdgeLabelAndCoplanarExportTests.swift`, mỗi assertion đã tự tay trace tay khớp với
+implementation thật trước khi tin — **chờ CI thật (Xcode) xác nhận trước khi merge**, không lặp lại
+sai lầm tin vào typecheck-only như lần GĐ2.
 
 ## Nguồn tham chiếu
 

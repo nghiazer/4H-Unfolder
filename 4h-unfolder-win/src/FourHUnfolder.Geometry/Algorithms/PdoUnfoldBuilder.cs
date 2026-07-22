@@ -62,11 +62,13 @@ public sealed class PdoUnfoldBuilder
             // Edge flags: EdgeIds[0]=AB, EdgeIds[1]=BC, EdgeIds[2]=CA
             var isFold     = new bool[3];
             var isBoundary = new bool[3];
+            var meshEdgeIds = new int[3] { -1, -1, -1 };
             for (int e = 0; e < Math.Min(3, meshFace.EdgeIds.Count); e++)
             {
                 var edge   = mesh.Edges[meshFace.EdgeIds[e]];
                 isFold[e]     = edge.Type == EdgeType.Fold;
                 isBoundary[e] = edge.Type == EdgeType.Boundary;
+                meshEdgeIds[e] = meshFace.EdgeIds[e];
             }
 
             // UV texture coordinates
@@ -86,7 +88,8 @@ public sealed class PdoUnfoldBuilder
                 edgeIsFold:     isFold,
                 edgeIsBoundary: isBoundary,
                 uvCoords:       uvCoords,
-                materialId:     meshFace.MaterialId));
+                materialId:     meshFace.MaterialId,
+                meshEdgeIds:    meshEdgeIds));
         }
 
         return result;
