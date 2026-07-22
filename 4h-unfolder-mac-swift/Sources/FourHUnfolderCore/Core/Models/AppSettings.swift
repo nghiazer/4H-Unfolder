@@ -48,6 +48,11 @@ struct AppSettings: Codable, Equatable {
         /// Dihedral-angle threshold (degrees) below which a fold edge counts as coplanar.
         var coplanarAngleDeg: Double = 1.0
 
+        /// Print cut-edge pair numbers (assembly matching guide) in SVG export. Independent
+        /// of View2DSettings.showEdgeIds, which only controls the on-screen canvas. Default
+        /// true preserves the pre-existing always-on SVG export behaviour.
+        var includeEdgeLabels: Bool = true
+
         var foldLineColor: String = "#4169e1"
         var foldLineWidth: Double = 0.8
         var foldLineDash: String  = "4,2"
@@ -103,6 +108,7 @@ struct AppSettings: Codable, Equatable {
             outlinePaddingMm    = d(.outlinePaddingMm, def.outlinePaddingMm)
             hideCoplanarFolds   = d(.hideCoplanarFolds, def.hideCoplanarFolds)
             coplanarAngleDeg    = d(.coplanarAngleDeg, def.coplanarAngleDeg)
+            includeEdgeLabels   = d(.includeEdgeLabels, def.includeEdgeLabels)
             foldLineColor       = d(.foldLineColor, def.foldLineColor)
             foldLineWidth       = d(.foldLineWidth, def.foldLineWidth)
             foldLineDash        = d(.foldLineDash, def.foldLineDash)
@@ -139,7 +145,9 @@ struct AppSettings: Codable, Equatable {
         var glueTabColor: String  = "#a8d5a2"
 
         var showFaceNumbers: Bool = false
-        var showEdgeIds: Bool = false
+        // Gates cut-edge pair number labels on the canvas (drawCutLabels). Default true
+        // preserves the pre-existing always-on behaviour now that this setting is wired up.
+        var showEdgeIds: Bool = true
         var showFoldAngles: Bool = false
         var showGlueTabs: Bool = true
         var showTexture: Bool = true

@@ -62,6 +62,7 @@ struct PDFExporter {
                 for ei in 0..<3 where face.edgeIsFold(ei) {
                     let mid = face.meshEdgeId(ei)
                     guard mid < 0 || drawn.insert(mid).inserted else { continue }
+                    if SVGExporter.isCoplanarFold(mid, result: result, settings: settings) { continue }
                     ctx.setStrokeColor(foldColor)
                     ctx.setLineWidth(CGFloat(settings.foldLineWidth) * 72 / 25.4)
                     if settings.foldLineDash != "Solid" {
@@ -125,7 +126,7 @@ struct PDFExporter {
 
         // ── Layer 5: cut-pair labels ─────────────────────────────────────────
         ctx.setLineDash(phase: 0, lengths: [])
-        if !result.cutEdgePairIds.isEmpty {
+        if settings.includeEdgeLabels && !result.cutEdgePairIds.isEmpty {
             let labelColor = cgColor(hex: settings.cutLineColor) ?? CGColor(red: 0.9, green: 0.1, blue: 0.1, alpha: 0.8)
             var drawn = Set<Int>()
             for face in result.faces {

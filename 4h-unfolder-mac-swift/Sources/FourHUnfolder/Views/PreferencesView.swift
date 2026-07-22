@@ -107,6 +107,7 @@ private struct PrintTab: View {
                 }
                 Toggle("Print Fold Lines", isOn: ps.printFoldLines)
                 Toggle("Print Cut Lines",  isOn: ps.printCutLines)
+                Toggle("Include Edge-Matching Labels", isOn: ps.includeEdgeLabels)
                 Toggle("Hide Coplanar Folds", isOn: ps.hideCoplanarFolds)
                 HStack {
                     Text("Coplanar Threshold")
@@ -172,6 +173,7 @@ private struct CanvasTab: View {
                 Toggle("Show Glue Tabs",   isOn: v2d.showGlueTabs)
                 Toggle("Show Textures",    isOn: v2d.showTexture)
                 Toggle("Show Face Numbers",isOn: v2d.showFaceNumbers)
+                Toggle("Show Edge IDs",    isOn: v2d.showEdgeIds)
                 Toggle("Show Fold Angles", isOn: v2d.showFoldAngles)
             }
 
