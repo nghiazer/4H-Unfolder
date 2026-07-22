@@ -24,8 +24,8 @@ body:
     id: version
     attributes:
       label: App version
-      description: Shown in the title bar / About. e.g. v0.2.0.A (Windows) or v0.0.0.5-alpha (macOS).
-      placeholder: v0.2.0.A
+      description: Shown in the title bar / About. e.g. v0.3.0.A (Windows) or v0.0.0.6-alpha (macOS).
+      placeholder: v0.3.0.A
     validations:
       required: true
 

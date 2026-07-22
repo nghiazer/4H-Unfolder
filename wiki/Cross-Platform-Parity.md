@@ -5,7 +5,7 @@ is a native Swift port catching up to it. This page tracks where they match and 
 
 | | Windows | macOS |
 |--|---------|-------|
-| **Status** | ✅ Production `v0.2.0.A` | 🚧 Alpha `v0.0.0.5-alpha` |
+| **Status** | ✅ Production `v0.3.0.A` | 🚧 Alpha `v0.0.0.6-alpha` |
 | **Stack** | WPF · .NET 8 · C# | SwiftUI · SceneKit · Swift |
 | **Distribution** | Inno Setup installer + portable ZIP | Ad-hoc signed `.app` (notarization pending) |
 
@@ -33,15 +33,23 @@ is a native Swift port catching up to it. This page tracks where they match and 
 | `.4hu` project bundles (cross-platform) | ✅ | ✅ |
 | Undo / redo | ✅ | ✅ |
 | Preferences panel | ✅ | ✅ |
-| **Outline padding** | ✅ (v0.1.1.A) | ❔ |
-| **Merge adjacent flaps** | ✅ (v0.1.1.A) | ❔ |
+| **Outline padding** | ✅ (v0.1.1.A) | 🟡 computed, not wired to export/canvas |
+| **Merge adjacent flaps** | ✅ (v0.1.1.A) | ✅ (v0.0.0.6-alpha) |
 | **Join connected cut edges** | ✅ (v0.1.1.A) | ❔ |
+| **Coplanar fold-line hide** | ✅ (v0.3.0.A) | ✅ (v0.0.0.6-alpha) |
+| **Edge-matching labels** | ✅ (v0.3.0.A) | ✅ (v0.0.0.6-alpha) |
+| **Auto-arrange tries 90° rotation** | ✅ | ✅ (v0.0.0.6-alpha) |
+| **Overlap-reducing unfold retry** | ✅ (v0.3.0.A) | ✅ (v0.0.0.6-alpha) |
 
-✅ present · ❌ not implemented · ❔ not yet verified on macOS
+✅ present · 🟡 partial · ❌ not implemented · ❔ not yet verified on macOS
 
-> The core feature set is at parity. Windows leads on **extra import formats** (Assimp) and the
-> **v0.1.1.A layout refinements** (outline padding, merged flaps, joined cut edges) — bringing
-> those to macOS is tracked on the [Roadmap](Roadmap).
+> The core feature set is at parity, and the papercraft-parity effort (coplanar-hide,
+> edge-matching labels, merge adjacent flaps, auto-arrange rotation, overlap-reducing retry) has
+> now landed on **both** platforms. Windows still leads on **extra import formats** (Assimp),
+> **outline padding actually rendering** (macOS has the math but hasn't wired it to export/canvas
+> yet), and **join connected cut edges** — tracked on the [Roadmap](Roadmap). See
+> [`PARITY-PROGRESS.md`](https://github.com/nghiazer/4H-Unfolder/blob/main/PARITY-PROGRESS.md) at
+> the repo root for the full plan and verification log.
 
 ---
 
