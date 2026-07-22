@@ -23,8 +23,14 @@ struct SVGExporter {
     static func isCoplanarFold(_ meshEdgeId: Int, result: UnfoldResult,
                                settings: AppSettings.PrintSettings) -> Bool {
         guard settings.hideCoplanarFolds, meshEdgeId >= 0 else { return false }
+        // UnfoldEngine only stores angles > 1° (needed elsewhere to suppress fake fold-angle
+        // labels on fan-triangulation diagonals) — an absent entry always means the real angle is
+        // in [0°, 1°]. Clamp the effective threshold to that same 1° floor so the "absent →
+        // coplanar" fallback below stays correct even if the user configures a threshold under
+        // it; otherwise a real ~0.6° edge would get hidden even when asked to keep ≥0.3° visible.
+        let threshold = max(1.0, Float(settings.coplanarAngleDeg))
         guard let deg = result.edgeDihedralAngles[meshEdgeId] else { return true }
-        return deg < Float(settings.coplanarAngleDeg)
+        return deg < threshold
     }
 
     // MARK: - Public API

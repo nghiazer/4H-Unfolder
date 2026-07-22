@@ -116,6 +116,8 @@ private struct PrintTab: View {
                         .frame(width: 60).multilineTextAlignment(.trailing)
                     Text("°")
                 }
+                Text("Minimum effective value is 1° — smaller values behave the same as 1°.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
 
             Section("Layout") {

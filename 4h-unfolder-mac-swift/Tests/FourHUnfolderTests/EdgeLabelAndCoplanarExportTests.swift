@@ -67,6 +67,43 @@ final class EdgeLabelAndCoplanarExportTests: XCTestCase {
         XCTAssertTrue(svg.contains(#"stroke="\#(s.foldLineColor)""#))
     }
 
+    // MARK: - isCoplanarFold: threshold floor (cross-review fix)
+    //
+    // UnfoldEngine only stores angles > 1° in edgeDihedralAngles (needed to suppress fake
+    // fold-angle labels on fan-triangulation diagonals) — so an absent entry always means the
+    // real angle is in [0°, 1°]. isCoplanarFold clamps its effective threshold to that same 1°
+    // floor so a user-configured value below it can't silently misclassify a real ~0.6° edge.
+
+    func testIsCoplanarFold_absentEdge_hiddenEvenBelowEngineFloor() {
+        var s = defaultSettings; s.hideCoplanarFolds = true; s.coplanarAngleDeg = 0.3
+        let result = UnfoldResult(faces: [], tabs: [], hasOverlaps: false,
+                                  cutEdgePairIds: [:], edgeDihedralAngles: [:], pieces: [])
+        XCTAssertTrue(SVGExporter.isCoplanarFold(0, result: result, settings: s),
+                     "an absent entry (real angle in [0°,1°]) must stay hidden even when the " +
+                     "configured threshold is below the engine's 1° floor")
+    }
+
+    func testIsCoplanarFold_presentEdgeAboveThreshold_notHidden() {
+        var s = defaultSettings; s.hideCoplanarFolds = true; s.coplanarAngleDeg = 5.0
+        let result = UnfoldResult(faces: [], tabs: [], hasOverlaps: false,
+                                  cutEdgePairIds: [:], edgeDihedralAngles: [7: Float(7.0)], pieces: [])
+        XCTAssertFalse(SVGExporter.isCoplanarFold(7, result: result, settings: s))
+    }
+
+    func testIsCoplanarFold_presentEdgeBelowThreshold_hidden() {
+        var s = defaultSettings; s.hideCoplanarFolds = true; s.coplanarAngleDeg = 5.0
+        let result = UnfoldResult(faces: [], tabs: [], hasOverlaps: false,
+                                  cutEdgePairIds: [:], edgeDihedralAngles: [7: Float(3.0)], pieces: [])
+        XCTAssertTrue(SVGExporter.isCoplanarFold(7, result: result, settings: s))
+    }
+
+    func testIsCoplanarFold_disabled_neverHides() {
+        var s = defaultSettings; s.hideCoplanarFolds = false
+        let result = UnfoldResult(faces: [], tabs: [], hasOverlaps: false,
+                                  cutEdgePairIds: [:], edgeDihedralAngles: [:], pieces: [])
+        XCTAssertFalse(SVGExporter.isCoplanarFold(0, result: result, settings: s))
+    }
+
     // MARK: - PDF: non-nil output + label/coplanar toggles change content size
 
     func testPDF_export_producesData() {
