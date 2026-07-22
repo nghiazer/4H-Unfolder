@@ -2,7 +2,7 @@
 
 > File theo dõi nội bộ cho công cuộc học hỏi từ 2 dự án papercraft mã nguồn mở và nâng cấp
 > 4H-Unfolder. Cập nhật mỗi khi hoàn thành một hạng mục.
-> Cập nhật gần nhất: **2026-07-22** (GĐ3 hoàn thành: 3.1 rotation macOS + 3.2 MST tie-break retry cả 2 nền tảng; 3.3 để sau).
+> Cập nhật gần nhất: **2026-07-22** (Cross-review GĐ3 tìm 1 finding nghiêm trọng về hiệu quả tie-break — đã fix bằng epsilon-perturbation + skip-check).
 
 ## Cross-review GĐ1+GĐ2 (2026-07-22) — đã fix
 
@@ -149,6 +149,49 @@ Việc đã làm:
 
 ---
 
+## Cross-review GĐ3 (2026-07-22) — đã fix
+
+Sau khi merge PR #59, review lại kỹ toàn bộ 3.1+3.2 một cách hoài nghi. Kiểm tra `OverlapDetector`,
+`KruskalMstBuilder`/`KruskalMSTBuilder`, `UnfoldService` orchestrator, và phần xoay 90° macOS
+(bằng đại số: ma trận biến đổi có định thức +1 → đúng là phép quay, không phải phản chiếu; `UV`
+không bị biến đổi theo giấy; `mergedPolygon` từ `FlapMerger` cũng được map đúng) — không thấy bug.
+
+**1 finding nghiêm trọng, xác nhận bằng thực nghiệm:** cơ chế tie-break retry (3.2) so sánh **bằng
+tuyệt đối bit-for-bit** giữa các giá trị góc dihedral (float). Dựng thử một mesh bất đối xứng 176
+cạnh (mô phỏng model thực tế — scan/sculpt, không đối xứng cố ý) và đo được **0 cặp cạnh trùng
+trọng số tuyệt đối**. Nghĩa là: với đa số model thực tế, cả 8 seed thử lại cho ra **y hệt** MST gốc
+— không có tác dụng gì — nhưng `Unfold()`/`.unfold()` vẫn chạy lại toàn bộ pipeline 9 lần mỗi khi có
+overlap, và vòng lặp chỉ dừng sớm khi đạt đúng 0 overlap (không phải "đủ tốt"), nên với mesh có
+overlap không thể tránh khỏi, chi phí 9x này lặp lại **mãi mãi ở mỗi lần chỉnh sửa** (`Unfold()` gọi
+lại trên mọi edit, không chỉ lúc load) trên cả 2 nền tảng.
+
+### Fix: epsilon-based near-tie perturbation + skip-check
+
+**Hiệu chỉnh epsilon bằng thực nghiệm** (không đoán suông): thử mesh ngẫu nhiên 176 cạnh với nhiều
+mức epsilon — đếm "gap gần" (giữa các trọng số liền kề sau sort) rất dễ gây hiểu lầm (ở epsilon=1°,
+162/175 gap được coi "gần" — tưởng như quá rộng), nhưng đo trực tiếp **MST thực sự đổi bao nhiêu**
+mới là chỉ số đúng: ở epsilon=1° chỉ 5/20 seed cho MST khác nhau, độ lệch tổng trọng số so với MST
+thật chỉ 0.745° trên tổng 32.75 rad (~0.02%) — biến động thật nhỏ, đủ để có ích, không đủ để làm
+lệch nghiêm trọng khỏi heuristic "ưu tiên cạnh phẳng nhất". Chốt **epsilon = 1°** (khớp
+`CoplanarAngleDeg` đã có sẵn trong codebase).
+
+| Thay đổi | Windows | macOS |
+|----------|---------|-------|
+| Tie-break: exact-equality `ThenBy` → epsilon-perturbation | `KruskalMstBuilder.TieEpsilonRad` (public const, 1°) + `TieBreakOffset` cộng dồn vào trọng số trước khi sort, giới hạn sao cho chỉ 2 cạnh lệch <epsilon mới có thể đổi thứ tự | `KruskalMSTBuilder.tieEpsilonRad` + `tieBreakOffset` tương tự |
+| Skip-check khi vô vọng | `KruskalMstBuilder.HasPotentialTies(graph)` — kiểm tra có cặp cạnh nào lệch <epsilon không, dùng để `Unfold()` bỏ qua toàn bộ vòng lặp retry khi provably futile | `KruskalMSTBuilder.hasPotentialTies(graph:)` tương tự |
+| Wiring | `UnfoldOnce` giờ trả thêm `DualGraph` (không rebuild thừa) để `Unfold()` gọi `HasPotentialTies` trước khi vào loop | `unfoldOnce` trả thêm `DualGraph` tương tự |
+
+**Chứng minh cận an toàn:** với perturbation giới hạn trong `[-0.5·eps, +0.5·eps]`, hai cạnh chỉ có
+thể đổi thứ tự tương đối khi hiệu trọng số thật của chúng **nhỏ hơn epsilon** — cạnh có hiệu >epsilon
+không bao giờ bị ảnh hưởng bởi seed, có test riêng khẳng định (`TieBreakSeed_NeverAffectsWellSeparatedWeights`).
+
+Kiểm chứng: Windows **121/121 test** (115 cũ + 6 mới: near-tie MST variation, well-separated
+invariant, `HasPotentialTies` ×4), build 0 lỗi (`EnableWindowsTargeting`). macOS: `swift build` ✅
+(Core+App), test mới type-check sạch qua shim + mỗi assertion đã tự tay trace khớp implementation
+thật — chờ CI thật xác nhận trước khi merge.
+
+---
+
 ## Giai đoạn 3 — Layout & tương tác ✅ (3.1+3.2; 3.3 để sau)
 
 **Khảo sát hiện trạng (2026-07-22) — kế hoạch ban đầu lại sai:** giống GĐ1/GĐ2, hoá ra phần lớn đã
@@ -242,6 +285,9 @@ merge** theo đúng quy trình đã rút kinh nghiệm từ GĐ2.
 | 2026-07-22 | Cross-review GĐ1+GĐ2: PDO no-op (Win), `PdoUnfoldBuilder` thiếu `meshEdgeIds` (Win), thiếu UI `CoplanarAngleDeg` (Win), threshold <1° bị engine cutoff ghi đè (mac) | Win **104/104** test · CI xanh macOS+Windows → merge PR #58 |
 | 2026-07-22 | GĐ3 Windows: `OverlapDetector.CountOverlaps`, `KruskalMstBuilder.tieBreakSeed`, `UnfoldService` refactor multi-seed retry + mesh-marking fix | net8.0 build + WPF compile (`EnableWindowsTargeting`) ✅ · **115/115** test ✅ (104 cũ + 11 mới) |
 | 2026-07-22 | GĐ3 macOS: `OverlapDetector.countOverlaps`, `KruskalMSTBuilder.tieBreakSeed`, `UnfoldService.unfold` refactor multi-seed retry + mesh-marking fix, `autoArrange()` thêm xoay 90° (+ `rotated90InLocalBBox` tách sang Core để test được) | `swift build` ✅ (Core+App) · test mới type-check sạch qua shim + đối chiếu tay |
+| 2026-07-22 | Merge PR #59 (`feat/parity-phase3-repack-multiseed`) → `main`, CI xanh cả 2 job ngay lần đầu | `gh run watch` ✅ |
+| 2026-07-22 | Cross-review GĐ3: phát hiện tie-break dựa exact-equality gần như vô dụng với mesh bất đối xứng (thực nghiệm: 0/176 tie tuyệt đối) trong khi vẫn tốn 9x chi phí mỗi lần overlap | Thực nghiệm scratch C# console app xác nhận + hiệu chỉnh epsilon |
+| 2026-07-22 | Fix: epsilon-perturbation (1°, hiệu chỉnh thực nghiệm) thay exact-equality + `HasPotentialTies`/`hasPotentialTies` skip-check cả 2 nền tảng | Win **121/121** test ✅ (115 cũ + 6 mới), build 0 lỗi · mac `swift build` ✅ + type-check sạch |
 
 ### Lưu ý môi trường verify (máy Darwin)
 - WPF App **không chạy runtime** được trên macOS (`NETSDK1100`) — dùng `-p:EnableWindowsTargeting=true`

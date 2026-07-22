@@ -1,4 +1,5 @@
-﻿using FourHUnfolder.Domain.Models;
+﻿using FourHUnfolder.Domain.DualGraph;
+using FourHUnfolder.Domain.Models;
 using FourHUnfolder.Domain.Results;
 using FourHUnfolder.Domain.Settings;
 using FourHUnfolder.Geometry.Algorithms;
@@ -39,14 +40,19 @@ public class UnfoldService
         FlapOverrideDict? flapOverrides = null,
         int seedCount = 8)
     {
-        var (best, bestFoldIds) = UnfoldOnce(mesh, edgeOverrides, printSettings, flapOverrides, mstTieBreakSeed: null);
+        var (best, bestFoldIds, dualGraph) = UnfoldOnce(mesh, edgeOverrides, printSettings, flapOverrides, mstTieBreakSeed: null);
 
-        if (best.HasOverlaps && seedCount > 0)
+        // Skip the retry loop entirely when it's provably futile: if no two dual-graph edges are
+        // within KruskalMstBuilder.TieEpsilonRad of each other, no seed can ever select a
+        // different spanning tree, so retrying would just burn full pipeline passes for zero
+        // chance of a different result (see PARITY-PROGRESS.md — empirically, irregular/organic
+        // meshes very often have zero exact ties, though near-ties within ~1° are common).
+        if (best.HasOverlaps && seedCount > 0 && KruskalMstBuilder.HasPotentialTies(dualGraph))
         {
             int bestCount = _overlapDetector.CountOverlaps(best.Faces);
             for (int seed = 0; seed < seedCount && bestCount > 0; seed++)
             {
-                var (candidate, candidateFoldIds) = UnfoldOnce(mesh, edgeOverrides, printSettings, flapOverrides, mstTieBreakSeed: seed);
+                var (candidate, candidateFoldIds, _) = UnfoldOnce(mesh, edgeOverrides, printSettings, flapOverrides, mstTieBreakSeed: seed);
                 int count = _overlapDetector.CountOverlaps(candidate.Faces);
                 if (count < bestCount)
                 {
@@ -65,7 +71,7 @@ public class UnfoldService
         return best;
     }
 
-    private (UnfoldResult, HashSet<int>) UnfoldOnce(
+    private (UnfoldResult, HashSet<int>, DualGraph) UnfoldOnce(
         Mesh mesh,
         IReadOnlyDictionary<int, EdgeType>? edgeOverrides,
         AppSettings.PrintSettings? printSettings,
@@ -122,7 +128,7 @@ public class UnfoldService
             dihedralAngles[ge.SharedMeshEdgeId] = ge.Weight * (180f / MathF.PI);
 
         var result = new UnfoldResult(rawResult.Faces, tabs, hasOverlaps, cutEdgePairIds, dihedralAngles);
-        return (result, foldEdgeIds);
+        return (result, foldEdgeIds, dualGraph);
     }
 
     /// <summary>

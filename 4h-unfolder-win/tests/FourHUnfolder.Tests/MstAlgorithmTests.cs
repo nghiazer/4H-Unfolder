@@ -154,4 +154,87 @@ public class MstAlgorithmTests
             "different tie-break seeds must be able to select a different spanning tree " +
             "among equal-weight ties — otherwise the multi-seed overlap retry can never help");
     }
+
+    // ── epsilon-based near-tie perturbation (real meshes almost never have EXACT ties) ──────
+
+    [Fact]
+    public void TieBreakSeed_ProducesVariedMstsAcrossNearButNotExactTies()
+    {
+        // Weights differ by tiny amounts (< TieEpsilonRad) but are NOT bit-identical — this is
+        // the realistic case for irregular/organic meshes, unlike BuildAllTiedK4's contrived
+        // exact ties. Without epsilon-based perturbation, OrderBy(Weight) alone already fully
+        // determines the order and no seed could ever change the result.
+        float eps = KruskalMstBuilder.TieEpsilonRad;
+        var g = BuildGraph(4,
+            (0, 1, 1.000f),
+            (0, 2, 1.000f + eps * 0.2f),
+            (0, 3, 1.000f + eps * 0.4f),
+            (1, 2, 1.000f + eps * 0.6f),
+            (1, 3, 1.000f + eps * 0.3f),
+            (2, 3, 1.000f + eps * 0.1f));
+
+        var distinctResults = Enumerable.Range(0, 20)
+            .Select(seed => new KruskalMstBuilder().Build(g, tieBreakSeed: seed))
+            .Select(mst => string.Join(",", mst.Select(e => e.Id).OrderBy(id => id)))
+            .Distinct()
+            .Count();
+
+        distinctResults.Should().BeGreaterThan(1,
+            "near-tied (but not bit-identical) edges must still be perturbable — this is the " +
+            "realistic case for irregular meshes, which almost never have exact float ties");
+    }
+
+    [Fact]
+    public void TieBreakSeed_NeverAffectsWellSeparatedWeights()
+    {
+        // Weights differ by far more than TieEpsilonRad — perturbation is bounded so it can
+        // never swap their relative order, regardless of seed (proves the safety bound: only
+        // near-ties are ever affected, real weight differences are always respected).
+        var g = BuildGraph(4,
+            (0, 1, 1f),
+            (1, 2, 2f),
+            (2, 3, 3f),
+            (0, 3, 100f),
+            (0, 2, 50f));
+
+        for (int seed = 0; seed < 10; seed++)
+        {
+            var mst = new KruskalMstBuilder().Build(g, tieBreakSeed: seed);
+            mst.Sum(e => e.Weight).Should().BeLessThan(10f,
+                $"seed {seed}: well-separated weights must never be reordered by tie-break perturbation");
+        }
+    }
+
+    // ── HasPotentialTies (lets UnfoldService skip a provably-futile retry loop) ─────────────
+
+    [Fact]
+    public void HasPotentialTies_AllTiedGraph_ReturnsTrue()
+    {
+        KruskalMstBuilder.HasPotentialTies(BuildAllTiedK4()).Should().BeTrue();
+    }
+
+    [Fact]
+    public void HasPotentialTies_NearTiedGraph_ReturnsTrue()
+    {
+        float eps = KruskalMstBuilder.TieEpsilonRad;
+        var g = BuildGraph(4, (0, 1, 1.000f), (0, 2, 1.000f + eps * 0.3f), (0, 3, 5f), (1, 2, 8f));
+        KruskalMstBuilder.HasPotentialTies(g).Should().BeTrue();
+    }
+
+    [Fact]
+    public void HasPotentialTies_WellSeparatedGraph_ReturnsFalse()
+    {
+        // Every weight differs from its neighbours by far more than TieEpsilonRad.
+        var g = BuildGraph(5,
+            (0, 1, 1f), (1, 2, 2f), (2, 3, 3f), (3, 4, 4f), (0, 4, 5f));
+        KruskalMstBuilder.HasPotentialTies(g).Should().BeFalse(
+            "no seed could ever change the MST when every edge is well outside tie-break range");
+    }
+
+    [Fact]
+    public void HasPotentialTies_EmptyOrSingleEdgeGraph_ReturnsFalse()
+    {
+        KruskalMstBuilder.HasPotentialTies(new DualGraph()).Should().BeFalse();
+        KruskalMstBuilder.HasPotentialTies(BuildGraph(2, (0, 1, 1f))).Should().BeFalse();
+    }
 }
