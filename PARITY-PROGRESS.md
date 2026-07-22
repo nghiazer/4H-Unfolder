@@ -2,7 +2,7 @@
 
 > File theo dõi nội bộ cho công cuộc học hỏi từ 2 dự án papercraft mã nguồn mở và nâng cấp
 > 4H-Unfolder. Cập nhật mỗi khi hoàn thành một hạng mục.
-> Cập nhật gần nhất: **2026-07-21**.
+> Cập nhật gần nhất: **2026-07-22**.
 
 ## Nguồn tham chiếu
 
@@ -22,7 +22,7 @@ tế trước khi tin bảng đó.
 | Giai đoạn | Nội dung | macOS | Windows |
 |-----------|----------|:-----:|:-------:|
 | **GĐ 1** | Chất lượng pattern: flap-merge, outline-padding, coplanar-hide | 🟡 Gần xong | ✅ Xong |
-| **GĐ 2** | Hỗ trợ lắp ráp: mountain/valley*, edge-matching labels | ⬜ Chưa | ⬜ Chưa |
+| **GĐ 2** | Hỗ trợ lắp ráp: mountain/valley*, edge-matching labels | 🚧 Đang làm | 🚧 Đang làm |
 | **GĐ 3** | Layout & tương tác: repack, multi-seed start face, chế độ Edge/Face | ⬜ Chưa | ⬜ Chưa |
 | **GĐ 4** | Tiện ích I/O: PNG/trang, layer máy cắt | ⬜ Chưa | ⬜ Chưa |
 
@@ -79,11 +79,32 @@ fan-triangulated.
 
 ---
 
-## Giai đoạn 2 — Hỗ trợ lắp ráp ⬜
+## Giai đoạn 2 — Hỗ trợ lắp ráp 🚧
 
-- **2.1 Edge-matching labels:** đánh số cặp cạnh dán, vẽ nhãn lên canvas + export. (macOS đã có
-  `cutEdgePairIds` sẵn trong `UnfoldResult` — mới tính, chưa render nhãn.)
-- **2.2 Mountain/valley fold:** đã có sẵn → chỉ rà soát tùy chọn kiểu nét (liền/đứt).
+### 2.1 Edge-matching labels
+
+**Khảo sát hiện trạng (2026-07-22) — kế hoạch ban đầu đã sai:** cả 2 nền tảng thực ra **đã có** cơ
+chế đánh số cặp cạnh (`CutEdgePairIds`/`cutEdgePairIds`, tính sẵn trong `UnfoldResult`). Việc thật
+còn thiếu là:
+
+| Hạng mục | macOS | Windows |
+|----------|:-----:|:-------:|
+| Canvas: vẽ số cặp cạnh | ✅ có sẵn (`drawCutLabels`) nhưng **luôn bật, không theo setting** | ✅ có sẵn, đúng gate `View2D.ShowEdgeIds` |
+| Export SVG: vẽ số cặp cạnh | ✅ có sẵn nhưng **luôn bật, không có toggle riêng cho export** | ❌ **chưa có** |
+| Export PDF: vẽ số cặp cạnh | (không có PDF exporter riêng trên mac) | ❌ **chưa có** |
+| Setting `showEdgeIds` (view) | Khai báo sẵn (`View2DSettings`, default `false`) nhưng **chưa wire vào canvas** — dead setting | ✅ hoạt động đúng |
+| Setting cho export riêng | ❌ chưa có | ❌ chưa có |
+
+Việc triển khai:
+- Windows: thêm `PrintSettings.IncludeEdgeLabels` (opt-in, default `false`) + render trong
+  `SvgExporter`/`PdfExporter` + toggle trong `SettingsDialog.xaml`.
+- macOS: wire `v2d.showEdgeIds` vào canvas (đổi default → `true` để giữ nguyên hành vi hiển thị hiện
+  tại, tránh regression); thêm `PrintSettings.includeEdgeLabels` (default `true`, giữ hành vi export
+  hiện tại) để gate SVG; thêm 2 toggle vào Preferences.
+
+### 2.2 Mountain/valley fold
+Đã có sẵn cả 2 nền tảng (người dùng xác nhận) → chỉ rà soát tùy chọn kiểu nét (liền/đứt) nếu cần,
+không phải việc bắt buộc của GĐ2.
 
 ---
 
