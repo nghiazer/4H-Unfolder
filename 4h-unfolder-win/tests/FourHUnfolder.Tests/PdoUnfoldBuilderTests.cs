@@ -132,6 +132,23 @@ public class PdoUnfoldBuilderTests
     }
 
     [Fact]
+    public void Build_MeshEdgeIdsArePopulated_NotDefaultSentinel()
+    {
+        // Regression: PdoUnfoldBuilder used to never pass meshEdgeIds to UnfoldedFace, so every
+        // PDO-built face silently got [-1,-1,-1] — breaking any downstream feature keyed by mesh
+        // edge ID (HideCoplanarFolds, IncludeEdgeLabels) for PDO-imported models.
+        var mesh   = MakeTwoTriangleMesh();
+        var result = new PdoUnfoldBuilder().Build(mesh);
+
+        for (int i = 0; i < result.Count; i++)
+        {
+            var expected = mesh.Faces[i].EdgeIds;
+            result[i].MeshEdgeIds.Should().Equal(expected,
+                $"face {i}'s MeshEdgeIds must mirror the mesh's real edge IDs, not the -1 sentinel");
+        }
+    }
+
+    [Fact]
     public void Build_NoLayout_ThrowsInvalidOperationException()
     {
         var mesh   = MakeTwoTriangleMesh();
