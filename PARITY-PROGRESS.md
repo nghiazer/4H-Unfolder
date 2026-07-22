@@ -110,6 +110,16 @@ Việc đã làm:
   `PDFExporter`; 2 toggle Preferences ("Show Edge IDs", "Include Edge-Matching Labels"). Test mới:
   `EdgeLabelAndCoplanarExportTests.swift` (6 test).
 
+> **Bài học xác thực (2026-07-22):** CI thật (GitHub Actions, Xcode) chạy `swift test` đầu tiên đã
+> **fail 1/103 test** — `testSVG_nonCoplanarFold_notHidden`. Nguyên nhân: test tự viết dùng nhầm
+> convention `class="fold"` (kiểu Windows SvgExporter) trong khi macOS `SVGExporter` thực ra render
+> fold-line bằng thuộc tính inline `stroke="<hex>"`, không có CSS class. Đây là **lỗi trong test**,
+> không phải lỗi sản phẩm — code coplanar-hide/PDFExporter vẫn đúng (3 test PDF liên quan đã pass
+> ngay từ đầu). Đã sửa 2 assertion dùng đúng `stroke="..."`, re-push, **CI xanh hoàn toàn** (macOS +
+> Windows) trước khi merge. **Rút kinh nghiệm:** `swiftc -typecheck` qua shim (xem mục môi trường
+> verify) chỉ chứng minh code *biên dịch được*, không chứng minh assertion đúng với output thật —
+> không thể thay thế việc chạy suite thật; luôn cần CI (hoặc Xcode) xác nhận trước khi merge.
+
 ### 2.2 Mountain/valley fold
 Đã có sẵn cả 2 nền tảng (người dùng xác nhận) → không phải việc của GĐ2, không đụng vào.
 
@@ -143,7 +153,9 @@ Việc đã làm:
 | 2026-07-21 | Merge: `feat/parity-papercraft-phase1` → `docs/wiki` (#53) → `main` (#54) | — |
 | 2026-07-21 | `docs/parity-progress`: thêm file tiến trình này | Merge #55 → `main` |
 | 2026-07-22 | GĐ2 Windows: `IncludeEdgeLabels` (SvgExporter/PdfExporter/SettingsVM/XAML) | net8.0 libs + WPF compile ✅ · **100/100** tests ✅ (97 cũ + 3 mới) |
-| 2026-07-22 | GĐ2 macOS: wire `showEdgeIds` (canvas) + `includeEdgeLabels` (SVG+PDF gate) + fix PDFExporter coplanar-hide gap (GĐ1 sót) + 2 Preferences toggle | `swift build` ✅ · test mới type-check sạch qua swiftc + shim XCTest thủ công (xem ghi chú môi trường) |
+| 2026-07-22 | GĐ2 macOS: wire `showEdgeIds` (canvas) + `includeEdgeLabels` (SVG+PDF gate) + fix PDFExporter coplanar-hide gap (GĐ1 sót) + 2 Preferences toggle | `swift build` ✅ · type-check qua shim (không phát hiện được lỗi assertion — xem bài học bên dưới) |
+| 2026-07-22 | CI thật (GitHub Actions) chạy PR #57: macOS FAIL 1/103 (`class="fold"` sai convention) → sửa 2 assertion → re-push → **CI xanh macOS+Windows** | `gh run watch` ✅ cả 2 job |
+| 2026-07-22 | Merge PR #57 (`feat/parity-phase2-edge-labels`) → `main` | — |
 
 ### Lưu ý môi trường verify (máy Darwin)
 - WPF App **không chạy runtime** được trên macOS (`NETSDK1100`) — dùng `-p:EnableWindowsTargeting=true`
