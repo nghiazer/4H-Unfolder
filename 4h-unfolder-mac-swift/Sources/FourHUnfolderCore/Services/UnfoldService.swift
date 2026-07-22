@@ -6,19 +6,59 @@ import Foundation
 
 actor UnfoldService {
 
+    /// - Parameter seedCount: when the default MST (natural tie-break) produces overlaps, retry
+    ///   with up to this many alternate Kruskal tie-breaks and keep whichever candidate has the
+    ///   fewest overlapping face pairs. 0 disables retrying. Free when the default already has no
+    ///   overlaps (no retries run).
     func unfold(
         mesh: Mesh,
         edgeOverrides: [Int: EdgeType],
         flapOverrides: [Int: FlapOverride],
         settings: AppSettings.PrintSettings,
-        meshScaleMm: Float = 1
+        meshScaleMm: Float = 1,
+        seedCount: Int = 8
     ) -> UnfoldResult {
+        var (best, bestFoldIds) = unfoldOnce(
+            mesh: mesh, edgeOverrides: edgeOverrides, flapOverrides: flapOverrides,
+            settings: settings, meshScaleMm: meshScaleMm, mstTieBreakSeed: nil)
+
+        if best.hasOverlaps && seedCount > 0 {
+            var bestCount = OverlapDetector().countOverlaps(faces: best.faces)
+            for seed in 0..<seedCount where bestCount > 0 {
+                let (candidate, candidateFoldIds) = unfoldOnce(
+                    mesh: mesh, edgeOverrides: edgeOverrides, flapOverrides: flapOverrides,
+                    settings: settings, meshScaleMm: meshScaleMm, mstTieBreakSeed: seed)
+                let count = OverlapDetector().countOverlaps(faces: candidate.faces)
+                if count < bestCount {
+                    best = candidate
+                    bestFoldIds = candidateFoldIds
+                    bestCount = count
+                }
+            }
+        }
+
+        // unfoldOnce mutates mesh.edges[].type as a side effect on every call — after trying
+        // several seeds, re-stamp with the WINNING seed's fold set so the mesh's persistent state
+        // (read directly by e.g. PieceComputer and canvas hit-testing) matches the returned
+        // result, regardless of which seed happened to run last in the loop above.
+        EdgeMarker().mark(mesh: mesh, foldEdgeIds: bestFoldIds)
+        return best
+    }
+
+    private func unfoldOnce(
+        mesh: Mesh,
+        edgeOverrides: [Int: EdgeType],
+        flapOverrides: [Int: FlapOverride],
+        settings: AppSettings.PrintSettings,
+        meshScaleMm: Float,
+        mstTieBreakSeed: Int?
+    ) -> (UnfoldResult, Set<Int>) {
 
         // 1. Build face-adjacency dual graph
         let dualGraph = DualGraphBuilder().build(mesh: mesh)
 
         // 2. Kruskal MST → preferred fold edges (flatten faces)
-        let mstEdges = KruskalMSTBuilder().build(graph: dualGraph)
+        let mstEdges = KruskalMSTBuilder().build(graph: dualGraph, tieBreakSeed: mstTieBreakSeed)
         var foldEdgeIds = Set(mstEdges.map { $0.sharedMeshEdgeId })
 
         // 3. Apply user edge overrides (toggle fold ↔ cut)
@@ -62,7 +102,7 @@ actor UnfoldService {
             }
         }
 
-        return UnfoldResult(
+        let result = UnfoldResult(
             faces: engineResult.faces,
             tabs: tabs,
             hasOverlaps: hasOverlaps,
@@ -70,5 +110,6 @@ actor UnfoldService {
             edgeDihedralAngles: engineResult.dihedralAngles,
             pieces: pieces
         )
+        return (result, foldEdgeIds)
     }
 }

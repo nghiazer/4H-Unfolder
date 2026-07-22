@@ -8,8 +8,19 @@ import simd
 
 struct OverlapDetector {
 
+    /// Fast yes/no check — stops at the first overlapping pair found.
     func hasOverlaps(faces: [UnfoldedFace]) -> Bool {
-        guard faces.count >= 2 else { return false }
+        overlapCount(faces: faces, stopAtFirst: true) > 0
+    }
+
+    /// Total number of overlapping face pairs — scans every candidate pair (no early exit).
+    /// Used to compare candidate layouts (e.g. different MST tie-breaks) by overlap severity.
+    func countOverlaps(faces: [UnfoldedFace]) -> Int {
+        overlapCount(faces: faces, stopAtFirst: false)
+    }
+
+    private func overlapCount(faces: [UnfoldedFace], stopAtFirst: Bool) -> Int {
+        guard faces.count >= 2 else { return 0 }
 
         // Phase 0: AABBs
         var aabbs = [(min: SIMD2<Float>, max: SIMD2<Float>)]()
@@ -54,6 +65,7 @@ struct OverlapDetector {
 
         // Phase 2+3: Test candidates
         var tested = Set<Int64>()
+        var count = 0
 
         for cell in grid where cell.count >= 2 {
             for ci in 0..<cell.count {
@@ -64,12 +76,13 @@ struct OverlapDetector {
 
                     if aabbsOverlap(aabbs[i], aabbs[j]) &&
                        trianglesOverlap(faces[i], faces[j]) {
-                        return true
+                        count += 1
+                        if stopAtFirst { return count }
                     }
                 }
             }
         }
-        return false
+        return count
     }
 
     // MARK: - AABB test

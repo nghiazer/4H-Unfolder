@@ -383,6 +383,8 @@ final class AppState: ObservableObject {
         let pageH   = Float(paper.heightMm)
         let pageSep = margin          // gap between adjacent pages
         let maxCols = 4               // max page columns before starting a new page row
+        let usableW = pageW - 2 * margin
+        let usableH = pageH - 2 * margin
 
         // Sort pieces largest-area first so big pieces get prime positions
         let sortedPieces = result.pieces.sorted { lhs, rhs in
@@ -413,7 +415,14 @@ final class AppState: ObservableObject {
             let allX = pieceFaces.flatMap { [$0.v0.x, $0.v1.x, $0.v2.x] }
             let allY = pieceFaces.flatMap { [$0.v0.y, $0.v1.y, $0.v2.y] }
             let minX = allX.min()!, minY = allY.min()!
-            let w = allX.max()! - minX, h = allY.max()! - minY
+            let wNat = allX.max()! - minX, hNat = allY.max()! - minY
+
+            // Try a 90° rotation when it produces a narrower footprint that still fits both axes
+            // (mirrors Windows RunAutoArrange's First-Fit-Decreasing-with-rotation heuristic).
+            var w = wNat, h = hNat, rotate90 = false
+            if hNat < wNat && hNat <= usableW && wNat <= usableH {
+                w = hNat; h = wNat; rotate90 = true
+            }
 
             // Wrap to next row within the current page when horizontal space runs out
             if localX > margin && localX + w > pageW - margin {
@@ -435,13 +444,27 @@ final class AppState: ObservableObject {
             // Absolute position in mm across the full multi-page canvas
             let absX = Float(pageCol) * (pageW + pageSep) + localX
             let absY = Float(pageRow) * (pageH + pageSep) + localY
-            let off  = SIMD2<Float>(absX - minX, absY - minY)
+
+            // Rotating bakes the 90° turn directly into vertex positions (this platform's
+            // autoArrange commits absolute geometry, unlike Windows' local-space + render-time
+            // RotateTransform) — rotate the piece's local bbox around its own origin (swapping
+            // w/h), then translate into the page slot.
+            let transform: (SIMD2<Float>) -> SIMD2<Float>
+            if rotate90 {
+                transform = { v in
+                    rotated90InLocalBBox(SIMD2(v.x - minX, v.y - minY), boxWidth: wNat)
+                        + SIMD2<Float>(absX, absY)
+                }
+            } else {
+                let off = SIMD2<Float>(absX - minX, absY - minY)
+                transform = { $0 + off }
+            }
 
             for i in newFaces.indices where faceSet.contains(newFaces[i].faceId) {
-                newFaces[i] = newFaces[i].translated(by: off)
+                newFaces[i] = newFaces[i].transformed(transform)
             }
             for i in newTabs.indices where faceSet.contains(newTabs[i].faceId) {
-                newTabs[i] = newTabs[i].translated(by: off)
+                newTabs[i] = newTabs[i].transformed(transform)
             }
 
             localX += w + margin
@@ -651,5 +674,32 @@ final class AppState: ObservableObject {
         } catch {
             errorMessage = "PDF write failed: \(error.localizedDescription)"
         }
+    }
+}
+
+// MARK: - Arbitrary per-vertex transform (rotate + translate in one pass)
+//
+// `translated(by:)` on UnfoldedFace/GlueTab only supports pure translation. autoArrange() also
+// needs to rotate a piece 90° when that improves packing, so these apply any per-point closure.
+
+private extension UnfoldedFace {
+    func transformed(_ f: (SIMD2<Float>) -> SIMD2<Float>) -> UnfoldedFace {
+        UnfoldedFace(
+            faceId: faceId, materialId: materialId,
+            v0: f(v0), v1: f(v1), v2: f(v2),
+            edge0IsFold: edge0IsFold, edge1IsFold: edge1IsFold, edge2IsFold: edge2IsFold,
+            edge0IsBoundary: edge0IsBoundary, edge1IsBoundary: edge1IsBoundary, edge2IsBoundary: edge2IsBoundary,
+            uv0: uv0, uv1: uv1, uv2: uv2,
+            meshEdge0: meshEdge0, meshEdge1: meshEdge1, meshEdge2: meshEdge2
+        )
+    }
+}
+
+private extension GlueTab {
+    func transformed(_ f: (SIMD2<Float>) -> SIMD2<Float>) -> GlueTab {
+        GlueTab(faceId: faceId, localEdgeIdx: localEdgeIdx,
+                p0: f(p0), p1: f(p1), p2: f(p2), p3: f(p3),
+                borderFoldStyle: borderFoldStyle,
+                mergedPolygon: mergedPolygon?.map(f))
     }
 }

@@ -9,11 +9,19 @@ namespace FourHUnfolder.Geometry.Algorithms;
 /// </summary>
 public class KruskalMstBuilder
 {
-    public IReadOnlyList<GraphEdge> Build(DualGraph graph)
+    /// <param name="tieBreakSeed">
+    /// When null (default), equal-weight edges keep their natural dual-graph order (today's
+    /// exact behaviour — deterministic, matches edge-ID order). When set, equal-weight edges are
+    /// ordered by a deterministic hash of (edgeId, seed) instead, so different seeds can yield a
+    /// different valid MST — used to retry the unfold when the default MST produces overlaps.
+    /// </param>
+    public IReadOnlyList<GraphEdge> Build(DualGraph graph, int? tieBreakSeed = null)
     {
         if (graph.Nodes.Count == 0) return Array.Empty<GraphEdge>();
 
-        var sortedEdges = graph.Edges.OrderBy(e => e.Weight).ToList();
+        var sortedEdges = tieBreakSeed is int seed
+            ? graph.Edges.OrderBy(e => e.Weight).ThenBy(e => TieBreakKey(e.SharedMeshEdgeId, seed)).ToList()
+            : graph.Edges.OrderBy(e => e.Weight).ToList();
 
         // Map face IDs to contiguous array indices for Union-Find
         var faceIds = graph.Nodes.Select(n => n.FaceId).ToList();
@@ -34,4 +42,6 @@ public class KruskalMstBuilder
 
         return mst;
     }
+
+    private static int TieBreakKey(int edgeId, int seed) => HashCode.Combine(edgeId, seed);
 }

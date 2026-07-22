@@ -52,6 +52,50 @@ public class OverlapDetectorTests
 
         new OverlapDetector().HasOverlaps([a]).Should().BeFalse();
     }
+
+    // ── CountOverlaps (used by UnfoldService's multi-seed retry to compare candidates) ────────
+
+    [Fact]
+    public void CountOverlaps_NoOverlap_ReturnsZero()
+    {
+        var a = MakeFace(0, new(0, 0), new(1, 0), new(0, 1));
+        var b = MakeFace(1, new(5, 5), new(6, 5), new(5, 6));
+
+        new OverlapDetector().CountOverlaps([a, b]).Should().Be(0);
+    }
+
+    [Fact]
+    public void CountOverlaps_OnePair_ReturnsOne()
+    {
+        var a = MakeFace(0, new(0, 0), new(2, 0), new(0, 2));
+        var b = MakeFace(1, new(0.5f, 0.5f), new(2.5f, 0.5f), new(0.5f, 2.5f));
+
+        new OverlapDetector().CountOverlaps([a, b]).Should().Be(1);
+    }
+
+    [Fact]
+    public void CountOverlaps_TwoIndependentPairs_ReturnsTwo()
+    {
+        // Two separate overlapping pairs, far apart from each other, so the spatial grid keeps
+        // them as independent candidate pairs (no cross-pair contamination).
+        var a1 = MakeFace(0, new(0, 0),   new(2, 0),   new(0, 2));
+        var a2 = MakeFace(1, new(0.5f, 0.5f), new(2.5f, 0.5f), new(0.5f, 2.5f));
+        var b1 = MakeFace(2, new(100, 100), new(102, 100), new(100, 102));
+        var b2 = MakeFace(3, new(100.5f, 100.5f), new(102.5f, 100.5f), new(100.5f, 102.5f));
+
+        new OverlapDetector().CountOverlaps([a1, a2, b1, b2]).Should().Be(2);
+    }
+
+    [Fact]
+    public void CountOverlaps_GreaterThanZero_MatchesHasOverlapsTrue()
+    {
+        var a = MakeFace(0, new(0, 0), new(2, 0), new(0, 2));
+        var b = MakeFace(1, new(0.5f, 0.5f), new(2.5f, 0.5f), new(0.5f, 2.5f));
+        var det = new OverlapDetector();
+
+        det.CountOverlaps([a, b]).Should().BeGreaterThan(0);
+        det.HasOverlaps([a, b]).Should().BeTrue();
+    }
 }
 
 public class ObjMeshLoaderTests

@@ -90,4 +90,34 @@ final class OverlapDetectorTests: XCTestCase {
         }
         XCTAssertFalse(OverlapDetector().hasOverlaps(faces: faces))
     }
+
+    // MARK: - countOverlaps (GĐ3.2: compares candidate layouts by overlap severity)
+
+    func testCountOverlaps_noOverlap_returnsZero() {
+        let f1 = tri(SIMD2(0, 0), SIMD2(1, 0), SIMD2(0.5, 1), faceId: 0)
+        let f2 = tri(SIMD2(5, 0), SIMD2(6, 0), SIMD2(5.5, 1), faceId: 1)
+        XCTAssertEqual(OverlapDetector().countOverlaps(faces: [f1, f2]), 0)
+    }
+
+    func testCountOverlaps_onePair_returnsOne() {
+        let f1 = tri(SIMD2(0, 0), SIMD2(2, 0), SIMD2(1, 2), faceId: 0)
+        let f2 = tri(SIMD2(0.5, 0.5), SIMD2(2.5, 0.5), SIMD2(1.5, 2.5), faceId: 1)
+        XCTAssertEqual(OverlapDetector().countOverlaps(faces: [f1, f2]), 1)
+    }
+
+    func testCountOverlaps_twoIndependentPairs_returnsTwo() {
+        let a1 = tri(SIMD2(0, 0), SIMD2(2, 0), SIMD2(1, 2), faceId: 0)
+        let a2 = tri(SIMD2(0.5, 0.5), SIMD2(2.5, 0.5), SIMD2(1.5, 2.5), faceId: 1)
+        let b1 = tri(SIMD2(100, 100), SIMD2(102, 100), SIMD2(101, 102), faceId: 2)
+        let b2 = tri(SIMD2(100.5, 100.5), SIMD2(102.5, 100.5), SIMD2(101.5, 102.5), faceId: 3)
+        XCTAssertEqual(OverlapDetector().countOverlaps(faces: [a1, a2, b1, b2]), 2)
+    }
+
+    func testCountOverlaps_greaterThanZero_matchesHasOverlapsTrue() {
+        let f1 = tri(SIMD2(0, 0), SIMD2(2, 0), SIMD2(1, 2), faceId: 0)
+        let f2 = tri(SIMD2(0.5, 0.5), SIMD2(2.5, 0.5), SIMD2(1.5, 2.5), faceId: 1)
+        let det = OverlapDetector()
+        XCTAssertGreaterThan(det.countOverlaps(faces: [f1, f2]), 0)
+        XCTAssertTrue(det.hasOverlaps(faces: [f1, f2]))
+    }
 }

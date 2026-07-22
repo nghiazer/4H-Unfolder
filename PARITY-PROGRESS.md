@@ -2,7 +2,7 @@
 
 > File theo dõi nội bộ cho công cuộc học hỏi từ 2 dự án papercraft mã nguồn mở và nâng cấp
 > 4H-Unfolder. Cập nhật mỗi khi hoàn thành một hạng mục.
-> Cập nhật gần nhất: **2026-07-22** (đã fix 3 finding từ cross-review GĐ1+GĐ2, +1 root cause sâu hơn phát hiện khi viết test).
+> Cập nhật gần nhất: **2026-07-22** (GĐ3 hoàn thành: 3.1 rotation macOS + 3.2 MST tie-break retry cả 2 nền tảng; 3.3 để sau).
 
 ## Cross-review GĐ1+GĐ2 (2026-07-22) — đã fix
 
@@ -47,7 +47,7 @@ tế trước khi tin bảng đó.
 |-----------|----------|:-----:|:-------:|
 | **GĐ 1** | Chất lượng pattern: flap-merge, outline-padding, coplanar-hide | 🟡 Gần xong | ✅ Xong |
 | **GĐ 2** | Hỗ trợ lắp ráp: mountain/valley*, edge-matching labels | ✅ Xong | ✅ Xong |
-| **GĐ 3** | Layout & tương tác: repack, multi-seed start face, chế độ Edge/Face | ⬜ Chưa | ⬜ Chưa |
+| **GĐ 3** | Layout & tương tác: repack, MST tie-break retry, chế độ Edge/Face (3.3 để sau) | ✅ Xong (3.1+3.2) | ✅ Xong (3.2) |
 | **GĐ 4** | Tiện ích I/O: PNG/trang, layer máy cắt | ⬜ Chưa | ⬜ Chưa |
 
 \* Mountain/valley và Undo/Redo: **đã có sẵn** cả 2 nền tảng (người dùng xác nhận) → loại khỏi phạm vi GĐ2.
@@ -149,12 +149,71 @@ Việc đã làm:
 
 ---
 
-## Giai đoạn 3 — Layout & tương tác ⬜
+## Giai đoạn 3 — Layout & tương tác ✅ (3.1+3.2; 3.3 để sau)
 
-- **3.1 Repack pieces:** bin-packing (shelf/MaxRects) → nút "Auto-arrange", giảm số trang.
-- **3.2 Multi-seed start face:** thử nhiều face khởi đầu, chọn layout ít overlap nhất (osresearch).
-- **3.3 Chế độ Edge/Face tương tác:** click cạnh cắt/nối, kéo/xoay piece trên canvas 2D
-  (rodrigorc). Hạng mục lớn — tách task riêng.
+**Khảo sát hiện trạng (2026-07-22) — kế hoạch ban đầu lại sai:** giống GĐ1/GĐ2, hoá ra phần lớn đã
+có sẵn hoặc cần diễn giải lại cho đúng kiến trúc thực tế.
+
+### 3.1 Repack pieces
+**Đã có sẵn cả 2 nền tảng** trước phiên này — Windows `MainViewModel.RunAutoArrange()`, macOS
+`AppState.autoArrange()`, cả hai là First-Fit-Decreasing shelf packing (sort theo diện tích giảm
+dần, xếp theo hàng/trang). Gap duy nhất: Windows thử xoay 90° từng piece để giảm lãng phí giấy,
+macOS thì không.
+
+**Đã làm:** thêm thử xoay 90° vào macOS `autoArrange()` (mirror điều kiện Windows: chỉ xoay khi
+piece đang rộng hơn cao VÀ cả hai chiều sau xoay vẫn vừa trang). **Khác biệt kiến trúc quan trọng**
+phát hiện khi làm: Windows lưu geometry piece ở toạ độ **local** (`piece.Faces` chưa xoay/dịch),
+rotate+translate áp dụng riêng lúc render (`RotateTransform`) và lúc export (`BuildExportLayout`).
+macOS `autoArrange()` thì bake thẳng toạ độ **tuyệt đối** vào `result.faces`/`result.tabs` ngay khi
+chạy — không có khái niệm "local piece space" tách biệt. Vì vậy macOS phải tự xoay vertex trực tiếp
+(không thể chỉ set một `pieceRotations[i] = 90` và để render lo phần còn lại, vì export đọc thẳng
+`result.faces` chứ không áp dụng `pieceRotations` overlay). Tách phần toán xoay thuần
+(`rotated90InLocalBBox`) vào `FourHUnfolderCore/Core/Math/SIMDExtensions.swift` để test được — vì
+`AppState.swift` nằm ở App target mà test target không phụ thuộc vào.
+
+### 3.2 Multi-seed start face → re-scope thành "MST tie-break retry"
+Ý tưởng gốc từ osresearch (thử nhiều face khởi đầu BFS, giữ layout ít overlap nhất) **không áp dụng
+được** trực tiếp: ở osresearch, BFS greedy quyết định fold/cut *ngay khi duyệt* nên đổi start face →
+đổi hình dạng piece → có thể đổi overlap. Ở 4H-Unfolder, fold/cut được quyết định **trước** bởi
+Kruskal MST (trọng số = góc dihedral), độc lập với face khởi đầu của bước BFS unfold — đổi start
+face chỉ đổi vị trí/hướng piece trên giấy, không đổi hình dạng hay overlap.
+
+**Đòn bẩy thật đã triển khai:** khi Kruskal gặp nhiều cạnh **cùng trọng số** (ties), thêm tham số
+`tieBreakSeed`/`tieBreakSeed:` phá tie bằng hash `(edgeId, seed)` — `null`/`nil` giữ nguyên hành vi
+gốc (thứ tự edge-id tự nhiên, deterministic, khớp 100% hành vi cũ). `UnfoldService.Unfold`/`.unfold`
+giờ là hàm điều phối: chạy baseline (seed=null) trước; nếu `HasOverlaps`, thử tối đa `seedCount`
+(mặc định 8) seed khác nhau, giữ lại kết quả có `CountOverlaps` (mới, đếm toàn bộ cặp overlap thay
+vì chỉ bool) thấp nhất. **Miễn phí khi không cần** — model không overlap thì không tốn thêm chi phí
+nào (giống thiết kế "chỉ chạy khi cần" ở fix PDO của GĐ2-cross-review).
+
+**Rủi ro kỹ thuật đã lường trước và fix:** `EdgeMarker.Mark()`/`.mark()` **mutate trực tiếp**
+`mesh.Edges[].Type` — nếu chạy nhiều seed trên cùng 1 mesh, phải đảm bảo mesh được đánh dấu lại theo
+seed **thắng cuộc**, không phải seed thử cuối cùng trong vòng lặp (vì `MainViewModel.IsEdgeFold`/
+canvas đọc trực tiếp `mesh.Edges[id].Type`, và macOS `PieceComputer` cũng đọc `mesh.edges[].type`).
+Fix: refactor `Unfold`/`unfold` thành hàm điều phối gọi `UnfoldOnce`/`unfoldOnce` (helper riêng cho
+1 lần thử, trả về cả `foldEdgeIds` đã dùng) nhiều lần, rồi **re-mark mesh lần cuối** theo fold-set
+của kết quả thắng cuộc trước khi return — có unit test riêng khẳng định invariant này
+(`Unfold_MeshEdgeTypes_AreConsistentWithReturnedFoldFlags` / `testUnfold_meshEdgeTypes_...`).
+
+**Giới hạn kiểm chứng đã ghi nhận trung thực:** không xây được 1 mesh thật chứng minh "seed X sửa
+được overlap thật" một cách xác định (constructing đòi hỏi hình học bất đối xứng phức tạp, không
+đáng effort). Thay vào đó test ở 2 tầng: (1) 2 primitive mới (`tieBreakSeed`, `CountOverlaps`) test
+kỹ ở mức đơn vị — chứng minh cơ chế hoạt động đúng; (2) tầng `UnfoldService` test các thuộc tính an
+toàn tổng quát (baseline không đổi khi không overlap, mesh-marking nhất quán, determinism) — không
+test riêng "có thực sự giảm overlap cho 1 mesh cụ thể hay không".
+
+### 3.3 Chế độ Edge/Face tương tác (rodrigorc-style)
+Click cạnh để cắt/nối, kéo/xoay piece trên canvas 2D. **Hạng mục lớn, người dùng xác nhận để sau** —
+sẽ tự nhắc lại trong phiên tương lai thay vì chờ được hỏi. Ghi chú: macOS canvas đã có sẵn
+`CanvasMode` với `.editEdge`/`.editFlap`/`.rotatePivot` — có thể phần hạ tầng tương tác cần cho 3.3
+đã tồn tại một phần, cần khảo sát kỹ hơn khi bắt tay vào.
+
+Kiểm chứng: Windows **115/115 test** (104 cũ + 11 mới: 4 `OverlapDetectorTests.CountOverlaps`,
+3 `MstAlgorithmTests.TieBreakSeed`, 4 `UnfoldServiceMultiSeedTests`), build 0 lỗi
+(`EnableWindowsTargeting`). macOS: `swift build` ✅ (cả Core lẫn App target), test mới
+(`KruskalMSTTests`/`OverlapDetectorTests`/`UnfoldServiceMultiSeedTests`/`PieceRotationTests`)
+type-check sạch qua shim + đối chiếu tay với implementation — **cần CI thật xác nhận trước khi
+merge** theo đúng quy trình đã rút kinh nghiệm từ GĐ2.
 
 ---
 
@@ -180,6 +239,9 @@ Việc đã làm:
 | 2026-07-22 | GĐ2 macOS: wire `showEdgeIds` (canvas) + `includeEdgeLabels` (SVG+PDF gate) + fix PDFExporter coplanar-hide gap (GĐ1 sót) + 2 Preferences toggle | `swift build` ✅ · type-check qua shim (không phát hiện được lỗi assertion — xem bài học bên dưới) |
 | 2026-07-22 | CI thật (GitHub Actions) chạy PR #57: macOS FAIL 1/103 (`class="fold"` sai convention) → sửa 2 assertion → re-push → **CI xanh macOS+Windows** | `gh run watch` ✅ cả 2 job |
 | 2026-07-22 | Merge PR #57 (`feat/parity-phase2-edge-labels`) → `main` | — |
+| 2026-07-22 | Cross-review GĐ1+GĐ2: PDO no-op (Win), `PdoUnfoldBuilder` thiếu `meshEdgeIds` (Win), thiếu UI `CoplanarAngleDeg` (Win), threshold <1° bị engine cutoff ghi đè (mac) | Win **104/104** test · CI xanh macOS+Windows → merge PR #58 |
+| 2026-07-22 | GĐ3 Windows: `OverlapDetector.CountOverlaps`, `KruskalMstBuilder.tieBreakSeed`, `UnfoldService` refactor multi-seed retry + mesh-marking fix | net8.0 build + WPF compile (`EnableWindowsTargeting`) ✅ · **115/115** test ✅ (104 cũ + 11 mới) |
+| 2026-07-22 | GĐ3 macOS: `OverlapDetector.countOverlaps`, `KruskalMSTBuilder.tieBreakSeed`, `UnfoldService.unfold` refactor multi-seed retry + mesh-marking fix, `autoArrange()` thêm xoay 90° (+ `rotated90InLocalBBox` tách sang Core để test được) | `swift build` ✅ (Core+App) · test mới type-check sạch qua shim + đối chiếu tay |
 
 ### Lưu ý môi trường verify (máy Darwin)
 - WPF App **không chạy runtime** được trên macOS (`NETSDK1100`) — dùng `-p:EnableWindowsTargeting=true`
