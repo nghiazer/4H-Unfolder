@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 Documentation & Wiki
+    url: https://github.com/nghiazer/4H-Unfolder/wiki
+    about: Installation, quick start, troubleshooting, and how the unfolder works.
+  - name: ❓ Questions & Ideas (Discussions)
+    url: https://github.com/nghiazer/4H-Unfolder/discussions
+    about: For open-ended questions or ideas, please start a discussion instead of an issue.
+  - name: 🔒 Report a security vulnerability
+    url: https://github.com/nghiazer/4H-Unfolder/security/advisories/new
+    about: Please report security issues privately — do not open a public issue.
