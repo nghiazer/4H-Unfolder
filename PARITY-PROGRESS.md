@@ -47,7 +47,7 @@ tế trước khi tin bảng đó.
 |-----------|----------|:-----:|:-------:|
 | **GĐ 1** | Chất lượng pattern: flap-merge, outline-padding, coplanar-hide | 🟡 Gần xong | ✅ Xong |
 | **GĐ 2** | Hỗ trợ lắp ráp: mountain/valley*, edge-matching labels | ✅ Xong | ✅ Xong |
-| **GĐ 3** | Layout & tương tác: repack, multi-seed start face, chế độ Edge/Face | ⬜ Chưa | ⬜ Chưa |
+| **GĐ 3** | Layout & tương tác: repack, MST tie-break retry, chế độ Edge/Face (3.3 để sau) | 🚧 Đang làm | 🚧 Đang làm |
 | **GĐ 4** | Tiện ích I/O: PNG/trang, layer máy cắt | ⬜ Chưa | ⬜ Chưa |
 
 \* Mountain/valley và Undo/Redo: **đã có sẵn** cả 2 nền tảng (người dùng xác nhận) → loại khỏi phạm vi GĐ2.
@@ -149,12 +149,41 @@ Việc đã làm:
 
 ---
 
-## Giai đoạn 3 — Layout & tương tác ⬜
+## Giai đoạn 3 — Layout & tương tác 🚧
 
-- **3.1 Repack pieces:** bin-packing (shelf/MaxRects) → nút "Auto-arrange", giảm số trang.
-- **3.2 Multi-seed start face:** thử nhiều face khởi đầu, chọn layout ít overlap nhất (osresearch).
-- **3.3 Chế độ Edge/Face tương tác:** click cạnh cắt/nối, kéo/xoay piece trên canvas 2D
-  (rodrigorc). Hạng mục lớn — tách task riêng.
+**Khảo sát hiện trạng (2026-07-22) — kế hoạch ban đầu lại sai:** giống GĐ1/GĐ2, hoá ra phần lớn đã
+có sẵn hoặc cần diễn giải lại cho đúng kiến trúc thực tế.
+
+### 3.1 Repack pieces
+**Đã có sẵn cả 2 nền tảng** trước phiên này — Windows `MainViewModel.RunAutoArrange()`, macOS
+`AppState.autoArrange()`, cả hai là First-Fit-Decreasing shelf packing (sort theo diện tích giảm
+dần, xếp theo hàng/trang). Gap duy nhất: Windows thử xoay 90° từng piece để giảm lãng phí giấy,
+macOS thì không. **Đang làm:** thêm thử xoay 90° vào macOS `autoArrange()`, mirror logic Windows.
+
+### 3.2 Multi-seed start face → re-scope thành "MST tie-break retry"
+Ý tưởng gốc từ osresearch (thử nhiều face khởi đầu BFS, giữ layout ít overlap nhất) **không áp dụng
+được** trực tiếp: ở osresearch, BFS greedy quyết định fold/cut *ngay khi duyệt* nên đổi start face →
+đổi hình dạng piece → có thể đổi overlap. Ở 4H-Unfolder, fold/cut được quyết định **trước** bởi
+Kruskal MST (trọng số = góc dihedral), độc lập với face khởi đầu của bước BFS unfold — đổi start
+face chỉ đổi vị trí/hướng piece trên giấy, không đổi hình dạng hay overlap.
+
+Đòn bẩy thật: khi Kruskal gặp nhiều cạnh **cùng trọng số** (ties), cách phá tie hiện tại là thứ tự
+edge-id cố định (deterministic, luôn ra 1 kết quả). **Đang làm:** thêm tham số `tieBreakSeed` phá
+tie bằng hash `(edgeId, seed)`, chạy `UnfoldService` nhiều lần với các seed khác nhau khi kết quả cơ
+sở có overlap, giữ lại kết quả ít overlap nhất (cần `OverlapDetector.CountOverlaps` — hiện chỉ có
+`HasOverlaps` dạng bool, không đủ để so sánh "ít hơn").
+
+**Rủi ro kỹ thuật đã lường trước:** `EdgeMarker.Mark()`/`.mark()` **mutate trực tiếp**
+`mesh.Edges[].Type` — nếu chạy nhiều seed trên cùng 1 mesh, phải đảm bảo mesh được đánh dấu lại theo
+seed **thắng cuộc**, không phải seed thử cuối cùng trong vòng lặp (vì `MainViewModel.IsEdgeFold`/
+canvas đọc trực tiếp `mesh.Edges[id].Type`, và macOS `PieceComputer` cũng đọc `mesh.edges[].type`).
+Fix: refactor `Unfold`/`unfold` thành hàm điều phối gọi `UnfoldOnce`/`unfoldOnce` (helper riêng cho
+1 lần thử) nhiều lần, rồi **re-mark mesh lần cuối** theo fold-set của kết quả thắng cuộc trước khi
+return.
+
+### 3.3 Chế độ Edge/Face tương tác (rodrigorc-style)
+Click cạnh để cắt/nối, kéo/xoay piece trên canvas 2D. **Hạng mục lớn, người dùng xác nhận để sau** —
+sẽ tự nhắc lại trong phiên tương lai thay vì chờ được hỏi.
 
 ---
 
