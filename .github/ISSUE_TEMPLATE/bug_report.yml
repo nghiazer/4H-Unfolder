@@ -1,0 +1,100 @@
+name: 🐛 Bug report
+description: Report something that isn't working correctly.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug! Please search
+        [existing issues](https://github.com/nghiazer/4H-Unfolder/issues) first to avoid duplicates.
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      description: Which app are you using?
+      options:
+        - Windows
+        - macOS
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Shown in the title bar / About. e.g. v0.2.0.A (Windows) or v0.0.0.5-alpha (macOS).
+      placeholder: v0.2.0.A
+    validations:
+      required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: OS version
+      description: e.g. Windows 11 23H2, or macOS 14.5.
+      placeholder: Windows 11 / macOS 14.5
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-type
+    attributes:
+      label: How did you install it?
+      options:
+        - Installer (Windows)
+        - Portable ZIP (Windows)
+        - Downloaded .app (macOS)
+        - Built from source
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, including expected vs. actual behavior.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: How can we reproduce it?
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: model-file
+    attributes:
+      label: Model file
+      description: >
+        If the bug is triggered by a specific mesh, please attach the
+        `.obj` / `.pdo` / `.4hu` file (drag it into this box). This is the single
+        most helpful thing for reproducing parsing / unfolding issues.
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Screenshots or logs
+      description: Add screenshots of the 3D/2D view or any error dialog if relevant.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirmation
+      options:
+        - label: I searched existing issues and this hasn't been reported yet.
+          required: true
+        - label: I'm on the latest release for my platform (or explained why not).
+          required: true
