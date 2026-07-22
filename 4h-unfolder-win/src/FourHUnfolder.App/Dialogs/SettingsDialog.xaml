@@ -720,6 +720,7 @@
                             <RowDefinition Height="32"/>
                             <RowDefinition Height="32"/>
                             <RowDefinition Height="32"/>
+                            <RowDefinition Height="32"/>
                             <!-- sub-head Fold Lines Print -->
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="32"/>
@@ -736,13 +737,15 @@
                         <CheckBox Grid.Row="2" Grid.ColumnSpan="3" Content="Print cut lines"      IsChecked="{Binding PrintCutLines}"/>
                         <CheckBox Grid.Row="3" Grid.ColumnSpan="3" Content="Include page label"   IsChecked="{Binding IncludePageLabel}"/>
                         <CheckBox Grid.Row="4" Grid.ColumnSpan="3" Content="Grayscale output"     IsChecked="{Binding GrayscaleOutput}"/>
+                        <CheckBox Grid.Row="5" Grid.ColumnSpan="3" Content="Include edge-matching labels" IsChecked="{Binding IncludeEdgeLabels}"
+                                  ToolTip="Print cut-edge pair numbers on the exported pattern (assembly matching guide)"/>
 
                         <!-- Sub-head: Fold Lines (Print) -->
-                        <TextBlock Grid.Row="5" Grid.ColumnSpan="3" Text="Fold Lines (Print)" Style="{StaticResource SubHead}"/>
+                        <TextBlock Grid.Row="6" Grid.ColumnSpan="3" Text="Fold Lines (Print)" Style="{StaticResource SubHead}"/>
 
                         <!-- Print fold color -->
-                        <TextBlock Grid.Row="6" Grid.Column="0" Text="Fold line color" Style="{StaticResource FieldLabel}"/>
-                        <StackPanel Grid.Row="6" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Grid.Row="7" Grid.Column="0" Text="Fold line color" Style="{StaticResource FieldLabel}"/>
+                        <StackPanel Grid.Row="7" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" VerticalAlignment="Center">
                             <Rectangle Width="22" Height="22"
                                        Fill="{Binding PrintFoldColor, Converter={StaticResource HexBrush}}"
                                        Stroke="{DynamicResource ColorSwatchBorderBrush}" StrokeThickness="1" Margin="0,0,6,0"/>
@@ -751,26 +754,26 @@
                         </StackPanel>
 
                         <!-- Print fold width -->
-                        <TextBlock Grid.Row="7" Grid.Column="0" Text="Fold line width" Style="{StaticResource FieldLabel}"/>
-                        <Slider Grid.Row="7" Grid.Column="1" Style="{StaticResource SettingSlider}"
+                        <TextBlock Grid.Row="8" Grid.Column="0" Text="Fold line width" Style="{StaticResource FieldLabel}"/>
+                        <Slider Grid.Row="8" Grid.Column="1" Style="{StaticResource SettingSlider}"
                                 Minimum="0.3" Maximum="4"
                                 Value="{Binding PrintFoldWidth, Mode=TwoWay}"/>
-                        <TextBox Grid.Row="7" Grid.Column="2" Style="{StaticResource NumericBox}"
+                        <TextBox Grid.Row="8" Grid.Column="2" Style="{StaticResource NumericBox}"
                                  Text="{Binding PrintFoldWidth, StringFormat={}{0:F1}, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"/>
 
                         <!-- Print fold dash -->
-                        <TextBlock Grid.Row="8" Grid.Column="0" Text="Fold line dash" Style="{StaticResource FieldLabel}"/>
-                        <ComboBox Grid.Row="8" Grid.Column="1" Grid.ColumnSpan="2"
+                        <TextBlock Grid.Row="9" Grid.Column="0" Text="Fold line dash" Style="{StaticResource FieldLabel}"/>
+                        <ComboBox Grid.Row="9" Grid.Column="1" Grid.ColumnSpan="2"
                                   HorizontalAlignment="Left" Width="160"
                                   ItemsSource="{Binding DashPatterns}"
                                   SelectedItem="{Binding PrintFoldDash}"/>
 
                         <!-- Sub-head: Cut Lines (Print) -->
-                        <TextBlock Grid.Row="9" Grid.ColumnSpan="3" Text="Cut Lines (Print)" Style="{StaticResource SubHead}"/>
+                        <TextBlock Grid.Row="10" Grid.ColumnSpan="3" Text="Cut Lines (Print)" Style="{StaticResource SubHead}"/>
 
                         <!-- Print cut color -->
-                        <TextBlock Grid.Row="10" Grid.Column="0" Text="Cut line color" Style="{StaticResource FieldLabel}"/>
-                        <StackPanel Grid.Row="10" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Grid.Row="11" Grid.Column="0" Text="Cut line color" Style="{StaticResource FieldLabel}"/>
+                        <StackPanel Grid.Row="11" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" VerticalAlignment="Center">
                             <Rectangle Width="22" Height="22"
                                        Fill="{Binding PrintCutColor, Converter={StaticResource HexBrush}}"
                                        Stroke="{DynamicResource ColorSwatchBorderBrush}" StrokeThickness="1" Margin="0,0,6,0"/>
@@ -779,11 +782,11 @@
                         </StackPanel>
 
                         <!-- Print cut width -->
-                        <TextBlock Grid.Row="11" Grid.Column="0" Text="Cut line width" Style="{StaticResource FieldLabel}"/>
-                        <Slider Grid.Row="11" Grid.Column="1" Style="{StaticResource SettingSlider}"
+                        <TextBlock Grid.Row="12" Grid.Column="0" Text="Cut line width" Style="{StaticResource FieldLabel}"/>
+                        <Slider Grid.Row="12" Grid.Column="1" Style="{StaticResource SettingSlider}"
                                 Minimum="0.3" Maximum="4"
                                 Value="{Binding PrintCutWidth, Mode=TwoWay}"/>
-                        <TextBox Grid.Row="11" Grid.Column="2" Style="{StaticResource NumericBox}"
+                        <TextBox Grid.Row="12" Grid.Column="2" Style="{StaticResource NumericBox}"
                                  Text="{Binding PrintCutWidth, StringFormat={}{0:F1}, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"/>
                     </Grid>
                 </GroupBox>

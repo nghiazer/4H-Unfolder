@@ -122,6 +122,32 @@ public class PdfExporter
                 }
             }
 
+            // ── cut-edge pair labels (assembly matching guide) ──────────────
+            if (p.IncludeEdgeLabels && result.CutEdgePairIds.Count > 0)
+            {
+                var pairFont  = new XFont("Helvetica", 7);
+                var pairBrush = new XSolidBrush(HexToColor(cutHex));
+                var drawnPairs = new HashSet<int>();
+                foreach (var face in result.Faces)
+                {
+                    if (!IsOnPage(face, oxMm, oyMm, paperWidthMm, paperHeightMm)) continue;
+                    var verts = face.Vertices;
+                    for (int i = 0; i < 3; i++)
+                    {
+                        if (face.EdgeIsFold[i] || face.EdgeIsBoundary[i]) continue;
+                        int meshEdgeId = face.MeshEdgeIds[i];
+                        if (meshEdgeId < 0
+                            || !result.CutEdgePairIds.TryGetValue(meshEdgeId, out var pairId)
+                            || !drawnPairs.Add(meshEdgeId))
+                            continue;
+
+                        var mp = (verts[i] + verts[(i + 1) % 3]) * 0.5f;
+                        gfx.DrawString(pairId.ToString(), pairFont, pairBrush,
+                                       new XPoint(MmToX(mp.X), MmToY(mp.Y)), XStringFormats.Center);
+                    }
+                }
+            }
+
             // ── page label ─────────────────────────────────────────────────
             if (p.IncludePageLabel)
             {

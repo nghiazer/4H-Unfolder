@@ -100,6 +100,7 @@ public class SvgExporter : IExporter
         sb.AppendLine( "      .boundary { stroke:#505050;      stroke-width:0.6; fill:none; }");
         sb.AppendLine($"      .tab      {{ fill:{tabFill}; stroke:#2e7d32; stroke-width:0.6; }}");
         sb.AppendLine( "      .label    { font-family:sans-serif; font-size:8px; fill:#888; }");
+        sb.AppendLine($"      .pairlabel{{ font-family:sans-serif; font-size:9px; fill:{cutColor}; text-anchor:middle; dominant-baseline:middle; }}");
         sb.AppendLine( "      .padding  { stroke:#404040; stroke-width:0.8; stroke-dasharray:4,4; fill:none; opacity:0.7; }");
         sb.AppendLine("    </style>");
 
@@ -193,6 +194,29 @@ public class SvgExporter : IExporter
                 string cls = isBoundary ? "boundary" : (isFold ? "fold" : "cut");
                 sb.AppendLine($"  <line x1=\"{Sx(pa.X)}\" y1=\"{Sy(pa.Y)}\" " +
                               $"x2=\"{Sx(pb.X)}\" y2=\"{Sy(pb.Y)}\" class=\"{cls}\"/>");
+            }
+        }
+
+        // ── cut-edge pair labels (assembly matching guide) ──────────────────────
+        if (p.IncludeEdgeLabels && result.CutEdgePairIds.Count > 0)
+        {
+            sb.AppendLine("  <!-- cut pair labels -->");
+            var drawnLabels = new HashSet<int>();
+            foreach (var face in result.Faces)
+            {
+                var verts = face.Vertices;
+                for (int i = 0; i < 3; i++)
+                {
+                    if (face.EdgeIsFold[i] || face.EdgeIsBoundary[i]) continue;
+                    int meshEdgeId = face.MeshEdgeIds[i];
+                    if (meshEdgeId < 0
+                        || !result.CutEdgePairIds.TryGetValue(meshEdgeId, out var pairId)
+                        || !drawnLabels.Add(meshEdgeId))
+                        continue;
+
+                    var mp = (verts[i] + verts[(i + 1) % 3]) * 0.5f;
+                    sb.AppendLine($"  <text x=\"{Sx(mp.X)}\" y=\"{Sy(mp.Y)}\" class=\"pairlabel\">{pairId}</text>");
+                }
             }
         }
 
