@@ -72,6 +72,8 @@ struct SVGExporter {
         // ── Layer 2 & 3: edges ───────────────────────────────────────────────
         let foldDash  = settings.foldLineDash == "Solid" ? "" :
             #" stroke-dasharray="\#(settings.foldLineDash)""#
+        let foldStroke = settings.grayscaleOutput ? "#555555" : settings.foldLineColor
+        let cutStroke  = settings.grayscaleOutput ? "#000000" : settings.cutLineColor
         var drawnFolds = Set<Int>(); var drawnCuts = Set<Int>(); var drawnBounds = Set<Int>()
 
         // Each category below is wrapped in an Inkscape-style layer <g> — lets cutting-machine
@@ -88,7 +90,7 @@ struct SVGExporter {
                     guard mid < 0 || drawnFolds.insert(mid).inserted else { continue }
                     if isCoplanarFold(mid, result: result, settings: settings) { continue }
                     let (p0, p1) = (verts[ei], verts[(ei+1)%3])
-                    lines.append(#"  <line x1="\#(x(p0))" y1="\#(y(p0))" x2="\#(x(p1))" y2="\#(y(p1))" stroke="\#(settings.foldLineColor)" stroke-width="\#(settings.foldLineWidth)"\#(foldDash)/>"#)
+                    lines.append(#"  <line x1="\#(x(p0))" y1="\#(y(p0))" x2="\#(x(p1))" y2="\#(y(p1))" stroke="\#(foldStroke)" stroke-width="\#(settings.foldLineWidth)"\#(foldDash)/>"#)
                 }
             }
             lines.append("  </g>")
@@ -106,7 +108,7 @@ struct SVGExporter {
                     let mid = face.meshEdgeId(ei)
                     guard mid < 0 || drawnCuts.insert(mid).inserted else { continue }
                     let (p0, p1) = (verts[ei], verts[(ei+1)%3])
-                    lines.append(#"  <line x1="\#(x(p0))" y1="\#(y(p0))" x2="\#(x(p1))" y2="\#(y(p1))" stroke="\#(settings.cutLineColor)" stroke-width="\#(settings.cutLineWidth)"/>"#)
+                    lines.append(#"  <line x1="\#(x(p0))" y1="\#(y(p0))" x2="\#(x(p1))" y2="\#(y(p1))" stroke="\#(cutStroke)" stroke-width="\#(settings.cutLineWidth)"/>"#)
                 }
             }
             lines.append("  <!-- boundary edges -->")
@@ -146,7 +148,7 @@ struct SVGExporter {
                     guard mid >= 0, let pairId = result.cutEdgePairIds[mid],
                           drawnLabels.insert(mid).inserted else { continue }
                     let mp = (verts[ei] + verts[(ei+1)%3]) / 2
-                    lines.append(#"  <text x="\#(x(mp))" y="\#(y(mp))" font-family="Helvetica,sans-serif" font-size="3" fill="\#(settings.cutLineColor)" text-anchor="middle" dominant-baseline="middle">\#(pairId)</text>"#)
+                    lines.append(#"  <text x="\#(x(mp))" y="\#(y(mp))" font-family="Helvetica,sans-serif" font-size="3" fill="\#(cutStroke)" text-anchor="middle" dominant-baseline="middle">\#(pairId)</text>"#)
                 }
             }
             lines.append("  </g>")

@@ -135,9 +135,14 @@ final class AppState: ObservableObject {
 
     /// Aligns the bounding boxes of the ≥2 currently-selected pieces to their common
     /// left/right/top/bottom edge or horizontal/vertical center — only ever adjusts
-    /// `pieceOffsets` (rotation is left untouched), matching Windows' equivalent toolbar action.
-    /// Not undo-able: `pushUndo`/`undo` only snapshot edge/flap overrides here, not piece
-    /// positions — same pre-existing limitation as the manual piece-drag gesture below.
+    /// `pieceOffsets` (rotation is left untouched); the alignment math matches Windows'
+    /// equivalent toolbar action, but NOT its undo behavior: Windows' AlignSelected pushes onto
+    /// its unified undo stack (EditSnapshot bundles edge/flap overrides AND piece layout, via
+    /// PushDragUndo), so ⌘Z there restores prior piece positions too. macOS `pushUndo`/`undo`
+    /// only ever snapshot edge/flap overrides, never `pieceOffsets`/`pieceRotations` — same
+    /// pre-existing limitation as the manual piece-drag gesture below (cross-review finding;
+    /// tracked as tech debt rather than fixed here since it needs a broader undo-stack redesign
+    /// covering the drag gesture too, not just this method).
     /// Geometry lives in PieceAligner (FourHUnfolderCore) so it's unit-testable — see
     /// PieceAlignerTests.swift.
     func alignSelectedPieces(_ mode: PieceAlignMode) {
@@ -202,17 +207,24 @@ final class AppState: ObservableObject {
     /// one Canvas view via manual hit-testing rather than discrete per-edge elements, so a
     /// native per-edge right-click context menu isn't a small addition; a modifier-click is
     /// consistent with the existing Shift-for-additive-select convention on this same canvas).
-    /// Unlike the single-edge joinEdge, this does not do the smart anchor-position reposition
-    /// (a merge of several original pieces has no single natural anchor) — matches Windows, which
-    /// also just re-unfolds plainly for the group case.
+    /// Like the single-edge joinEdge, preserves the position of every unaffected piece and gives
+    /// the merged piece a sensible inherited position (see repositionAfterGroupJoin) — a plain
+    /// autoArrange() here would scramble the user's entire canvas layout for what should be a
+    /// small, local edit; Windows' RerunUnfold(preservePositions: true) default (used for
+    /// JoinEdgeGroup too) does the equivalent position-preservation via GroupId survival.
     func joinEdgeGroup(_ meshEdgeId: Int) {
         guard let mesh, meshEdgeId < mesh.edges.count else { return }
         guard let result = unfoldResult else { return }
         let group = EdgeGroupFinder.findAdjacentCutEdgeGroup(startEdgeId: meshEdgeId, result: result)
         guard !group.isEmpty else { return }
         pushUndo()
+        let oldCentroids = captureEffectiveCentroids(result: result)
+        let oldFaceSets  = result.pieces.map { Set($0) }
         for eid in group { edgeOverrides[eid] = .fold }
-        Task { await unfold(); autoArrange() }
+        Task {
+            await unfold()
+            repositionAfterGroupJoin(oldFaceSets: oldFaceSets, oldCentroids: oldCentroids)
+        }
     }
 
     // MARK: - Reposition helpers
@@ -296,6 +308,28 @@ final class AppState: ObservableObject {
                 }
                 pieceOffsets[newPi] = oldCentroids[bestOldPi] - newRaw
             }
+        }
+        recomputePagesForOffsets()
+    }
+
+    /// Restores every piece (merged or unrelated) to the position of whichever old piece shares
+    /// the most faces with it. Generalizes repositionAfterSplit's "best-match by shared faces"
+    /// heuristic to the group-join case (many old pieces merging into one new piece) — unlike
+    /// single-edge joinEdge there's no one natural anchor face to prefer, so every new piece just
+    /// inherits its best-matching predecessor's position. Keeps unrelated pieces exactly where the
+    /// user left them instead of scrambling the whole canvas via autoArrange.
+    private func repositionAfterGroupJoin(oldFaceSets: [Set<Int>], oldCentroids: [SIMD2<Float>]) {
+        guard let result = unfoldResult else { return }
+        for (newPi, newFaceIds) in result.pieces.enumerated() {
+            let newSet = Set(newFaceIds)
+            let newRaw = rawCentroid(forPieceIdx: newPi, result: result)
+
+            var bestOldPi = 0; var bestShared = 0
+            for (oldPi, oldSet) in oldFaceSets.enumerated() {
+                let shared = newSet.intersection(oldSet).count
+                if shared > bestShared { bestShared = shared; bestOldPi = oldPi }
+            }
+            pieceOffsets[newPi] = oldCentroids[bestOldPi] - newRaw
         }
         recomputePagesForOffsets()
     }

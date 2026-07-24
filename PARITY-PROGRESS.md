@@ -377,6 +377,31 @@ gốc; ghi nhận quyết định rõ ràng thay vì lặng lẽ bỏ qua.
 
 ---
 
+## Cross-review GĐ3.3 + GĐ4 (2026-07-24) — đã fix 3/5, 2 ghi nhận tech-debt
+
+Đọc lại code Windows (nguồn tham chiếu) đối chiếu tay từng dòng với code macOS mới viết — không tin
+vào chính tài liệu mình vừa viết. Phát hiện 2 khẳng định "matches Windows" trong doc-comment của
+chính phiên trước là **sai** (viết dựa trên giả định, chưa verify code Windows thật).
+
+| # | Mức độ | Nền tảng | Vấn đề | Cách xử lý |
+|---|--------|----------|--------|-----------|
+| 1 | 🔴 Cao | macOS (3.3) | `joinEdgeGroup` gọi thẳng `autoArrange()` sau unfold → **xóa sạch vị trí thủ công của TẤT CẢ piece trên canvas**, kể cả những piece không liên quan gì đến nhóm cạnh vừa nối. Doc-comment cũ khẳng định "matches Windows, which also just re-unfolds plainly" — **sai**: `RerunUnfold(preservePositions: true)` (mặc định, dùng cho cả `JoinEdgeGroup`) khôi phục vị trí mọi piece còn giữ nguyên GroupId, chỉ đặt piece MỚI (bị merge) ở vị trí mặc định bên cạnh trang giấy. Hai method chị em `splitEdge`/`joinEdge` trên chính macOS cũng đã tự làm đúng việc này (`repositionAfterSplit`/`repositionAfterJoin`) — `joinEdgeGroup` là ngoại lệ duy nhất phá vỡ layout | Thêm `repositionAfterGroupJoin` (khái quát hoá heuristic "khớp piece cũ theo số face chung" đã có ở `repositionAfterSplit`) — thay `autoArrange()` bằng giữ nguyên vị trí piece không liên quan + piece merge kế thừa vị trí piece cũ khớp nhất |
+| 2 | 🟡 Trung bình | macOS (3.3, tech debt sâu hơn) | `alignSelectedPieces` (và thao tác kéo piece thủ công có từ trước) **không undo được** trên macOS — `pushUndo`/`undo` chỉ snapshot `edgeOverrides`/`flapOverrides`. Doc-comment cũ khẳng định "matching Windows' equivalent toolbar action" — **sai theo nghĩa undo**: Windows `AlignSelected` gọi `PushDragUndo` vào **cùng một** `_undoStack` hợp nhất (`EditSnapshot` gộp edge+flap+piece-layout) nên ⌘Z trên Windows khôi phục CẢ vị trí piece. Đây là khoảng cách kiến trúc sâu, có từ trước GĐ3.3 (thao tác kéo piece thủ công cũng chưa từng gọi `pushUndo`) | **Không fix ngay** (cần thiết kế lại toàn bộ undo-stack macOS để gộp piece-layout, ảnh hưởng cả gesture kéo piece có sẵn) — sửa lại doc-comment cho đúng sự thật, ghi nhận tech-debt |
+| 3 | 🟢 Thấp | macOS (3.3) | Thao tác ⌥-click để join cả nhóm cạnh cắt **không có gợi ý nào trong UI** — khác Windows, nơi tính năng tương đương là 1 mục menu chuột-phải hiện rõ ràng | Cập nhật tooltip nút "Edit Edges" trong toolbar để nhắc ⌥-click |
+| 4 | 🔴 Cao | macOS (GĐ4 + kế thừa từ SVG/PDF có từ trước) | `grayscaleOutput` (toggle "Grayscale Output" trong Preferences) **chỉ ảnh hưởng màu fill mặt/tab**, không bao giờ ép màu đường fold/cut hay nhãn cặp-cạnh về xám/đen — trên **cả 3** định dạng export (SVG, PDF, và PNG mới ở GĐ4, vốn sao chép nguyên logic vẽ của PDFExporter). Windows xử lý đúng (ép `#555555`/`#000000` cho fold/cut/label khi bật grayscale) — xác nhận bằng cách đọc `SvgExporter.cs`/`PngExporter.cs` thật. PNG (GĐ4, mới) chỉ kế thừa lỗi đã có sẵn ở PDF/SVG (có từ trước GĐ4), không phải lỗi GĐ4 tự gây ra | Thêm nhánh `grayscaleOutput ? gray/black : configured-color` cho fold/cut/label ở cả 3 file (`SVGExporter.swift`, `PDFExporter.swift`, `PNGExporter.swift`) — nhất quán, tránh chỉ vá PNG mà để SVG/PDF tiếp tục sai |
+| 5 | 🟡 Trung bình | macOS (GĐ4) | `PNGExporter.swift` **bỏ qua hoàn toàn** `settings.svgScaleFactor` khi tính toạ độ hình học — trong khi `SVGExporter.swift`/`PDFExporter.swift` đều nhân toạ độ với nó (dùng như hệ số hiệu chỉnh tỉ lệ in). Mặc định `svgScaleFactor=1.0` nên chưa ai gặp phải, nhưng người dùng nào hiệu chỉnh giá trị này (bù sai số máy in) sẽ thấy PNG xuất ra SAI tỉ lệ so với SVG/PDF cùng cấu hình | **Chưa fix** — cách áp dụng đúng cho PNG mơ hồ hơn PDF vì PNG dùng layout trang cố định (fixed paper size, multi-page grid) còn PDF macOS tự co trang theo pattern (single-page, auto-fit) — cần quyết định thiết kế (scale nội dung quanh đâu, có giữ nguyên kích thước trang pixel cố định không) trước khi sửa, không đoán liều |
+
+**Kiểm chứng fix:**
+- #1: build sạch; đối chiếu tay với `repositionAfterSplit`/`repositionAfterJoin` (cùng heuristic, đã có từ trước) — không viết được unit test trực tiếp vì method này (giống 2 method chị em) sống trong App target, test target không phụ thuộc vào (giới hạn đã có từ trước, không phải mới phát sinh).
+- #3: chỉ đổi text tooltip, không có logic để test.
+- #4: **thực thi thật** — script `swiftc` độc lập render PNG ở cả 2 chế độ (grayscale/color) rồi lấy mẫu pixel thật tại điểm nằm trên đường cut: grayscale → RGB(0,0,0) đen thật; color → RGB(255,38,0) đỏ (khớp `#ff0000` sau anti-alias) — không chỉ typecheck. Thêm 2 test `XCTestCase` mới trong `SVGExporterTests.swift` (`testSVG_grayscale_foldAndCutLinesAreNotColored`, `testSVG_color_foldAndCutLinesUseConfiguredColors`), verify thật qua scratch script + type-check toàn bộ 17 file test suite sạch.
+- #2, #5: chỉ ghi nhận, không code — không cần kiểm chứng runtime.
+
+Windows: không có thay đổi nào (đóng vai trò "nguồn đối chiếu đúng" cho cả 5 phát hiện, không tự phát
+hiện lỗi mới ở phía Windows).
+
+---
+
 ## Nhật ký triển khai
 
 | Ngày | Việc | Kết quả kiểm chứng |
