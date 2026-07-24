@@ -18,12 +18,14 @@ public partial class EditFlapsViewModel : ObservableObject
     [ObservableProperty] private bool _flapEditActive = false;
 
     // ── Shape(S) tab ──────────────────────────────────────────────────────────
+    // Height/angle defaults come from AppSettings.PrintSettings via the constructor below,
+    // not from these field initializers — they're overwritten before the dialog is ever shown.
     [ObservableProperty] private bool   _setHeight  = true;
-    [ObservableProperty] private double _heightMm   = 5.0;
+    [ObservableProperty] private double _heightMm;
     [ObservableProperty] private bool   _setAngle   = false;
     [ObservableProperty] private bool   _angleAuto  = true;
-    [ObservableProperty] private double _leftAngle  = 45.0;
-    [ObservableProperty] private double _rightAngle = 45.0;
+    [ObservableProperty] private double _leftAngle;
+    [ObservableProperty] private double _rightAngle;
 
     // ── Position(Q) tab ───────────────────────────────────────────────────────
     [ObservableProperty] private FlapOptionItem _selectedInnerMode;

@@ -445,7 +445,7 @@ Phát hiện khi khảo sát làm đổi phạm vi 2 việc:
 | Phase | Nền tảng | Việc | Mức ưu tiên | Trạng thái |
 |:---:|:---:|---|:---:|:---:|
 | 1 | macOS | Wire Outline Padding vào export/canvas — port `BoundaryPolygonComputer` (edge-chain), gọi `PolygonOffset.inflate`, layer SVG mới + canvas overlay + UI toggle | 🔴 | ✅ |
-| 2 | Windows | 3 quick-win: cảnh báo `FlapOverride.Deserialize` lỗi, dọn magic-number `EditFlapsViewModel`, thêm setting `OverlapRetrySeedCount` (thay 8 cứng) | 🟢 | ⬜ |
+| 2 | Windows | 3 quick-win: cảnh báo `FlapOverride.Deserialize` lỗi, dọn magic-number `EditFlapsViewModel`, thêm setting `OverlapRetrySeedCount` (thay 8 cứng) | 🟢 | ✅ |
 | 3 | macOS | Hợp nhất undo stack — `OverrideSnapshot` thêm `pieceOffsets`/`pieceRotations`/`userGroups`, push undo ở drag/rotate/align (pre-capture pattern như Windows `PushDragUndo`) | 🟡 | ⬜ |
 | 4 | macOS | Fix `PNGExporter` bỏ qua `svgScaleFactor` — scale mm→px transform + sửa lại 2 chỗ chia font-size không nhất quán | 🟡 | ⬜ |
 | 5 | macOS | Thêm import STL — `StlMeshLoader` conform `MeshLoaderProtocol` có sẵn, không cần dependency ngoài | 🟡 | ⬜ |
@@ -506,6 +506,37 @@ Wire vào:
 - **Chưa làm được:** click-through UI thật (load mesh → bật Outline Padding trong Preferences → xác
   nhận bằng mắt đường dash hiện trên canvas) — môi trường phiên này không xác nhận được quyền
   Accessibility cho UI automation macOS. Nên xác nhận lại bằng mắt trong lần chạy Xcode thật tiếp theo.
+
+### Phase 2 Windows: 3 quick-win — hoàn thành (2026-07-25)
+
+1. **`FlapOverride.Deserialize` corrupt-data warning** — không sửa `Deserialize` (vẫn giữ nguyên
+   `Debug.WriteLine` + trả `null`), thay vào đó đếm số override bị bỏ qua ngay tại call site
+   (`MainViewModel.RestoreProjectState`) và đẩy vào `state.Warnings` — cơ chế **đã có sẵn**, được
+   `ProjectSerializer.cs` dùng cho "Mesh file not found"/"Texture file not found" và hiển thị gộp qua
+   `StatusText` ở cuối `RestoreProjectState` ("Project loaded with warnings: ..."). Không cần dựng UI
+   cảnh báo mới — tận dụng đúng đường ống đã có, nhất quán với cách warning khác đã được surface.
+2. **`EditFlapsViewModel` magic-number cleanup** — xác nhận đây chỉ là cosmetic: constructor
+   (`HeightMm = mainVm.CurrentPrintSettings.GlueTabDepthMm` …) đã ghi đè giá trị hardcode 5.0/45.0
+   trước khi dialog hiện ra, nên không phải bug chức năng. Bỏ initializer trùng lặp trên 3
+   `[ObservableProperty]` (`_heightMm`, `_leftAngle`, `_rightAngle`), để `AppSettings` là nguồn sự
+   thật duy nhất, kèm comment giải thích tại sao field không cần default nữa.
+3. **`OverlapRetrySeedCount` setting** (thay số 8 cứng trong `UnfoldService.Unfold`'s `seedCount`
+   default) — theo đúng khuôn `CoplanarAngleDeg`: `AppSettings.PrintSettings.OverlapRetrySeedCount`
+   (int, default 8) → `SettingsViewModel` (`LoadFrom`/`ToSettings`) → `SettingsDialog.xaml` row 12 mới
+   (Slider 0–20 + TextBox) trong GroupBox "Page Layout & Tab Geometry", cùng chỗ với Coplanar
+   threshold. Cả 3 call site `_unfoldService.Unfold(...)` trong `MainViewModel.cs` (Unfold thường,
+   `RerunUnfold`, `RestoreProjectState`) trước đây luôn dùng default ngầm — nay truyền tường minh
+   `seedCount: _settingsService.Current.Print.OverlapRetrySeedCount` bằng named argument (tránh lẫn
+   vị trí tham số optional `flapOverrides` phía trước).
+
+**Kiểm chứng:** `dotnet build -p:EnableWindowsTargeting=true` 0 lỗi (chỉ 7 NU1603 warning baseline có
+sẵn). `dotnet test tests/FourHUnfolder.Tests` **127/127 pass** — không đổi so với baseline trước phase
+này (đúng như kỳ vọng: cả 3 việc đều là app-layer wiring/plumbing trên `MainViewModel`/`SettingsViewModel`
+— các lớp này không nằm trong test suite portable, WPF không chạy runtime ngoài Windows; logic thuật
+toán bên dưới — `UnfoldService.Unfold(seedCount:)`, `FlapOverride.Deserialize` — không đổi, vẫn được
+test từ GĐ2/GĐ3, `FlapOverrideTests.cs` hiện có vẫn pass nguyên vì file đó không bị đụng tới). Không
+thêm test mới vì không có logic thuật toán mới để test — khớp tiền lệ `PngDpi` (setting field không
+có dedicated wiring test, chỉ compile-check qua App build).
 
 ---
 
