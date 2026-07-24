@@ -192,16 +192,27 @@ struct PNGExporter {
 
     // MARK: - Page-slice filtering (mirrors PDFExporter's IsOnPage / IsTabOnPage)
 
+    // Broken into an explicit loop with a named helper (rather than a `.contains { }` closure
+    // with a compound && chain) — the compound-boolean-in-generic-closure form made the real
+    // Swift compiler (Xcode, on CI) time out with "unable to type-check this expression in
+    // reasonable time"; the local toolchain used during development didn't hit that timeout, so
+    // this was only caught by real CI, not local `swift build`.
+    private static func vertexInRect(_ v: SIMD2<Float>, _ oxMm: Double, _ oyMm: Double, _ wMm: Double, _ hMm: Double) -> Bool {
+        let x = Double(v.x)
+        let y = Double(v.y)
+        let xOk = x >= oxMm && x <= oxMm + wMm
+        let yOk = y >= oyMm && y <= oyMm + hMm
+        return xOk && yOk
+    }
+
     private static func isOnPage(_ face: UnfoldedFace, _ oxMm: Double, _ oyMm: Double, _ wMm: Double, _ hMm: Double) -> Bool {
-        [face.v0, face.v1, face.v2].contains {
-            Double($0.x) >= oxMm && Double($0.x) <= oxMm + wMm && Double($0.y) >= oyMm && Double($0.y) <= oyMm + hMm
-        }
+        for v in [face.v0, face.v1, face.v2] where vertexInRect(v, oxMm, oyMm, wMm, hMm) { return true }
+        return false
     }
 
     private static func isTabOnPage(_ tab: GlueTab, _ oxMm: Double, _ oyMm: Double, _ wMm: Double, _ hMm: Double) -> Bool {
-        tab.polygon.contains {
-            Double($0.x) >= oxMm && Double($0.x) <= oxMm + wMm && Double($0.y) >= oyMm && Double($0.y) <= oyMm + hMm
-        }
+        for v in tab.polygon where vertexInRect(v, oxMm, oyMm, wMm, hMm) { return true }
+        return false
     }
 
     // MARK: - Path helpers
