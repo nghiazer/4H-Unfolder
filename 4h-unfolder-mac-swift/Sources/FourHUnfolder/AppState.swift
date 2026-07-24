@@ -611,7 +611,8 @@ final class AppState: ObservableObject {
             edgeOverrides: edgeOverrides,
             flapOverrides: flapOverrides,
             settings: settings.print,
-            meshScaleMm: meshScaleMmPerUnit
+            meshScaleMm: meshScaleMmPerUnit,
+            seedCount: settings.print.overlapRetrySeedCount
         )
         pieceOffsets         = [:]
         pieceRotations       = [:]

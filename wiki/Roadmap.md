@@ -11,6 +11,19 @@ public version. Priorities: 🔴 High · 🟡 Medium · 🟢 Low.
 
 ## Recently shipped
 
+Backlog-clearing pass (2026-07-25), both platforms unless noted:
+
+- ✅ **Outline padding wired into export/canvas on macOS** — the offset math (`PolygonOffset`)
+  existed since GĐ1 but had no piece-boundary tracer to hand it a polygon; ported Windows'
+  `BoundaryPolygonComputer` to close the gap. SVG + canvas only, matching Windows (no PDF on
+  either platform)
+- ✅ **Configurable overlap-retry budget** — was fixed at 8 attempts on both platforms, now a
+  setting (`OverlapRetrySeedCount` / `overlapRetrySeedCount`)
+- ✅ **`FlapOverride.Deserialize` corrupt-data warning** (Windows) — surfaces through the existing
+  project-load warnings pipeline instead of only a debug-only log line
+- ✅ **`EditFlapsViewModel` settings wiring cleanup** (Windows) — cosmetic; the dialog already read
+  live defaults from `AppSettings`, this just removed the misleading duplicate hardcoded values
+
 Delivered in **v0.4.0.A** (Windows) / **v0.0.0.7-alpha** (macOS) — GĐ4 + GĐ3.3 of the
 papercraft-parity effort:
 
@@ -43,9 +56,6 @@ Delivered in **Windows v0.1.1.A**:
 - ✅ **Merge adjacent flaps** — union of neighbouring tab polygons
 - ✅ **Join connected cut edges** — reconnect adjacent isolated cut edges
 
-_(macOS outline padding is still computed but not yet wired to export/canvas — see
-[macOS parity](#macos) below.)_
-
 ---
 
 ## Windows
@@ -55,9 +65,6 @@ _(macOS outline padding is still computed but not yet wired to export/canvas —
 | 🟢 | Select symmetrical pair | Pick an edge/piece and auto-select its mirror |
 | 🟢 | Split window | Detachable / side-by-side 3D + 2D panes |
 | 🟢 | Change coordinates | Re-origin / re-orient the model interactively |
-| 🟢 | Settings wiring | `EditFlapsViewModel` hardcodes 5 mm / 45° — fall back to `AppSettings` |
-| 🟢 | Corrupt-data warning | `FlapOverride.Deserialize` silently ignores bad data — surface a warning |
-| 🟢 | Configurable retry budget | Overlap-reducing unfold retry currently fixed at 8 attempts — consider exposing as a setting for very large meshes |
 
 ---
 
@@ -67,7 +74,6 @@ Goal: reach **feature parity with Windows**, then graduate from alpha → beta.
 
 | Priority | Item |
 |:---:|------|
-| 🔴 | Wire outline padding into export/canvas (the offset math already exists — `PolygonOffset`) |
 | 🟡 | Undo stack doesn't cover piece positions/rotations (drag, align pieces) — only edge/flap overrides. Needs the same unified-snapshot redesign Windows already has (`EditSnapshot`/`PushDragUndo`), not a per-call patch |
 | 🟡 | `PNGExporter` ignores the `svgScaleFactor` print-calibration setting that SVG/PDF both honor — latent at the default value; fix needs a design call given PNG's fixed-page multi-page-grid layout |
 | 🟡 | Extra import formats (Assimp equivalent) |

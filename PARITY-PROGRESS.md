@@ -540,6 +540,36 @@ có dedicated wiring test, chỉ compile-check qua App build).
 
 ---
 
+## Cross-review Phase 1 + Phase 2 (2026-07-25) — không có bug thật, 1 scope gap tự bắt được
+
+Đọc lại toàn bộ diff của cả 2 phase một cách hoài nghi (không tin vào chính write-up vừa viết ở trên),
+đối chiếu tay với Windows reference nơi áp dụng. Không tìm thấy bug chức năng nào. 2 việc đáng ghi
+nhận:
+
+| # | Mức độ | Phát hiện | Xử lý |
+|---|--------|-----------|-------|
+| 1 | 🟡 Scope gap | Kế hoạch gốc scope "Configurable retry budget" (Phase 2) chỉ cho **Windows**, theo đúng cách `wiki/Roadmap.md` liệt kê nó (chỉ nằm trong bảng Windows). Nhưng bảng tech-debt macOS trong `CLAUDE.md` (dòng riêng, không nằm trong phạm vi khảo sát ban đầu của Phase 2) đã ghi rõ: `UnfoldService.swift` (mac) **cũng** hardcode `seedCount = 8` y hệt Windows — cùng 1 gap, 2 nền tảng, giống hệt kiểu phát hiện đã có với `PNGExporter`/`svgScaleFactor` ở khảo sát ban đầu. Bỏ sót vì lấy `wiki/Roadmap.md` làm nguồn scope chính cho Phase 2 thay vì đối chiếu cả `CLAUDE.md` | Thêm `overlapRetrySeedCount` cho macOS ngay trong cùng phiên cross-review này (không tách phase riêng vì nhỏ, rủi ro thấp, đúng khuôn `outlinePaddingMm` vừa làm ở Phase 1): `AppSettings.PrintSettings.overlapRetrySeedCount` (Int, default 8, có tolerant-decoder) → `AppState.unfold()` truyền `seedCount: settings.print.overlapRetrySeedCount` → field mới trong `PreferencesView` Print tab, cạnh Coplanar Threshold. `swift build` sạch. |
+| 2 | 🟢 Ghi nhận, không phải bug | `SettingsDialog.xaml` (Win): `OverlapRetrySeedCount` (`int`) bind TwoWay vào `Slider.Value` (`double`) — pattern chuẩn WPF (numeric TypeConverter tự convert), nhưng đây là **lần đầu codebase này bind 1 `int` ObservableProperty vào Slider** (grep xác nhận không có tiền lệ). Không sửa gì (tin vào hành vi WPF chuẩn, rủi ro thấp nếu sai là binding im lặng không update chứ không crash) — **cần xác nhận bằng mắt trên Windows thật** trước khi coi là 100% chắc, theo đúng quy tắc "WPF runtime cần verify trên Windows thật" đã lặp lại nhiều lần trong tài liệu này. |
+| 3 | 🟢 Phát hiện phụ, không liên quan Phase 1/2 | Viết script round-trip thật (`JSONEncoder`/`JSONDecoder`) để kiểm chứng `overlapRetrySeedCount` mới không phá tolerant-decoder của `PrintSettings` — **pass**. Nhưng bản nháp đầu của script (dùng JSON với `view2D`/`view3D`/`general` rỗng hoàn toàn để mô phỏng "settings.json cũ") **fail** — hoá ra không liên quan gì đến field mới: `View2DSettings`/`View3DSettings`/`GeneralSettings` **chưa từng có** tolerant `init(from:)` như `PrintSettings` (chỉ `PrintSettings` được vá sau sự cố GĐ1). Đây là lỗ hổng có sẵn từ trước, không do Phase 1/2 gây ra — nếu tương lai thêm field mới vào 1 trong 3 struct đó mà không thêm decoder chịu lỗi, sẽ lặp lại đúng bug đã fix cho `PrintSettings`. Không fix ngay (ngoài phạm vi Phase 1/2) — ghi nhận tech-debt trong `CLAUDE.md`. |
+
+**Ghi nhận riêng, không phải bug — hiệu năng (Phase 1, mức thấp, đã biết trước):**
+`PatternCanvasView.drawOutlinePadding` gọi lại `BoundaryPolygonComputer.compute` + `PolygonOffset.inflate`
+(chain cạnh + tính arc lượng giác) cho **mọi piece, mỗi frame render** khi Outline Padding bật — không
+cache/memoize. Với mesh nhỏ/vừa (đa số model giấy thực tế) không đáng kể; với mesh nhiều piece/cạnh có
+thể cộng dồn vào chi phí retry 9x đã biết (mục Performance trong `CLAUDE.md`/`wiki/Roadmap.md` GĐ Phase
+8). Không fix ngay — thêm cache đúng cách cần key theo `(result, pieceOffsets, pieceRotations,
+outlinePaddingMm)` và invalidation rõ ràng, việc lớn hơn phạm vi "wire up" của Phase 1. Để lại cho
+Phase 8 (profiling) quyết định có đáng làm không dựa trên số đo thật thay vì đoán.
+
+**Đồng bộ tài liệu (lý do trước đây cố tình hoãn tới bước này):** cả 2 branch phase trước đó là
+`wip/` riêng biệt, sửa `CLAUDE.md`/`wiki/Roadmap.md` (bảng dùng chung) ở mỗi branch sẽ tạo conflict khi
+merge. Nay merge thẳng cả 2 phase vào `main` trong 1 lượt nên đồng bộ luôn: xoá TD-36-2, TD-36-3, dòng
+"Wire outline padding" (mac 🔴) khỏi `CLAUDE.md`; xoá "Settings wiring", "Corrupt-data warning",
+"Configurable retry budget" (Win) khỏi `wiki/Roadmap.md`, thêm dòng retry-budget mac mới đã fix luôn
+trong cross-review này.
+
+---
+
 ### Lưu ý môi trường verify (máy Darwin)
 - WPF App **không chạy runtime** được trên macOS (`NETSDK1100`) — dùng `-p:EnableWindowsTargeting=true`
   để compile-check C#/XAML. Hành vi runtime WPF **cần verify trên Windows thật**.

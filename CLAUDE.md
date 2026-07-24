@@ -151,23 +151,22 @@ the exact line from `find_definition`.
 | ID | Priority | Description |
 |----|----------|-------------|
 | TD-38-4/5/6 | 🟢 Low | Select Symmetrical Pair / Split Window / Change Coordinates |
-| TD-36-2 | 🟢 Low | `EditFlapsViewModel` hardcodes defaults (5mm/45°) — not wired to `AppSettings` fallback |
-| TD-36-3 | 🟢 Low | `FlapOverride.Deserialize`: silent-ignore on corrupt data — add warning |
 | Performance | 🟢 Low | O(n²) AABB+SAT overlap; spatial grid used, but the overlap-reducing retry (v0.3.0.A) multiplies unfold cost up to 9× when a mesh has an unavoidable overlap — profile meshes > 2000 faces |
 
 Resolved this release: macOS "port join connected cut edges from Windows" (GĐ3.3 — Windows
-already had it) — see [`PARITY-PROGRESS.md`](PARITY-PROGRESS.md) for the full GĐ4 (PNG
-export/page + SVG cutting-machine layers) and GĐ3.3 (join connected cut edges + align pieces)
-writeup, plus the cross-review findings fixed afterward (layout-wipe bug in group-join,
-Grayscale Output not covering line/label colors).
+already had it), macOS Outline Padding wired into export/canvas, and 3 small Windows items
+(`EditFlapsViewModel` magic-number cleanup, `FlapOverride.Deserialize` corrupt-data warning,
+configurable overlap-retry budget on both platforms) — see [`PARITY-PROGRESS.md`](PARITY-PROGRESS.md)
+for the full GĐ4 (PNG export/page + SVG cutting-machine layers), GĐ3.3 (join connected cut edges +
+align pieces), and backlog-clearing Phase 1+2 writeups, plus the cross-review findings fixed
+afterward (layout-wipe bug in group-join, Grayscale Output not covering line/label colors).
 
 ### macOS tech debt open
 | ID | Priority | Description |
 |----|----------|-------------|
-| — | 🔴 High | Wire outline padding (`PolygonOffset`) into export/canvas — math exists, not consumed yet |
-| — | 🟢 Low | Configurable overlap-retry budget (fixed at 8 attempts) for very large meshes |
 | — | 🟡 Med | Undo stack (`pushUndo`/`undo`) never snapshots piece positions/rotations (`pieceOffsets`/`pieceRotations`) — only edge/flap overrides. Affects manual piece drag, `alignSelectedPieces`. Windows' equivalent (`EditSnapshot`/`PushDragUndo`) unifies edge+flap+layout into one undo stack; macOS needs the same redesign, not a per-call patch. Found in GĐ3.3 cross-review (2026-07-24) |
 | — | 🟡 Med | `PNGExporter.swift` ignores `settings.svgScaleFactor` for geometry (SVG/PDF both apply it) — latent while the setting defaults to 1.0, but wrong for anyone calibrating print scale. Fix needs a design call: PNG uses a fixed-page multi-page grid (unlike PDF's auto-sized single page), so "how should the scale factor apply without moving content off-page" isn't obvious. Found in GĐ4 cross-review (2026-07-24) |
+| — | 🟢 Low | `View2DSettings`/`View3DSettings`/`GeneralSettings` lack the tolerant `init(from:)` that `PrintSettings` has — adding a new field to any of them without one risks the same "missing key wipes the whole sub-object" bug `PrintSettings` was fixed for. Latent (no field has been added to those 3 structs since `PrintSettings` got its fix), found incidentally in backlog Phase 1+2 cross-review (2026-07-25) |
 
 ---
 

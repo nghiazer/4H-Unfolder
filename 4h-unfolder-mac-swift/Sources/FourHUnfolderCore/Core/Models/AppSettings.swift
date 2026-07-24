@@ -48,6 +48,13 @@ struct AppSettings: Codable, Equatable {
         /// Dihedral-angle threshold (degrees) below which a fold edge counts as coplanar.
         var coplanarAngleDeg: Double = 1.0
 
+        /// Overlap-reducing unfold retry: how many alternate near-minimal spanning trees to try
+        /// (via MST tie-break seeds) when the default unfold has overlaps, keeping the
+        /// least-overlap result. Each attempt re-runs the full unfold pipeline, so raising this
+        /// trades unfold time for a better chance of resolving overlaps on large/irregular meshes.
+        /// 0 disables the retry entirely. Mirrors C# AppSettings.PrintSettings.OverlapRetrySeedCount.
+        var overlapRetrySeedCount: Int = 8
+
         /// Print cut-edge pair numbers (assembly matching guide) in SVG export. Independent
         /// of View2DSettings.showEdgeIds, which only controls the on-screen canvas. Default
         /// true preserves the pre-existing always-on SVG export behaviour.
@@ -112,6 +119,7 @@ struct AppSettings: Codable, Equatable {
             outlinePaddingMm    = d(.outlinePaddingMm, def.outlinePaddingMm)
             hideCoplanarFolds   = d(.hideCoplanarFolds, def.hideCoplanarFolds)
             coplanarAngleDeg    = d(.coplanarAngleDeg, def.coplanarAngleDeg)
+            overlapRetrySeedCount = d(.overlapRetrySeedCount, def.overlapRetrySeedCount)
             includeEdgeLabels   = d(.includeEdgeLabels, def.includeEdgeLabels)
             foldLineColor       = d(.foldLineColor, def.foldLineColor)
             foldLineWidth       = d(.foldLineWidth, def.foldLineWidth)
