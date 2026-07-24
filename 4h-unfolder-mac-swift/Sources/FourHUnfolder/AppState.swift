@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import CoreGraphics
 import ImageIO
+import simd
 // FourHUnfolderCore is compiled with -enable-testing (see Package.swift) so
 // internal symbols remain accessible here without a full public API surface.
 @testable import FourHUnfolderCore
@@ -130,6 +131,30 @@ final class AppState: ObservableObject {
         return userGroups[minFid]
     }
 
+    // MARK: - Align selected pieces (GĐ3.3 parity port from Windows MainViewModel.AlignSelected)
+
+    /// Aligns the bounding boxes of the ≥2 currently-selected pieces to their common
+    /// left/right/top/bottom edge or horizontal/vertical center — only ever adjusts
+    /// `pieceOffsets` (rotation is left untouched), matching Windows' equivalent toolbar action.
+    /// Not undo-able: `pushUndo`/`undo` only snapshot edge/flap overrides here, not piece
+    /// positions — same pre-existing limitation as the manual piece-drag gesture below.
+    /// Geometry lives in PieceAligner (FourHUnfolderCore) so it's unit-testable — see
+    /// PieceAlignerTests.swift.
+    func alignSelectedPieces(_ mode: PieceAlignMode) {
+        guard let result = unfoldResult else { return }
+        let deltas = PieceAligner.alignmentDeltas(
+            result: result,
+            selected: Array(selectedPieceIndices),
+            pieceOffsets: pieceOffsets,
+            pieceRotations: pieceRotations,
+            mode: mode
+        )
+        guard !deltas.isEmpty else { return }
+        for (pi, d) in deltas {
+            pieceOffsets[pi] = (pieceOffsets[pi] ?? .zero) + d
+        }
+    }
+
     func clearEdgeOverrides() {
         pushUndo()
         edgeOverrides.removeAll()
@@ -168,6 +193,26 @@ final class AppState: ObservableObject {
             repositionAfterJoin(oldFaceSets: oldFaceSets, oldCentroids: oldCentroids,
                                 anchorFaceId: anchorFaceId)
         }
+    }
+
+    /// GĐ3.3: batch version of joinEdge — converts the whole chain of cut edges transitively
+    /// connected to meshEdgeId (via shared 2D vertices) to Fold in one action. Mirrors Windows'
+    /// MainViewModel.JoinEdgeGroup (triggered there from a right-click canvas context menu; here
+    /// from ⌥-click on a cut edge in Edit Edges mode — this SwiftUI canvas draws all edges into
+    /// one Canvas view via manual hit-testing rather than discrete per-edge elements, so a
+    /// native per-edge right-click context menu isn't a small addition; a modifier-click is
+    /// consistent with the existing Shift-for-additive-select convention on this same canvas).
+    /// Unlike the single-edge joinEdge, this does not do the smart anchor-position reposition
+    /// (a merge of several original pieces has no single natural anchor) — matches Windows, which
+    /// also just re-unfolds plainly for the group case.
+    func joinEdgeGroup(_ meshEdgeId: Int) {
+        guard let mesh, meshEdgeId < mesh.edges.count else { return }
+        guard let result = unfoldResult else { return }
+        let group = EdgeGroupFinder.findAdjacentCutEdgeGroup(startEdgeId: meshEdgeId, result: result)
+        guard !group.isEmpty else { return }
+        pushUndo()
+        for eid in group { edgeOverrides[eid] = .fold }
+        Task { await unfold(); autoArrange() }
     }
 
     // MARK: - Reposition helpers

@@ -516,9 +516,15 @@ struct PatternCanvasView: View {
                     // Fold edge → disjoin (smart reposition, no autoArrange)
                     appState.splitEdge(meshEdgeId)
                 } else if !face.edgeIsBoundary(ei) {
-                    // Cut edge → start join preview
-                    startJoinPreview(meshEdgeId: meshEdgeId, clickedFace: face, result: result,
-                                     at: point, xf: xf)
+                    // ⌥-click a cut edge → join the whole connected chain at once (GĐ3.3,
+                    // mirrors Windows' "Join connected cut edges" context-menu action).
+                    // Plain click keeps the existing single-edge join-preview flow.
+                    if NSEvent.modifierFlags.contains(.option) {
+                        appState.joinEdgeGroup(meshEdgeId)
+                    } else {
+                        startJoinPreview(meshEdgeId: meshEdgeId, clickedFace: face, result: result,
+                                         at: point, xf: xf)
+                    }
                 }
                 return
             }
