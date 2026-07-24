@@ -165,6 +165,7 @@ struct PatternCanvasView: View {
                         drawFaces(ctx, result: result, xf: xf)
                         drawEdges(ctx, result: result, xf: xf)
                         if v2d.showGlueTabs    { drawTabs(ctx, result: result, xf: xf) }
+                        drawOutlinePadding(ctx, result: result, xf: xf)
                         if v2d.showEdgeIds     { drawCutLabels(ctx, result: result, xf: xf) }
                         if v2d.showFaceNumbers { drawFaceLabels(ctx, result: result, xf: xf) }
                         if v2d.showFoldAngles  { drawFoldAngles(ctx, result: result, xf: xf) }
@@ -982,6 +983,24 @@ struct PatternCanvasView: View {
             ctx.fill(path,   with: .color(fill))
             ctx.stroke(path, with: .color(stroke),
                        style: StrokeStyle(lineWidth: 0.6, dash: [4, 2]))
+        }
+    }
+
+    // 5b. Outline padding guide (seam allowance) — mirrors SVGExporter's Outline Padding layer.
+    // Gated purely by the setting value (no separate canvas toggle), matching Windows'
+    // PatternCanvasControl padding-guide overlay.
+    private func drawOutlinePadding(_ ctx: GraphicsContext, result: UnfoldResult, xf: CGAffineTransform) {
+        let paddingMm = Float(appState.settings.print.outlinePaddingMm)
+        guard paddingMm > 0 else { return }
+        let guideColor = Color(red: 0.25, green: 0.25, blue: 0.25)
+        for faceIds in result.pieces {
+            let faceSet = Set(faceIds)
+            let pieceFaces = result.faces.filter { faceSet.contains($0.faceId) }
+            guard let boundary = BoundaryPolygonComputer.compute(faces: pieceFaces, vertsFor: { effectiveVerts($0, result: result) }),
+                  let inflated = PolygonOffset.inflate(boundary, paddingMm: paddingMm)
+            else { continue }
+            ctx.stroke(polyPath(inflated, xf: xf), with: .color(guideColor.opacity(0.7)),
+                       style: StrokeStyle(lineWidth: 0.8, dash: [4, 2]))
         }
     }
 

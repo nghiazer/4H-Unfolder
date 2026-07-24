@@ -426,6 +426,150 @@ hiện lỗi mới ở phía Windows).
 | 2026-07-24 | Khảo sát 3.3: rodrigorc's 3-mode system đã có sẵn cả 2 nền tảng (kiến trúc khác nhau) → thu hẹp phạm vi còn 2 gap thật: join connected cut edges + align pieces (Windows có sẵn, macOS thiếu) | — |
 | 2026-07-24 | GĐ3.3 macOS: `EdgeGroupFinder.swift` (BFS cạnh cắt nối nhau) + `PieceAligner.swift` (align 6 hướng, tách khỏi AppState để test được) + `AppState.joinEdgeGroup`/`alignSelectedPieces` + ⌥-click trigger + 6 nút toolbar align | `swift build` ✅ · scratch `swiftc` execution **23/23** assertion pass (không chỉ compile) · 17 test `XCTestCase` mới (`EdgeGroupFinderTests`+`PieceAlignerTests`) · type-check toàn bộ 15 file test suite sạch · soát lại không có pattern gây Swift compiler timeout như GĐ4 |
 
+---
+
+## Kế hoạch xử lý tồn đọng (2026-07-25)
+
+Sau khi GĐ1-4 + cross-review xong (v0.4.0.A / v0.0.0.7-alpha), khảo sát lại toàn bộ tech-debt còn mở
+trong `CLAUDE.md` + `wiki/Roadmap.md` (13 việc, không có GitHub issue/PR nào đang mở — mọi thứ track
+nội bộ). Lên kế hoạch 8 phase, ưu tiên theo mức độ tác động/rủi ro, **triển khai từng phase một, dừng
+xin xác nhận trước khi sang phase kế tiếp** (không dồn nhiều phase vào 1 phiên).
+
+Phát hiện khi khảo sát làm đổi phạm vi 2 việc:
+- `EditFlapsViewModel` "hardcode" 5mm/45° thực ra chỉ là cosmetic — constructor đã ghi đè bằng
+  `AppSettings` trước khi dùng. Không phải bug chức năng, chỉ là dọn code trùng magic number.
+- `PNGExporter` bỏ qua `svgScaleFactor` là bug ở **cả 2 nền tảng**, không chỉ macOS — Windows
+  `PngExporter.cs` có lỗ hổng y hệt. Phase 4 chỉ fix macOS (đúng phạm vi ghi trong Roadmap hiện tại),
+  ghi nhận thêm dòng roadmap mới cho phía Windows thay vì scope-creep.
+
+| Phase | Nền tảng | Việc | Mức ưu tiên | Trạng thái |
+|:---:|:---:|---|:---:|:---:|
+| 1 | macOS | Wire Outline Padding vào export/canvas — port `BoundaryPolygonComputer` (edge-chain), gọi `PolygonOffset.inflate`, layer SVG mới + canvas overlay + UI toggle | 🔴 | ✅ |
+| 2 | Windows | 3 quick-win: cảnh báo `FlapOverride.Deserialize` lỗi, dọn magic-number `EditFlapsViewModel`, thêm setting `OverlapRetrySeedCount` (thay 8 cứng) | 🟢 | ✅ |
+| 3 | macOS | Hợp nhất undo stack — `OverrideSnapshot` thêm `pieceOffsets`/`pieceRotations`/`userGroups`, push undo ở drag/rotate/align (pre-capture pattern như Windows `PushDragUndo`) | 🟡 | ⬜ |
+| 4 | macOS | Fix `PNGExporter` bỏ qua `svgScaleFactor` — scale mm→px transform + sửa lại 2 chỗ chia font-size không nhất quán | 🟡 | ⬜ |
+| 5 | macOS | Thêm import STL — `StlMeshLoader` conform `MeshLoaderProtocol` có sẵn, không cần dependency ngoài | 🟡 | ⬜ |
+| 6 | macOS | Chuẩn bị ký/notarize bản phân phối — entitlements + `ExportOptions.plist` + notarize step gate bằng env var; **phần credentials (Apple Developer ID) cần user cung cấp, không tự làm được** | 🟡 | ⬜ |
+| 7 | Windows | Select Symmetrical Pair (scoped: mode-toggle + mirror-plane estimate). Split Window / Change Coordinates: giữ nguyên "deferred as too complex"/"scope unclear" theo `SESSION_PROGRESS.md`, không tự ý scope nông | 🟢 | ⬜ |
+| 8 | Cả 2 | Perf: dựng mesh >2000 face đo thực nghiệm chi phí retry 9x. Docs: 1 GIF demo + 3 screenshot còn thiếu trong wiki (`Home.md`, `Quick-Start.md`) | 🟢 | ⬜ |
+
+Chi tiết implementation từng phase (file cụ thể, pattern tham chiếu từ Windows, cách verify) nằm trong
+plan file phiên làm việc — sẽ chép lại phần liên quan vào mục tương ứng của tài liệu này ngay khi
+phase đó bắt đầu triển khai, để không phụ thuộc vào file plan tạm.
+
+### Phase 1 macOS: Outline Padding — hoàn thành (2026-07-25)
+
+`PolygonOffset.inflate` đã có sẵn từ GĐ1 nhưng không có gì gọi tới (0 call site ngoài test) vì macOS
+chưa có bộ dựng boundary polygon theo từng piece. Đã port `BoundaryPolygonComputer.Compute`/
+`ChainEdges` (Windows) sang `Core/Algorithms/BoundaryPolygonComputer.swift`: gom cạnh non-fold
+(cut + boundary — cả 2 đều bị cắt vật lý) của một piece, dedupe theo `meshEdgeId` (fallback theo toạ
+độ khi `meshEdgeId < 0`), chain thành vòng kín có thứ tự. API nhận thêm closure `vertsFor` để 1 hàm
+dùng chung được cho cả export (toạ độ thô `result.faces`) lẫn canvas (toạ độ hiệu lực sau
+rotate+offset, qua `effectiveVerts`).
+
+**Phát hiện + fix một bug thật khi viết test (không chỉ port máy móc):** `ChainEdges` bản Windows để
+lại 1 điểm đóng vòng trùng lặp (điểm cuối == điểm đầu) trong output — vô hại bên Windows vì
+`Clipper.InflatePaths` tự dọn điểm trùng/thẳng hàng trước khi offset. `PolygonOffset.inflate` bên
+macOS **không** có bước dọn dẹp đó (tài liệu chính nó ghi rõ "Clipper-free... chỉ join cục bộ") — nếu
+port y nguyên, điểm trùng lặp biến 1 góc thật thành 2 cạnh độ dài 0 liên tiếp, khiến `inflate` bỏ qua
+hẳn góc đó (notch phẳng thay vì bo tròn/miter đúng) ở **mọi** piece xuất ra. Xác nhận bằng thực nghiệm
+(script `swiftc` độc lập, xem bên dưới) trước khi thêm bước trim điểm trùng ở cuối `chainEdges` — chỉ
+xảy ra khi vòng đã đóng kín thật (so `polygon.count >= 4` + so điểm đầu/cuối), không đổi hành vi ported
+logic ở phần còn lại.
+
+Wire vào:
+- `SVGExporter.swift`: layer mới `<g inkscape:label="Outline Padding">`, gate bằng
+  `outlinePaddingMm > 0`, style khớp Windows (`stroke="#404040" stroke-width="0.8"
+  stroke-dasharray="4,4" fill="none" opacity="0.7"`). Chỉ SVG + canvas, **không** PDF — khớp Windows
+  (`PdfExporter.cs` cũng chưa từng nhận `paddingPolygons`), không tự ý mở rộng phạm vi.
+- `PatternCanvasView.swift`: `drawOutlinePadding` mới, gọi sau `drawTabs`, dùng `effectiveVerts` nên
+  theo đúng vị trí piece đang kéo/xoay tay trên canvas. Gate trực tiếp bằng giá trị setting (không
+  toggle canvas riêng) — khớp Windows (`PatternCanvasControl` cũng chỉ check `paddingMm > 0`).
+- `PreferencesView.swift`: field "Outline Padding" (mm) trong Print tab, cạnh Margin/SVG Scale —
+  đúng lý do trước đây item này bị deferred ("chưa show UI control để tránh no-op").
+
+**Kiểm chứng (thực thi thật, không chỉ typecheck):**
+- `swift build` (Core+App) sạch.
+- Script `swiftc`-linked độc lập (biên dịch thẳng toàn bộ `Sources/FourHUnfolderCore` +
+  script test làm `main.swift`) chạy **10/10 assertion thật pass** — gồm: piece hình vuông 2 tam giác
+  (fold ở đường chéo) chain đúng 4 góc không có điểm trùng lặp; `PolygonOffset.inflate` trên polygon
+  đó giữ **đủ cả 4 góc** sau khi bo tròn (bbox nở đúng 0.5mm mỗi phía — nếu chưa fix bug điểm trùng thì
+  1 góc sẽ bị mất, bbox sẽ lệch); piece tam giác đơn; toàn-fold trả `nil`; input rỗng trả `nil`;
+  closure `vertsFor` được áp dụng đúng.
+- `BoundaryPolygonComputerTests.swift` (5 `XCTestCase` test, cùng nội dung với script trên) +
+  toàn bộ 18 file test suite hiện có type-check sạch qua shim XCTest tái tạo (đã vá thêm `XCTFail`,
+  `XCTAssertGreaterThan`/`LessThan`, `XCTAssertThrowsError`, `XCTUnwrap` — thiếu so với lần trước;
+  cũng gặp lại đúng lỗ hổng "thiếu re-export Foundation" đã ghi nhận ở GĐ4, vá bằng `@_exported import
+  Foundation` như lần trước).
+- Smoke-launch app đã build (`FourHUnfolder` binary) — mở và chạy ổn định >2s, không crash ngay khi
+  thêm `drawOutlinePadding` vào vòng lặp render Canvas.
+- **Chưa làm được:** click-through UI thật (load mesh → bật Outline Padding trong Preferences → xác
+  nhận bằng mắt đường dash hiện trên canvas) — môi trường phiên này không xác nhận được quyền
+  Accessibility cho UI automation macOS. Nên xác nhận lại bằng mắt trong lần chạy Xcode thật tiếp theo.
+
+### Phase 2 Windows: 3 quick-win — hoàn thành (2026-07-25)
+
+1. **`FlapOverride.Deserialize` corrupt-data warning** — không sửa `Deserialize` (vẫn giữ nguyên
+   `Debug.WriteLine` + trả `null`), thay vào đó đếm số override bị bỏ qua ngay tại call site
+   (`MainViewModel.RestoreProjectState`) và đẩy vào `state.Warnings` — cơ chế **đã có sẵn**, được
+   `ProjectSerializer.cs` dùng cho "Mesh file not found"/"Texture file not found" và hiển thị gộp qua
+   `StatusText` ở cuối `RestoreProjectState` ("Project loaded with warnings: ..."). Không cần dựng UI
+   cảnh báo mới — tận dụng đúng đường ống đã có, nhất quán với cách warning khác đã được surface.
+2. **`EditFlapsViewModel` magic-number cleanup** — xác nhận đây chỉ là cosmetic: constructor
+   (`HeightMm = mainVm.CurrentPrintSettings.GlueTabDepthMm` …) đã ghi đè giá trị hardcode 5.0/45.0
+   trước khi dialog hiện ra, nên không phải bug chức năng. Bỏ initializer trùng lặp trên 3
+   `[ObservableProperty]` (`_heightMm`, `_leftAngle`, `_rightAngle`), để `AppSettings` là nguồn sự
+   thật duy nhất, kèm comment giải thích tại sao field không cần default nữa.
+3. **`OverlapRetrySeedCount` setting** (thay số 8 cứng trong `UnfoldService.Unfold`'s `seedCount`
+   default) — theo đúng khuôn `CoplanarAngleDeg`: `AppSettings.PrintSettings.OverlapRetrySeedCount`
+   (int, default 8) → `SettingsViewModel` (`LoadFrom`/`ToSettings`) → `SettingsDialog.xaml` row 12 mới
+   (Slider 0–20 + TextBox) trong GroupBox "Page Layout & Tab Geometry", cùng chỗ với Coplanar
+   threshold. Cả 3 call site `_unfoldService.Unfold(...)` trong `MainViewModel.cs` (Unfold thường,
+   `RerunUnfold`, `RestoreProjectState`) trước đây luôn dùng default ngầm — nay truyền tường minh
+   `seedCount: _settingsService.Current.Print.OverlapRetrySeedCount` bằng named argument (tránh lẫn
+   vị trí tham số optional `flapOverrides` phía trước).
+
+**Kiểm chứng:** `dotnet build -p:EnableWindowsTargeting=true` 0 lỗi (chỉ 7 NU1603 warning baseline có
+sẵn). `dotnet test tests/FourHUnfolder.Tests` **127/127 pass** — không đổi so với baseline trước phase
+này (đúng như kỳ vọng: cả 3 việc đều là app-layer wiring/plumbing trên `MainViewModel`/`SettingsViewModel`
+— các lớp này không nằm trong test suite portable, WPF không chạy runtime ngoài Windows; logic thuật
+toán bên dưới — `UnfoldService.Unfold(seedCount:)`, `FlapOverride.Deserialize` — không đổi, vẫn được
+test từ GĐ2/GĐ3, `FlapOverrideTests.cs` hiện có vẫn pass nguyên vì file đó không bị đụng tới). Không
+thêm test mới vì không có logic thuật toán mới để test — khớp tiền lệ `PngDpi` (setting field không
+có dedicated wiring test, chỉ compile-check qua App build).
+
+---
+
+## Cross-review Phase 1 + Phase 2 (2026-07-25) — không có bug thật, 1 scope gap tự bắt được
+
+Đọc lại toàn bộ diff của cả 2 phase một cách hoài nghi (không tin vào chính write-up vừa viết ở trên),
+đối chiếu tay với Windows reference nơi áp dụng. Không tìm thấy bug chức năng nào. 2 việc đáng ghi
+nhận:
+
+| # | Mức độ | Phát hiện | Xử lý |
+|---|--------|-----------|-------|
+| 1 | 🟡 Scope gap | Kế hoạch gốc scope "Configurable retry budget" (Phase 2) chỉ cho **Windows**, theo đúng cách `wiki/Roadmap.md` liệt kê nó (chỉ nằm trong bảng Windows). Nhưng bảng tech-debt macOS trong `CLAUDE.md` (dòng riêng, không nằm trong phạm vi khảo sát ban đầu của Phase 2) đã ghi rõ: `UnfoldService.swift` (mac) **cũng** hardcode `seedCount = 8` y hệt Windows — cùng 1 gap, 2 nền tảng, giống hệt kiểu phát hiện đã có với `PNGExporter`/`svgScaleFactor` ở khảo sát ban đầu. Bỏ sót vì lấy `wiki/Roadmap.md` làm nguồn scope chính cho Phase 2 thay vì đối chiếu cả `CLAUDE.md` | Thêm `overlapRetrySeedCount` cho macOS ngay trong cùng phiên cross-review này (không tách phase riêng vì nhỏ, rủi ro thấp, đúng khuôn `outlinePaddingMm` vừa làm ở Phase 1): `AppSettings.PrintSettings.overlapRetrySeedCount` (Int, default 8, có tolerant-decoder) → `AppState.unfold()` truyền `seedCount: settings.print.overlapRetrySeedCount` → field mới trong `PreferencesView` Print tab, cạnh Coplanar Threshold. `swift build` sạch. |
+| 2 | 🟢 Ghi nhận, không phải bug | `SettingsDialog.xaml` (Win): `OverlapRetrySeedCount` (`int`) bind TwoWay vào `Slider.Value` (`double`) — pattern chuẩn WPF (numeric TypeConverter tự convert), nhưng đây là **lần đầu codebase này bind 1 `int` ObservableProperty vào Slider** (grep xác nhận không có tiền lệ). Không sửa gì (tin vào hành vi WPF chuẩn, rủi ro thấp nếu sai là binding im lặng không update chứ không crash) — **cần xác nhận bằng mắt trên Windows thật** trước khi coi là 100% chắc, theo đúng quy tắc "WPF runtime cần verify trên Windows thật" đã lặp lại nhiều lần trong tài liệu này. |
+| 3 | 🟢 Phát hiện phụ, không liên quan Phase 1/2 | Viết script round-trip thật (`JSONEncoder`/`JSONDecoder`) để kiểm chứng `overlapRetrySeedCount` mới không phá tolerant-decoder của `PrintSettings` — **pass**. Nhưng bản nháp đầu của script (dùng JSON với `view2D`/`view3D`/`general` rỗng hoàn toàn để mô phỏng "settings.json cũ") **fail** — hoá ra không liên quan gì đến field mới: `View2DSettings`/`View3DSettings`/`GeneralSettings` **chưa từng có** tolerant `init(from:)` như `PrintSettings` (chỉ `PrintSettings` được vá sau sự cố GĐ1). Đây là lỗ hổng có sẵn từ trước, không do Phase 1/2 gây ra — nếu tương lai thêm field mới vào 1 trong 3 struct đó mà không thêm decoder chịu lỗi, sẽ lặp lại đúng bug đã fix cho `PrintSettings`. Không fix ngay (ngoài phạm vi Phase 1/2) — ghi nhận tech-debt trong `CLAUDE.md`. |
+
+**Ghi nhận riêng, không phải bug — hiệu năng (Phase 1, mức thấp, đã biết trước):**
+`PatternCanvasView.drawOutlinePadding` gọi lại `BoundaryPolygonComputer.compute` + `PolygonOffset.inflate`
+(chain cạnh + tính arc lượng giác) cho **mọi piece, mỗi frame render** khi Outline Padding bật — không
+cache/memoize. Với mesh nhỏ/vừa (đa số model giấy thực tế) không đáng kể; với mesh nhiều piece/cạnh có
+thể cộng dồn vào chi phí retry 9x đã biết (mục Performance trong `CLAUDE.md`/`wiki/Roadmap.md` GĐ Phase
+8). Không fix ngay — thêm cache đúng cách cần key theo `(result, pieceOffsets, pieceRotations,
+outlinePaddingMm)` và invalidation rõ ràng, việc lớn hơn phạm vi "wire up" của Phase 1. Để lại cho
+Phase 8 (profiling) quyết định có đáng làm không dựa trên số đo thật thay vì đoán.
+
+**Đồng bộ tài liệu (lý do trước đây cố tình hoãn tới bước này):** cả 2 branch phase trước đó là
+`wip/` riêng biệt, sửa `CLAUDE.md`/`wiki/Roadmap.md` (bảng dùng chung) ở mỗi branch sẽ tạo conflict khi
+merge. Nay merge thẳng cả 2 phase vào `main` trong 1 lượt nên đồng bộ luôn: xoá TD-36-2, TD-36-3, dòng
+"Wire outline padding" (mac 🔴) khỏi `CLAUDE.md`; xoá "Settings wiring", "Corrupt-data warning",
+"Configurable retry budget" (Win) khỏi `wiki/Roadmap.md`, thêm dòng retry-budget mac mới đã fix luôn
+trong cross-review này.
+
+---
+
 ### Lưu ý môi trường verify (máy Darwin)
 - WPF App **không chạy runtime** được trên macOS (`NETSDK1100`) — dùng `-p:EnableWindowsTargeting=true`
   để compile-check C#/XAML. Hành vi runtime WPF **cần verify trên Windows thật**.

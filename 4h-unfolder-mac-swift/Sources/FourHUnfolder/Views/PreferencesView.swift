@@ -118,6 +118,14 @@ private struct PrintTab: View {
                 }
                 Text("Minimum effective value is 1° — smaller values behave the same as 1°.")
                     .font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Text("Overlap Retry Attempts")
+                    Spacer()
+                    TextField("", value: ps.overlapRetrySeedCount, format: .number)
+                        .frame(width: 60).multilineTextAlignment(.trailing)
+                }
+                Text("Alternate spanning trees to try when the unfold has overlaps. Each attempt re-runs the full unfold — higher costs more time on large meshes. 0 disables the retry.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
 
             Section("Layout") {
@@ -134,6 +142,15 @@ private struct PrintTab: View {
                     TextField("×", value: ps.svgScaleFactor, format: .number)
                         .frame(width: 60).multilineTextAlignment(.trailing)
                 }
+                HStack {
+                    Text("Outline Padding")
+                    Spacer()
+                    TextField("mm", value: ps.outlinePaddingMm, format: .number)
+                        .frame(width: 60).multilineTextAlignment(.trailing)
+                    Text("mm")
+                }
+                Text("Seam-allowance guide drawn outside each piece; 0 disables it. Shown on canvas and in SVG export.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Toggle("Grayscale Output", isOn: ps.grayscaleOutput)
                 Toggle("Include Page Label", isOn: ps.includePageLabel)
             }

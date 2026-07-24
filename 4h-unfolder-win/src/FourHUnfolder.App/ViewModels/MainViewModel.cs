@@ -669,7 +669,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
             double scale        = UnfoldService.ComputeScale(_currentMesh, setup.Scale);
             ScaleMmPerUnit = scale;
-            var    unfoldResult = _unfoldService.Unfold(_currentMesh, _edgeOverrides, _settingsService.Current.Print);
+            var    unfoldResult = _unfoldService.Unfold(_currentMesh, _edgeOverrides, _settingsService.Current.Print,
+                                                         seedCount: _settingsService.Current.Print.OverlapRetrySeedCount);
             var    pieces       = _unfoldService.ComputePieces(_currentMesh);
 
             RebuildPieces(unfoldResult, pieces, scale);
@@ -1454,7 +1455,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (_currentMesh == null) return;
         var oldPos = Pieces.ToDictionary(p => p.GroupId,
                                          p => (p.PositionX, p.PositionY, p.Rotation));
-        var result = _unfoldService.Unfold(_currentMesh, _edgeOverrides, _settingsService.Current.Print, _flapOverrides);
+        var result = _unfoldService.Unfold(_currentMesh, _edgeOverrides, _settingsService.Current.Print, _flapOverrides,
+                                            seedCount: _settingsService.Current.Print.OverlapRetrySeedCount);
         var groups = _unfoldService.ComputePieces(_currentMesh);
         RebuildPieces(result, groups, ScaleMmPerUnit);
 
@@ -1838,17 +1840,22 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 _edgeOverrides[id] = t;
 
         // Restore flap overrides
+        int corruptFlapOverrides = 0;
         foreach (var (id, encoded) in state.FlapOverrides)
         {
             var ov = FlapOverride.Deserialize(encoded);
             if (ov != null) _flapOverrides[id] = ov;
+            else corruptFlapOverrides++;
         }
+        if (corruptFlapOverrides > 0)
+            state.Warnings.Add($"{corruptFlapOverrides} corrupt flap override(s) skipped.");
 
         // Restore paper
         PaperSizeModel = new PaperSizeModel(state.Paper.Name, state.Paper.WidthMm, state.Paper.HeightMm);
 
         // Re-run unfold
-        var unfoldResult = _unfoldService.Unfold(_currentMesh, _edgeOverrides, _settingsService.Current.Print, _flapOverrides);
+        var unfoldResult = _unfoldService.Unfold(_currentMesh, _edgeOverrides, _settingsService.Current.Print, _flapOverrides,
+                                                  seedCount: _settingsService.Current.Print.OverlapRetrySeedCount);
         var pieces       = _unfoldService.ComputePieces(_currentMesh);
         var layoutMap    = state.Layouts.ToDictionary(l => l.GroupId);
 

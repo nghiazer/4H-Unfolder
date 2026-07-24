@@ -163,6 +163,13 @@ public sealed class AppSettings
         // Dihedral-angle threshold (deg) below which a fold edge counts as coplanar.
         public double CoplanarAngleDeg    { get; set; } = 1.0;
 
+        // Overlap-reducing unfold retry: how many alternate near-minimal spanning trees to try
+        // (via MST tie-break seeds) when the default unfold has overlaps, keeping the
+        // least-overlap result. Each attempt re-runs the full unfold pipeline, so raising this
+        // trades unfold time for a better chance of resolving overlaps on large/irregular meshes.
+        // 0 disables the retry entirely.
+        public int    OverlapRetrySeedCount { get; set; } = 8;
+
         // Print cut-edge pair numbers (assembly matching guide) on exported SVG/PDF.
         // Independent of View2D.ShowEdgeIds, which only controls the on-screen canvas.
         public bool   IncludeEdgeLabels   { get; set; } = false;
