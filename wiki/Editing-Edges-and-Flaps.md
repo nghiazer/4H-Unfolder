@@ -25,6 +25,9 @@ splits the pattern into more, smaller pieces; folding edges merges pieces back t
 - **Join** — reattach a piece to a neighbour along a shared edge. A **preview arrow** shows
   where and how the piece will fold in before you commit.
 - **Disjoin** — detach along an edge, turning a fold into a cut.
+- **Join connected cut edges** — join a whole chain of adjacent cut edges (edges connected by
+  shared 2D vertices) in one action instead of one at a time. On Windows, right-click a cut edge
+  and choose it from the context menu; on macOS, **⌥-click** a cut edge in Edit Edges mode.
 
 Use this to control how the model breaks apart — e.g. keep a face group together so it folds
 as one flap, or split a piece that overlaps itself.
@@ -78,6 +81,8 @@ so your customizations survive a reload — and are cross-platform between Windo
 - **Drag** a piece to reposition it on the page.
 - **Rotate handle** on a selected piece spins it (useful for packing).
 - **Lasso-select** multiple pieces with a rubber-band drag; hold **Shift** to add to the selection.
+- **Align** — with ≥2 pieces selected, use the toolbar's Left / Right / Center-H / Top / Bottom /
+  Center-V buttons to line their bounding boxes up.
 - **Group / Ungroup** — grouped pieces move and rotate as one unit; groups persist in the `.4hu`.
 - **Right-drag** pans the canvas; scroll zooms.
 
@@ -86,3 +91,7 @@ so your customizations survive a reload — and are cross-platform between Windo
 ## Undo / Redo
 Edge toggles and flap overrides are captured as lightweight snapshots, so **Undo / Redo**
 step through your edits safely.
+
+> **macOS note**: Undo currently only covers edge/flap edits, not piece drag or Align — moving or
+> aligning pieces on macOS isn't undoable yet (tracked on the [Roadmap](Roadmap)). On Windows,
+> Undo/Redo covers piece position and rotation too.

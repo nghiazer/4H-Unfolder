@@ -2,7 +2,7 @@
 
 Native macOS port of 4H-Unfolder, built with Swift 5.9 + SwiftUI + SceneKit (Metal). Unfolds 3D meshes into 2D printable papercraft patterns.
 
-> **Status: v0.0.0.6-alpha** — Phases 1–12 + papercraft-parity (GĐ1–GĐ3) complete, 128 unit tests passing.
+> **Status: v0.0.0.7-alpha** — Phases 1–12 + papercraft-parity (GĐ1–GĐ4, incl. 3.3) complete, 152 unit tests passing.
 > See [PROGRESS.md](PROGRESS.md) for detailed phase tracking.
 
 ---
@@ -12,7 +12,7 @@ Native macOS port of 4H-Unfolder, built with Swift 5.9 + SwiftUI + SceneKit (Met
 Pre-built ad-hoc signed bundle (macOS 13+, no installer needed):
 
 ```
-publish/mac/v0.0.0.6-alpha/4H-Unfolder_v0.0.0.6-alpha_mac.zip
+publish/mac/v0.0.0.7-alpha/4H-Unfolder_v0.0.0.7-alpha_mac.zip
 ```
 
 > **First launch**: Right-click `4H Unfolder.app` → **Open** (Gatekeeper bypass for unsigned builds).
@@ -26,16 +26,17 @@ publish/mac/v0.0.0.6-alpha/4H-Unfolder_v0.0.0.6-alpha_mac.zip
 |----------|---------|
 | **Import** | OBJ (+ MTL material + UV textures), PDO v3 (binary, embedded zlib textures) |
 | **Unfold** | Kruskal MST on face-adjacency dual graph → BFS face placement in paper-space mm; setup dialog for real-world target size |
-| **2D Canvas** | Zoom/pan, click edge to toggle fold ↔ cut, join/disjoin edges with preview arrow, drag piece to reposition, rotate handle on selection |
+| **2D Canvas** | Zoom/pan, click edge to toggle fold ↔ cut, join/disjoin edges with preview arrow, ⌥-click a cut edge to join its whole connected chain in one action, drag piece to reposition, rotate handle on selection |
 | **Multi-select** | Lasso rubber-band selection (Shift = additive); right-drag to pan |
 | **Group** | Group/Ungroup selected pieces — grouped pieces move and rotate together; persisted in .4hu |
+| **Align** | 6-way piece alignment (left/right/center-H/top/bottom/center-V) for ≥2 selected pieces |
 | **3D Viewport** | SceneKit (Metal), multi-material, UV texture mapping, face selection highlight |
 | **Glue Tabs** | Trapezoid / Rectangle / Triangle shapes; 10 FlapMode variants per edge; merge adjacent flaps into one polygon |
 | **Fold Lines** | Coplanar fold-line hide (configurable ~1° threshold) for cleaner patterns |
 | **Assembly Aid** | Edge-matching labels — cut-edge pair numbers on canvas + export |
 | **Overlap** | Spatial grid + AABB + SAT detection; automatic overlap-reducing retry (alternate near-minimal spanning trees) when the default unfold overlaps |
 | **Layout** | Auto-arrange pieces on page (tries 90° rotation per piece); paper size picker (A4/A3/A2/A1/Letter/Legal); portrait/landscape |
-| **Export** | SVG (vector) and PDF (Core Graphics), grayscale option |
+| **Export** | SVG (vector, Inkscape-style cutting-machine layers), PDF (Core Graphics), PNG (one raster image per page, configurable DPI), grayscale option |
 | **Project** | Save/load `.4hu` ZIP bundle — mesh + overrides + piece positions + groups (cross-platform with Windows) |
 | **Undo/Redo** | Lightweight snapshot of edge/flap overrides |
 | **Preferences** | 4-tab window — General, Print, Canvas, 3D View |
@@ -75,13 +76,13 @@ swift build -c release        # optimised release
 
 ```bash
 cd 4h-unfolder-mac-swift
-./scripts/build-release.sh v0.0.0.6-alpha
-# → publish/mac/v0.0.0.6-alpha/4H-Unfolder_v0.0.0.6-alpha_mac.zip
+./scripts/build-release.sh v0.0.0.7-alpha
+# → publish/mac/v0.0.0.7-alpha/4H-Unfolder_v0.0.0.7-alpha_mac.zip
 ```
 
 ### Tests
 
-Open in Xcode → **Product → Test (⌘U)**. All 128 tests must pass before release.
+Open in Xcode → **Product → Test (⌘U)**. All 152 tests must pass before release.
 
 ---
 
@@ -97,6 +98,7 @@ Open in Xcode → **Product → Test (⌘U)**. All 128 tests must pass before re
 | ⌘0 | Fit pattern to window |
 | ⌘⇧E | Export SVG |
 | ⌘P | Export PDF |
+| ⌘⇧P | Export PNG (one image per page) |
 | ⌘Z / ⌘⇧Z | Undo / Redo |
 | ⌘, | Preferences |
 
@@ -116,6 +118,7 @@ Open in Xcode → **Product → Test (⌘U)**. All 128 tests must pass before re
 | Shift + lasso | Additive selection |
 | Left-click cut edge (once) | Preview join arrow |
 | Left-click (second) | Confirm join |
+| ⌥-click cut edge | Join the whole connected chain of cut edges in one action |
 
 ---
 
@@ -131,16 +134,17 @@ Open in Xcode → **Product → Test (⌘U)**. All 128 tests must pass before re
 │   │   ├── Core/Math/               ← SIMD geometry (triangleApex, reconstructApex)
 │   │   ├── Core/Models/             ← Mesh, UnfoldResult, AppSettings, FlapOverride
 │   │   ├── Core/Graph/              ← DualGraph, UnionFind, KruskalMSTBuilder
-│   │   ├── Core/Algorithms/         ← UnfoldEngine, GlueTabGenerator, OverlapDetector
+│   │   ├── Core/Algorithms/         ← UnfoldEngine, GlueTabGenerator, OverlapDetector,
+│   │   │                              EdgeGroupFinder, PieceAligner
 │   │   ├── IO/Loaders/              ← ObjMeshLoader, PdoMeshLoader
-│   │   ├── IO/Exporters/            ← SVGExporter, PDFExporter
+│   │   ├── IO/Exporters/            ← SVGExporter, PDFExporter, PNGExporter
 │   │   └── Services/                ← UnfoldService (actor), ProjectSerializer
 │   └── FourHUnfolder/               ← SwiftUI app target (macOS 13+)
 │       ├── App.swift                ← @main, native menus, Settings scene (⌘,)
 │       ├── AppState.swift           ← @MainActor ObservableObject, undo stack
 │       └── Views/                   ← MainView, SidebarView, SceneKitView,
 │                                       PatternCanvasView, UnfoldSetupSheet, PreferencesView
-└── Tests/FourHUnfolderTests/        ← 128 XCTest cases (12 files)
+└── Tests/FourHUnfolderTests/        ← 152 XCTest cases (15 files)
 ```
 
 ---
@@ -153,6 +157,7 @@ Open in Xcode → **Product → Test (⌘U)**. All 128 tests must pass before re
 | `.pdo` (Pepakura Designer v3, embedded textures) | ✅ | — |
 | `.svg` (Scalable Vector Graphics) | — | ✅ |
 | `.pdf` (Portable Document Format) | — | ✅ |
+| `.png` (one raster image per page) | — | ✅ |
 | `.4hu` (4H-Unfolder project bundle, cross-platform) | ✅ | ✅ |
 
 > PDO v4 / PD6 format not supported.

@@ -4,15 +4,25 @@ Once your pattern has no overlaps and the pieces are laid out on pages, export i
 
 ---
 
-## SVG vs PDF
+## SVG vs PDF vs PNG
 
 | Format | Use it when… |
 |--------|--------------|
 | **PDF** | You'll print at home and cut by hand. Page-accurate, print-ready. |
-| **SVG** | You'll edit the vectors (Illustrator / Inkscape) or feed a **cutting machine** (Cricut, Silhouette, laser). |
+| **SVG** | You'll edit the vectors (Illustrator / Inkscape) or feed a **cutting machine** that reads vector paths (Cricut, Silhouette, laser). |
+| **PNG** | Your cutting-machine software only imports **bitmaps**, not vectors. One image is written per page, at a configurable DPI. |
 
-Both preserve the true millimetre scale of the pattern. A **grayscale** toggle is available
-for printing without color (or to save ink).
+All three preserve the true millimetre scale of the pattern. A **grayscale** toggle is available
+for printing without color (or to save ink) — it applies to fills, fold/cut lines, and edge labels
+in all three formats.
+
+### SVG cutting-machine layers
+
+SVG exports group fold lines, cut lines, edge labels, glue tabs, and outline padding into separate
+Inkscape-style `<g inkscape:groupmode="layer">` groups. Software that understands Inkscape layers
+(LightBurn, Inkscape itself, some Cricut Design Space imports) lets you show/hide each group or
+assign different cut/engrave settings per layer — for example, cutting the outer silhouette while
+only *scoring* (not cutting) the fold lines.
 
 ---
 
