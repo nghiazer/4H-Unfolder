@@ -91,6 +91,7 @@ public class SvgExporter : IExporter
         var sb = new StringBuilder();
         sb.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
         sb.AppendLine($"<svg xmlns=\"http://www.w3.org/2000/svg\" " +
+                      $"xmlns:inkscape=\"http://www.inkscape.org/namespaces/inkscape\" " +
                       $"width=\"{F(W)}\" height=\"{F(H)}\" viewBox=\"0 0 {F(W)} {F(H)}\">");
         sb.AppendLine("  <defs>");
         sb.AppendLine("    <style>");
@@ -160,8 +161,15 @@ public class SvgExporter : IExporter
         }
 
         // ── fold / cut / boundary lines ────────────────────────────────────────
+        // Collected into per-type buckets (not written directly to sb) so each type can be
+        // emitted inside its own Inkscape layer <g> below — lets cutting-machine software
+        // (LightBurn, Cricut Design Space, Inkscape) show/hide or assign per-operation settings
+        // by layer. Inline stroke="" is added alongside class="" because many lightweight SVG
+        // importers used by that software don't execute the <defs><style> CSS block at all.
         // TD-22-4: use rounded-coordinate edge key to avoid float equality issues
         var drawnEdges = new HashSet<(float, float, float, float)>();
+        var foldLines  = new List<string>();
+        var cutLines   = new List<string>();
 
         foreach (var face in result.Faces)
         {
@@ -191,16 +199,35 @@ public class SvgExporter : IExporter
                 var key = EdgeKey(pa, pb);
                 if (!drawnEdges.Add(key)) continue;
 
-                string cls = isBoundary ? "boundary" : (isFold ? "fold" : "cut");
-                sb.AppendLine($"  <line x1=\"{Sx(pa.X)}\" y1=\"{Sy(pa.Y)}\" " +
-                              $"x2=\"{Sx(pb.X)}\" y2=\"{Sy(pb.Y)}\" class=\"{cls}\"/>");
+                string cls    = isBoundary ? "boundary" : (isFold ? "fold" : "cut");
+                string stroke = isBoundary ? "#505050" : (isFold ? foldColor : cutColor);
+                string line   = $"    <line x1=\"{Sx(pa.X)}\" y1=\"{Sy(pa.Y)}\" " +
+                                $"x2=\"{Sx(pb.X)}\" y2=\"{Sy(pb.Y)}\" class=\"{cls}\" stroke=\"{stroke}\"/>";
+
+                (isFold ? foldLines : cutLines).Add(line);
             }
+        }
+
+        if (foldLines.Count > 0)
+        {
+            sb.AppendLine("  <g inkscape:groupmode=\"layer\" inkscape:label=\"Fold Lines\" id=\"layer-fold\">");
+            foreach (var line in foldLines) sb.AppendLine(line);
+            sb.AppendLine("  </g>");
+        }
+        if (cutLines.Count > 0)
+        {
+            // Boundary edges are the outer silhouette of a piece — a cutting machine treats
+            // them the same as internal cut edges (both get physically cut), so they share
+            // this layer rather than the fold layer above.
+            sb.AppendLine("  <g inkscape:groupmode=\"layer\" inkscape:label=\"Cut Lines\" id=\"layer-cut\">");
+            foreach (var line in cutLines) sb.AppendLine(line);
+            sb.AppendLine("  </g>");
         }
 
         // ── cut-edge pair labels (assembly matching guide) ──────────────────────
         if (p.IncludeEdgeLabels && result.CutEdgePairIds.Count > 0)
         {
-            sb.AppendLine("  <!-- cut pair labels -->");
+            sb.AppendLine("  <g inkscape:groupmode=\"layer\" inkscape:label=\"Edge Labels\" id=\"layer-labels\">");
             var drawnLabels = new HashSet<int>();
             foreach (var face in result.Faces)
             {
@@ -215,31 +242,35 @@ public class SvgExporter : IExporter
                         continue;
 
                     var mp = (verts[i] + verts[(i + 1) % 3]) * 0.5f;
-                    sb.AppendLine($"  <text x=\"{Sx(mp.X)}\" y=\"{Sy(mp.Y)}\" class=\"pairlabel\">{pairId}</text>");
+                    sb.AppendLine($"    <text x=\"{Sx(mp.X)}\" y=\"{Sy(mp.Y)}\" class=\"pairlabel\" fill=\"{cutColor}\">{pairId}</text>");
                 }
             }
+            sb.AppendLine("  </g>");
         }
 
         // ── glue tabs ──────────────────────────────────────────────────────────
         if (p.IncludeGlueTabs)
         {
+            sb.AppendLine("  <g inkscape:groupmode=\"layer\" inkscape:label=\"Glue Tabs\" id=\"layer-tabs\">");
             foreach (var tab in result.GlueTabs)
             {
                 string pts = string.Join(" ", tab.Vertices.Select(v => Pt(v)));
-                sb.AppendLine($"  <polygon points=\"{pts}\" class=\"tab\"/>");
+                sb.AppendLine($"    <polygon points=\"{pts}\" class=\"tab\" stroke=\"#2e7d32\"/>");
             }
+            sb.AppendLine("  </g>");
         }
 
         // ── outline padding (seam allowance guide) ─────────────────────────────
         if (paddingPolygons != null && paddingPolygons.Count > 0)
         {
-            sb.AppendLine("  <!-- outline padding (seam allowance) -->");
+            sb.AppendLine("  <g inkscape:groupmode=\"layer\" inkscape:label=\"Outline Padding\" id=\"layer-padding\">");
             foreach (var poly in paddingPolygons)
             {
                 if (poly.Count < 3) continue;
                 string pts = string.Join(" ", poly.Select(v => Pt(v)));
-                sb.AppendLine($"  <polygon points=\"{pts}\" class=\"padding\"/>");
+                sb.AppendLine($"    <polygon points=\"{pts}\" class=\"padding\" stroke=\"#404040\"/>");
             }
+            sb.AppendLine("  </g>");
         }
 
         sb.AppendLine("</svg>");
