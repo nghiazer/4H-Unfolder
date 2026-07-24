@@ -208,6 +208,9 @@
                 <Button Style="{StaticResource IconBtn}" Content="&#xE8A5;"
                         Command="{Binding ExportPdfCommand}" IsEnabled="{Binding CanExport}"
                         ToolTip="Export PDF pattern"/>
+                <Button Style="{StaticResource IconBtn}" Content="&#xEB9F;"
+                        Command="{Binding ExportPngCommand}" IsEnabled="{Binding CanExport}"
+                        ToolTip="Export PNG pattern (one image per page — for cutting machines)"/>
                 <Separator/>
                 <Button Style="{StaticResource IconBtn}" Content="&#xE792;"
                         Command="{Binding SaveProjectCommand}" IsEnabled="{Binding CanExport}"

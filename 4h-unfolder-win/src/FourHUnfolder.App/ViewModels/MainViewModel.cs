@@ -29,6 +29,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private readonly UnfoldService     _unfoldService;
     private readonly IExporter         _exporter;
     private readonly PdfExporter       _pdfExporter;
+    private readonly PngExporter       _pngExporter;
     private readonly ProjectSerializer _serializer;
     private readonly SettingsService   _settingsService;
     private readonly ThemeService      _themeService;
@@ -279,7 +280,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     // ── constructor ───────────────────────────────────────────────────────────
     public MainViewModel(MeshService meshService, UnfoldService unfoldService,
-                         IExporter exporter, PdfExporter pdfExporter,
+                         IExporter exporter, PdfExporter pdfExporter, PngExporter pngExporter,
                          ProjectSerializer serializer, SettingsService settingsService,
                          ThemeService themeService)
     {
@@ -287,6 +288,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _unfoldService   = unfoldService;
         _exporter        = exporter;
         _pdfExporter     = pdfExporter;
+        _pngExporter     = pngExporter;
         _serializer      = serializer;
         _settingsService = settingsService;
         _themeService    = themeService;
@@ -786,6 +788,31 @@ public partial class MainViewModel : ObservableObject, IDisposable
             StatusText = $"PDF exported to {Path.GetFileName(dlg.FileName)}";
         }
         catch (Exception ex) { Error("Export PDF failed", ex); }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanExport))]
+    private void ExportPng()
+    {
+        if (_currentMesh == null) return;
+        var dlg = new SaveFileDialog
+        {
+            Title      = "Export PNG Pattern (one file per page)",
+            Filter     = "PNG files (*.png)|*.png",
+            DefaultExt = "png",
+            FileName   = "unfolded_pattern"
+        };
+        if (dlg.ShowDialog() != true) return;
+        try
+        {
+            var result  = BuildExportLayout();
+            var written = _pngExporter.Export(result, dlg.FileName,
+                PaperSizeModel.WidthMm, PaperSizeModel.HeightMm,
+                PagesWide, PagesTall, PageSepMm);
+            StatusText = written.Count == 1
+                ? $"PNG exported to {Path.GetFileName(written[0])}"
+                : $"PNG exported — {written.Count} pages to {Path.GetDirectoryName(written[0])}";
+        }
+        catch (Exception ex) { Error("Export PNG failed", ex); }
     }
 
     // ── SAVE / LOAD PROJECT ───────────────────────────────────────────────────

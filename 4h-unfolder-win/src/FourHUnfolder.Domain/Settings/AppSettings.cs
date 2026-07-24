@@ -170,6 +170,10 @@ public sealed class AppSettings
         // Output quality
         public double SvgScaleFactor    { get; set; } = 10.0;  // model-mm → SVG px
         public bool   GrayscaleOutput   { get; set; } = false;
+
+        // PNG export resolution (pixels per inch). One raster image per page — for
+        // cutting-machine software (Cricut / laser) that prefers PNG/bitmap import.
+        public double PngDpi            { get; set; } = 300.0;
     }
 
     // ── General ───────────────────────────────────────────────────────────────

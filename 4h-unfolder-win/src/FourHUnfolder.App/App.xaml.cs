@@ -30,6 +30,7 @@ public partial class App : System.Windows.Application
         sc.AddSingleton<IMeshLoader,  MultiFormatMeshLoader>();
         sc.AddSingleton<IExporter,    SvgExporter>();
         sc.AddSingleton<PdfExporter>();
+        sc.AddSingleton<PngExporter>();
 
         // Application
         sc.AddSingleton<MeshService>();
