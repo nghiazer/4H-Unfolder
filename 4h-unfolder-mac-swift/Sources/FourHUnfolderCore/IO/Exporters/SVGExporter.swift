@@ -136,6 +136,24 @@ struct SVGExporter {
             lines.append("  </g>")
         }
 
+        // ── Layer 4b: outline padding (seam-allowance guide) ─────────────────
+        // Scoped to SVG + canvas only, matching Windows (PdfExporter never receives
+        // paddingPolygons either — not a macOS gap).
+        if settings.outlinePaddingMm > 0 {
+            lines.append("  <g inkscape:groupmode=\"layer\" inkscape:label=\"Outline Padding\" id=\"layer-padding\">")
+            lines.append("  <!-- outline padding -->")
+            for faceIds in result.pieces {
+                let faceSet = Set(faceIds)
+                let pieceFaces = result.faces.filter { faceSet.contains($0.faceId) }
+                guard let boundary = BoundaryPolygonComputer.compute(faces: pieceFaces),
+                      let inflated = PolygonOffset.inflate(boundary, paddingMm: Float(settings.outlinePaddingMm))
+                else { continue }
+                let pts = inflated.map(px).joined(separator: " ")
+                lines.append(##"  <polygon points="\##(pts)" stroke="#404040" stroke-width="0.8" stroke-dasharray="4,4" fill="none" opacity="0.7"/>"##)
+            }
+            lines.append("  </g>")
+        }
+
         // ── Layer 5: cut-pair number labels ──────────────────────────────────
         if settings.includeEdgeLabels && !result.cutEdgePairIds.isEmpty {
             lines.append("  <g inkscape:groupmode=\"layer\" inkscape:label=\"Edge Labels\" id=\"layer-labels\">")

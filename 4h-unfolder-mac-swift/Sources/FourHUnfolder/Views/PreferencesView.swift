@@ -134,6 +134,15 @@ private struct PrintTab: View {
                     TextField("×", value: ps.svgScaleFactor, format: .number)
                         .frame(width: 60).multilineTextAlignment(.trailing)
                 }
+                HStack {
+                    Text("Outline Padding")
+                    Spacer()
+                    TextField("mm", value: ps.outlinePaddingMm, format: .number)
+                        .frame(width: 60).multilineTextAlignment(.trailing)
+                    Text("mm")
+                }
+                Text("Seam-allowance guide drawn outside each piece; 0 disables it. Shown on canvas and in SVG export.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Toggle("Grayscale Output", isOn: ps.grayscaleOutput)
                 Toggle("Include Page Label", isOn: ps.includePageLabel)
             }
