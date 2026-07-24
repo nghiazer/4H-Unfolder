@@ -149,7 +149,7 @@ struct MainView: View {
             }
             .background(appState.canvasMode == .editEdge ? Color.accentColor.opacity(0.15) : Color.clear,
                         in: RoundedRectangle(cornerRadius: 4))
-            .help("Edit Edges: click edges to toggle fold/cut (⌘1)")
+            .help("Edit Edges: click edges to toggle fold/cut · ⌥-click a cut edge to join its whole connected chain (⌘1)")
 
             Button { appState.canvasMode = .editFlap } label: {
                 Label("Edit Flaps", systemImage: "square.on.square")

@@ -99,7 +99,9 @@ struct PNGExporter {
 
         // ── fold edges ───────────────────────────────────────────────────────
         if settings.printFoldLines {
-            let foldColor = cgColor(hex: settings.foldLineColor) ?? CGColor(red: 0.25, green: 0.40, blue: 0.87, alpha: 1)
+            let foldColor = settings.grayscaleOutput
+                ? CGColor(red: 0.33, green: 0.33, blue: 0.33, alpha: 1)
+                : (cgColor(hex: settings.foldLineColor) ?? CGColor(red: 0.25, green: 0.40, blue: 0.87, alpha: 1))
             var drawn = Set<Int>()
             for face in result.faces {
                 guard isOnPage(face, oxMm, oyMm, paperWidthMm, paperHeightMm) else { continue }
@@ -123,7 +125,9 @@ struct PNGExporter {
         // ── cut / boundary edges ─────────────────────────────────────────────
         ctx.setLineDash(phase: 0, lengths: [])
         if settings.printCutLines {
-            let cutColor = cgColor(hex: settings.cutLineColor) ?? CGColor(red: 0.9, green: 0.1, blue: 0.1, alpha: 1)
+            let cutColor = settings.grayscaleOutput
+                ? CGColor(red: 0, green: 0, blue: 0, alpha: 1)
+                : (cgColor(hex: settings.cutLineColor) ?? CGColor(red: 0.9, green: 0.1, blue: 0.1, alpha: 1))
             var drawn = Set<Int>()
             for face in result.faces {
                 guard isOnPage(face, oxMm, oyMm, paperWidthMm, paperHeightMm) else { continue }
@@ -168,7 +172,9 @@ struct PNGExporter {
 
         // ── cut-pair labels ──────────────────────────────────────────────────
         if settings.includeEdgeLabels && !result.cutEdgePairIds.isEmpty {
-            let labelColor = cgColor(hex: settings.cutLineColor) ?? CGColor(red: 0.9, green: 0.1, blue: 0.1, alpha: 0.8)
+            let labelColor = settings.grayscaleOutput
+                ? CGColor(red: 0, green: 0, blue: 0, alpha: 1)
+                : (cgColor(hex: settings.cutLineColor) ?? CGColor(red: 0.9, green: 0.1, blue: 0.1, alpha: 0.8))
             var drawn = Set<Int>()
             for face in result.faces {
                 guard isOnPage(face, oxMm, oyMm, paperWidthMm, paperHeightMm) else { continue }

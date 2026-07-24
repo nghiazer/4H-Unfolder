@@ -138,6 +138,34 @@ final class SVGExporterTests: XCTestCase {
                       "Color SVG must use blue fill color #cce0ff")
     }
 
+    /// Cross-review finding: grayscaleOutput used to only affect face/tab fill, never fold/cut
+    /// line strokes or cut-pair label fill — so a "grayscale" export still had colored lines.
+    /// Windows correctly forces fold/cut colors to gray/black in grayscale mode; these assert
+    /// macOS now matches that.
+    func testSVG_grayscale_foldAndCutLinesAreNotColored() {
+        var s = defaultSettings
+        s.grayscaleOutput = true
+        s.printFoldLines = true
+        s.printCutLines = true
+        let svg = export(TestMesh.tetrahedron(), settings: s)
+        XCTAssertFalse(svg.contains(#"stroke="\#(s.foldLineColor)""#),
+                       "Grayscale SVG must not use the configured (colored) fold line color")
+        XCTAssertFalse(svg.contains(#"stroke="\#(s.cutLineColor)""#),
+                       "Grayscale SVG must not use the configured (colored) cut line color")
+        XCTAssertTrue(svg.contains("stroke=\"#555555\""), "Grayscale fold lines must be gray")
+        XCTAssertTrue(svg.contains("stroke=\"#000000\""), "Grayscale cut lines must be black")
+    }
+
+    func testSVG_color_foldAndCutLinesUseConfiguredColors() {
+        var s = defaultSettings
+        s.grayscaleOutput = false
+        s.printFoldLines = true
+        s.printCutLines = true
+        let svg = export(TestMesh.tetrahedron(), settings: s)
+        XCTAssertTrue(svg.contains(#"stroke="\#(s.foldLineColor)""#))
+        XCTAssertTrue(svg.contains(#"stroke="\#(s.cutLineColor)""#))
+    }
+
     // MARK: - Empty result
 
     func testSVG_emptyResult_doesNotCrash() {
