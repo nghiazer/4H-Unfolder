@@ -2,7 +2,7 @@
 
 > File theo dõi nội bộ cho công cuộc học hỏi từ 2 dự án papercraft mã nguồn mở và nâng cấp
 > 4H-Unfolder. Cập nhật mỗi khi hoàn thành một hạng mục.
-> Cập nhật gần nhất: **2026-07-22** (Cross-review GĐ3 tìm 1 finding nghiêm trọng về hiệu quả tie-break — đã fix bằng epsilon-perturbation + skip-check).
+> Cập nhật gần nhất: **2026-07-22** (GĐ4 hoàn thành: PNG export/trang + SVG layer máy cắt cả 2 nền tảng; GĐ3.3 đang triển khai).
 
 ## Cross-review GĐ1+GĐ2 (2026-07-22) — đã fix
 
@@ -48,7 +48,7 @@ tế trước khi tin bảng đó.
 | **GĐ 1** | Chất lượng pattern: flap-merge, outline-padding, coplanar-hide | 🟡 Gần xong | ✅ Xong |
 | **GĐ 2** | Hỗ trợ lắp ráp: mountain/valley*, edge-matching labels | ✅ Xong | ✅ Xong |
 | **GĐ 3** | Layout & tương tác: repack, MST tie-break retry, chế độ Edge/Face (3.3 để sau) | ✅ Xong (3.1+3.2) | ✅ Xong (3.2) |
-| **GĐ 4** | Tiện ích I/O: PNG/trang, layer máy cắt | ⬜ Chưa | ⬜ Chưa |
+| **GĐ 4** | Tiện ích I/O: PNG/trang, layer máy cắt | ✅ Xong | ✅ Xong |
 
 \* Mountain/valley và Undo/Redo: **đã có sẵn** cả 2 nền tảng (người dùng xác nhận) → loại khỏi phạm vi GĐ2.
 
@@ -260,10 +260,66 @@ merge** theo đúng quy trình đã rút kinh nghiệm từ GĐ2.
 
 ---
 
-## Giai đoạn 4 — Tiện ích I/O ⬜
+## Giai đoạn 4 — Tiện ích I/O ✅ (4.1; 4.2 bỏ qua có lý do)
 
-- **4.1 Export PNG/trang** + layer riêng (cut/fold/label) cho máy cắt (Cricut/laser).
-- **4.2** (Undo/Redo, reload-giữ-unwrap): Undo/Redo đã có sẵn → cân nhắc reload-model.
+### 4.1 Export PNG/trang + layer riêng (cut/fold/label) cho máy cắt
+
+**Phát hiện kiến trúc quan trọng khi khảo sát:** Windows `SvgExporter` là **1 canvas SVG duy nhất**
+(không chia trang) và dùng **CSS `<style>` class** (`class="fold"`) thay vì thuộc tính inline —
+nhiều phần mềm máy cắt nhẹ (LightBurn, Cricut Design Space) **không chạy `<style>` CSS**, chỉ đọc
+`stroke=`/`fill=` inline. macOS `SVGExporter` may đã dùng inline `stroke=` sẵn (không cần sửa phần
+này). Cả 2 nền tảng đều **chưa** có group/layer nào cho cut/fold/label tách biệt.
+
+**Đã làm — SVG layer (Inkscape-style `<g>` groups):**
+| | Windows | macOS |
+|---|---------|-------|
+| `xmlns:inkscape=` trên `<svg>` root | ✅ | ✅ |
+| `<g inkscape:groupmode="layer" inkscape:label="Fold Lines">` | ✅ | ✅ |
+| `<g ... label="Cut Lines">` (gộp cut + boundary — cả 2 đều cần cắt vật lý) | ✅ | ✅ |
+| `<g ... label="Glue Tabs">` / `label="Edge Labels"` | ✅ | ✅ |
+| Inline `stroke="..."` thêm cạnh `class="..."` (fix tương thích parser nhẹ) | ✅ mới thêm | đã có sẵn từ trước |
+| Giữ nguyên toàn bộ comment/class cũ | ✅ (không test nào phụ thuộc) | ✅ **bắt buộc** — 6+ test cũ (`SVGExporterTests`, `EdgeLabelAndCoplanarExportTests`) assert đúng string comment cũ, chỉ bọc thêm `<g>` xung quanh, không xoá gì |
+
+**Đã làm — PNG export (1 file/trang):**
+- **Windows:** `PngExporter.cs` — **không đặt trong `FourHUnfolder.Infrastructure`** (nơi
+  `SvgExporter`/`PdfExporter` sống) mà đặt trong `FourHUnfolder.App/Services/`, vì cần
+  `System.Windows.Media` (`DrawingVisual`+`RenderTargetBitmap`+`PngBitmapEncoder`) — chỉ có ở
+  `net8.0-windows`+`UseWPF=true`; Infrastructure cố tình giữ `net8.0` thuần để build/test được trên
+  máy không phải Windows (đã verify suốt session này). Mirror logic chia trang của `PdfExporter`
+  (`pagesWide×pagesTall`, `pageSepMm`) nhưng vẽ bằng WPF, không Y-flip (WPF Y-down khớp model).
+  Setting mới `PngDpi` (mặc định 300) trong `AppSettings.Print`. Wire vào `MainViewModel`
+  (`ExportPngCommand`) + toolbar `MainWindow.xaml` + DI `App.xaml.cs`.
+- **macOS:** `PNGExporter.swift` — dùng chung CoreGraphics với `PDFExporter.swift` (bitmap
+  `CGContext` thay vì PDF context), **thêm mới** page-splitting (mac `PDFExporter` chỉ 1 trang, chưa
+  từng có multi-page). Setting mới `pngDpi` (+ tolerant decoder). Wire vào `AppState.exportPNG()` +
+  menu `App.swift` (⌘⇧P) + toolbar `MainView.swift`.
+
+**Kiểm chứng bất đối xứng giữa 2 nền tảng (quan trọng, đã tự lường trước và xử lý):**
+- **Windows:** thử thêm reference `FourHUnfolder.App` (WPF) vào test project portable → build FAIL
+  ngay (`NETSDK1100`) — xác nhận bằng thực nghiệm, không đoán. Tệ hơn: dù có compile được qua
+  `EnableWindowsTargeting`, **WPF không có runtime ngoài Windows** nên test cũng sẽ crash lúc chạy,
+  không chỉ lúc build. → `PngExporterTests` **không đưa vào** test suite portable; chỉ compile-check
+  qua App build (đã pass) + review logic tay cẩn thận. Output PNG thật cần verify trên Windows.
+- **macOS:** CoreGraphics **chạy được thật** trên máy Darwin (không như WPF) → viết được script
+  scratch gọi thẳng `PNGExporter.export(...)` qua `swiftc` (link trực tiếp `.o` đã build), **thực
+  thi thật** (không chỉ typecheck): xác nhận đúng số file/trang, đúng tên file (`_p1`, `_p2`...),
+  đúng kích thước pixel theo DPI (2480×3508 cho A4@300dpi), DPI cao hơn → ảnh lớn hơn, và **lấy mẫu
+  pixel thật** xác nhận màu face-fill đúng như tính toán kỳ vọng (blend alpha đúng công thức) — phát
+  hiện 1 bug trong chính script test (double Y-flip) khi mới viết, tự sửa và xác nhận lại bằng cách
+  quét cột pixel để suy ra đúng chiều buffer bộ nhớ trước khi tin kết quả.
+
+Kiểm chứng: Windows **127/127 test** (121 cũ + 6 mới, tất cả trong `SvgLayerTests` — `PngExporter`
+không có unit test trong suite portable vì lý do đã giải thích ở trên, chỉ compile-check qua App
+build), build 0 lỗi (`EnableWindowsTargeting`). macOS: `swift build` ✅ (Core+App), **type-check
+sạch toàn bộ test suite** (lần đầu chạy full-suite, không chỉ file lẻ — bắt được 2 lỗ hổng trong
+shim XCTest tự chế: thiếu `accuracy:` overload và thiếu re-export `Foundation`, đã vá), + verify
+thật bằng `swiftc` execution (18 check tổng, tất cả pass) cho cả PNGExporter lẫn SVGLayer.
+
+### 4.2 — bỏ qua có lý do
+Undo/Redo đã có sẵn từ trước (không phải việc GĐ4). "Reload model giữ nguyên unwrap" **cố tình bỏ
+qua**: ánh xạ trạng thái unwrap cũ sang mesh mới (có thể khác topology hoàn toàn) không có định
+nghĩa rõ ràng — làm nửa vời còn tệ hơn không làm. Không tương đương "cân nhắc" trong bản kế hoạch
+gốc; ghi nhận quyết định rõ ràng thay vì lặng lẽ bỏ qua.
 
 ### Ngách (cân nhắc sau)
 - Wireframe connector generator (osresearch) — sinh khớp nối in-3D cho mô hình lớn; khác định vị paper.
@@ -288,6 +344,8 @@ merge** theo đúng quy trình đã rút kinh nghiệm từ GĐ2.
 | 2026-07-22 | Merge PR #59 (`feat/parity-phase3-repack-multiseed`) → `main`, CI xanh cả 2 job ngay lần đầu | `gh run watch` ✅ |
 | 2026-07-22 | Cross-review GĐ3: phát hiện tie-break dựa exact-equality gần như vô dụng với mesh bất đối xứng (thực nghiệm: 0/176 tie tuyệt đối) trong khi vẫn tốn 9x chi phí mỗi lần overlap | Thực nghiệm scratch C# console app xác nhận + hiệu chỉnh epsilon |
 | 2026-07-22 | Fix: epsilon-perturbation (1°, hiệu chỉnh thực nghiệm) thay exact-equality + `HasPotentialTies`/`hasPotentialTies` skip-check cả 2 nền tảng | Win **121/121** test ✅ (115 cũ + 6 mới), build 0 lỗi · mac `swift build` ✅ + type-check sạch |
+| 2026-07-22 | GĐ4 Windows: SVG layer (`xmlns:inkscape`, `<g>` fold/cut/tab/label) + inline stroke; `PngExporter.cs` mới trong App (WPF) + `PngDpi` setting + wire UI | Win **127/127** test ✅ (121 cũ + 6 mới `SvgLayerTests`), build 0 lỗi (`EnableWindowsTargeting`) |
+| 2026-07-22 | GĐ4 macOS: SVG layer tương ứng (giữ comment cũ) + `PNGExporter.swift` (CoreGraphics bitmap, thêm page-splitting mới) + `pngDpi` setting + wire UI | `swift build` ✅ · type-check **toàn bộ** test suite lần đầu (vá 2 lỗ hổng shim) · verify thật qua `swiftc` execution (18 check, tất cả pass, kể cả lấy mẫu pixel màu) |
 
 ### Lưu ý môi trường verify (máy Darwin)
 - WPF App **không chạy runtime** được trên macOS (`NETSDK1100`) — dùng `-p:EnableWindowsTargeting=true`
