@@ -205,6 +205,15 @@ struct MainView: View {
             .disabled(appState.unfoldResult == nil)
             .help("Export unfolded pattern as PDF (⌘P)")
 
+            // Export PNG (one image per page — for cutting machines)
+            Button {
+                Task { await appState.exportPNG() }
+            } label: {
+                Label("Export PNG…", systemImage: "photo")
+            }
+            .disabled(appState.unfoldResult == nil)
+            .help("Export unfolded pattern as PNG, one image per page — for cutting machines (⌘⇧P)")
+
             Divider()
 
             // Project save / open

@@ -38,6 +38,9 @@ struct FourHUnfolderApp: App {
                 Button("Export PDF…") { Task { await appState.exportPDF() } }
                     .keyboardShortcut("p", modifiers: .command)
                     .disabled(appState.unfoldResult == nil)
+                Button("Export PNG…") { Task { await appState.exportPNG() } }
+                    .keyboardShortcut("p", modifiers: [.command, .shift])
+                    .disabled(appState.unfoldResult == nil)
             }
 
             // MARK: Edit menu

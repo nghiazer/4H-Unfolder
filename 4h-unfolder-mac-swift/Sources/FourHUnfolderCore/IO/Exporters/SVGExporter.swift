@@ -56,6 +56,7 @@ struct SVGExporter {
         lines.append(#"<?xml version="1.0" encoding="UTF-8"?>"#)
         lines.append("""
             <svg xmlns="http://www.w3.org/2000/svg" \
+            xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" \
             width="\(svgW)mm" height="\(svgH)mm" \
             viewBox="0 0 \(svgW) \(svgH)">
             """)
@@ -73,7 +74,12 @@ struct SVGExporter {
             #" stroke-dasharray="\#(settings.foldLineDash)""#
         var drawnFolds = Set<Int>(); var drawnCuts = Set<Int>(); var drawnBounds = Set<Int>()
 
+        // Each category below is wrapped in an Inkscape-style layer <g> — lets cutting-machine
+        // software (LightBurn, Cricut Design Space, Inkscape) show/hide or assign per-operation
+        // settings by layer. Existing HTML comments are kept as-is (tests assert on them);
+        // the <g> wrapping is purely additive.
         if settings.printFoldLines {
+            lines.append("  <g inkscape:groupmode=\"layer\" inkscape:label=\"Fold Lines\" id=\"layer-fold\">")
             lines.append("  <!-- fold edges -->")
             for face in result.faces {
                 let verts = [face.v0, face.v1, face.v2]
@@ -85,9 +91,14 @@ struct SVGExporter {
                     lines.append(#"  <line x1="\#(x(p0))" y1="\#(y(p0))" x2="\#(x(p1))" y2="\#(y(p1))" stroke="\#(settings.foldLineColor)" stroke-width="\#(settings.foldLineWidth)"\#(foldDash)/>"#)
                 }
             }
+            lines.append("  </g>")
         }
 
         if settings.printCutLines {
+            // Boundary edges are the outer silhouette of a piece — a cutting machine treats
+            // them the same as internal cut edges (both get physically cut), so they share
+            // this layer rather than the fold layer above.
+            lines.append("  <g inkscape:groupmode=\"layer\" inkscape:label=\"Cut Lines\" id=\"layer-cut\">")
             lines.append("  <!-- cut edges -->")
             for face in result.faces {
                 let verts = [face.v0, face.v1, face.v2]
@@ -108,20 +119,24 @@ struct SVGExporter {
                     lines.append(##"  <line x1="\##(x(p0))" y1="\##(y(p0))" x2="\##(x(p1))" y2="\##(y(p1))" stroke="#888" stroke-width="0.5"/>"##)
                 }
             }
+            lines.append("  </g>")
         }
 
         // ── Layer 4: glue tabs ───────────────────────────────────────────────
         if settings.includeGlueTabs {
             let tabColor = settings.grayscaleOutput ? "#a0a0a0" : "#a8d5a2"
+            lines.append("  <g inkscape:groupmode=\"layer\" inkscape:label=\"Glue Tabs\" id=\"layer-tabs\">")
             lines.append("  <!-- glue tabs -->")
             for tab in result.tabs {
                 let pts = tab.polygon.map(px).joined(separator: " ")
                 lines.append("  <polygon points=\"\(pts)\" fill=\"\(tabColor)\" fill-opacity=\"0.6\" stroke=\"#2e7d32\" stroke-width=\"0.4\"/>")
             }
+            lines.append("  </g>")
         }
 
         // ── Layer 5: cut-pair number labels ──────────────────────────────────
         if settings.includeEdgeLabels && !result.cutEdgePairIds.isEmpty {
+            lines.append("  <g inkscape:groupmode=\"layer\" inkscape:label=\"Edge Labels\" id=\"layer-labels\">")
             lines.append("  <!-- cut pair labels -->")
             var drawnLabels = Set<Int>()
             for face in result.faces {
@@ -134,6 +149,7 @@ struct SVGExporter {
                     lines.append(#"  <text x="\#(x(mp))" y="\#(y(mp))" font-family="Helvetica,sans-serif" font-size="3" fill="\#(settings.cutLineColor)" text-anchor="middle" dominant-baseline="middle">\#(pairId)</text>"#)
                 }
             }
+            lines.append("  </g>")
         }
 
         // ── Layer 6: page label ──────────────────────────────────────────────

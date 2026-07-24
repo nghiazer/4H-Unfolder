@@ -70,6 +70,10 @@ struct AppSettings: Codable, Equatable {
         var marginMm: Double = 5.0
         var bleedMm: Double = 0.0
 
+        /// PNG export resolution (pixels per inch). One raster image per page — for
+        /// cutting-machine software (Cricut / laser) that prefers PNG/bitmap import.
+        var pngDpi: Double = 300.0
+
         var paperSize: PaperSizeModel = .a4
         var isLandscape: Bool = false
 
@@ -122,6 +126,7 @@ struct AppSettings: Codable, Equatable {
             svgScaleFactor      = d(.svgScaleFactor, def.svgScaleFactor)
             marginMm            = d(.marginMm, def.marginMm)
             bleedMm             = d(.bleedMm, def.bleedMm)
+            pngDpi              = d(.pngDpi, def.pngDpi)
             paperSize           = d(.paperSize, def.paperSize)
             isLandscape         = d(.isLandscape, def.isLandscape)
         }

@@ -675,6 +675,27 @@ final class AppState: ObservableObject {
             errorMessage = "PDF write failed: \(error.localizedDescription)"
         }
     }
+
+    /// Exports one PNG raster image per page (for cutting-machine software that prefers bitmap
+    /// import over SVG/PDF). Mirrors exportSVG/exportPDF's save-panel pattern.
+    func exportPNG() async {
+        guard let result = unfoldResult else { return }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.png]
+        panel.nameFieldStringValue = "\(mesh?.name ?? "pattern").png"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        let paper = settings.print.effectivePaper
+        let written = PNGExporter.export(
+            result: result, settings: settings.print, baseURL: url,
+            paperWidthMm: paper.widthMm, paperHeightMm: paper.heightMm,
+            pagesWide: pagesWide, pagesTall: pagesTall,
+            pageSepMm: settings.print.marginMm)
+
+        if written.isEmpty {
+            errorMessage = "PNG export failed — could not create bitmap context."
+        }
+    }
 }
 
 // MARK: - Arbitrary per-vertex transform (rotate + translate in one pass)
