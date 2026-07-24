@@ -185,6 +185,40 @@ struct MainView: View {
             })
             .help("Remove group assignment from selected pieces")
 
+            // Align selected pieces (GĐ3.3 parity port from Windows)
+            Group {
+                Button { appState.alignSelectedPieces(.left) } label: {
+                    Label("Align Left", systemImage: "align.horizontal.left")
+                }
+                .help("Align selected pieces to the leftmost edge")
+
+                Button { appState.alignSelectedPieces(.right) } label: {
+                    Label("Align Right", systemImage: "align.horizontal.right")
+                }
+                .help("Align selected pieces to the rightmost edge")
+
+                Button { appState.alignSelectedPieces(.centerH) } label: {
+                    Label("Align Center H", systemImage: "align.horizontal.center")
+                }
+                .help("Align selected pieces to their common horizontal center")
+
+                Button { appState.alignSelectedPieces(.top) } label: {
+                    Label("Align Top", systemImage: "align.vertical.top")
+                }
+                .help("Align selected pieces to the topmost edge")
+
+                Button { appState.alignSelectedPieces(.bottom) } label: {
+                    Label("Align Bottom", systemImage: "align.vertical.bottom")
+                }
+                .help("Align selected pieces to the bottommost edge")
+
+                Button { appState.alignSelectedPieces(.centerV) } label: {
+                    Label("Align Center V", systemImage: "align.vertical.center")
+                }
+                .help("Align selected pieces to their common vertical center")
+            }
+            .disabled(appState.selectedPieceIndices.count < 2)
+
             Divider()
 
             // Export SVG
