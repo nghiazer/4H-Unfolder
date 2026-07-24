@@ -1,6 +1,6 @@
 # 4H-Unfolder
 
-Papercraft / pepakura unfolder — loads 3D meshes (`.obj`, `.pdo`) and unfolds them into flat 2D paper patterns with glue tabs, fold-line annotations, and SVG/PDF export.
+Papercraft / pepakura unfolder — loads 3D meshes (`.obj`, `.pdo`) and unfolds them into flat 2D paper patterns with glue tabs, fold-line annotations, and SVG/PDF/PNG export.
 
 ---
 
@@ -8,8 +8,8 @@ Papercraft / pepakura unfolder — loads 3D meshes (`.obj`, `.pdo`) and unfolds 
 
 | Platform | Stack | Version | Status |
 |----------|-------|---------|--------|
-| **Windows** | WPF · .NET 8 · C# | v0.3.0.A | Production |
-| **macOS** | Swift 5.9 · SwiftUI · SceneKit · Metal | v0.0.0.6-alpha | Alpha |
+| **Windows** | WPF · .NET 8 · C# | v0.4.0.A | Production |
+| **macOS** | Swift 5.9 · SwiftUI · SceneKit · Metal | v0.0.0.7-alpha | Alpha |
 
 ---
 
@@ -44,15 +44,15 @@ Papercraft / pepakura unfolder — loads 3D meshes (`.obj`, `.pdo`) and unfolds 
 - **3D Mesh Import** — `.obj` (Wavefront OBJ + MTL + UV textures) and Pepakura `.pdo` v3
 - **Auto-Unfold** — Kruskal MST on face-adjacency dual graph → BFS face placement; real-world target size dialog
 - **Overlap-Reducing Retry** — when the default unfold overlaps, automatically retries alternate near-minimal spanning trees (epsilon-bounded tie-break) and keeps the least-overlap result
-- **Edge Control** — click any edge to toggle fold ↔ cut; join/disjoin edges with preview arrow; per-edge FlapMode (10 variants)
+- **Edge Control** — click any edge to toggle fold ↔ cut; join/disjoin edges with preview arrow; join a whole connected chain of cut edges in one action; per-edge FlapMode (10 variants)
 - **Glue Tabs** — Trapezoid / Rectangle / Triangle shapes, alternate-flap mode, merge adjacent flaps into one polygon, outline padding (seam allowance)
 - **Coplanar Fold-Line Hide** — suppress fold lines between near-flat faces (configurable threshold) for cleaner patterns
 - **Edge-Matching Labels** — optional cut-edge pair numbers on canvas and export, for assembly guidance
-- **Interactive 2D Canvas** — zoom/pan, lasso multi-select (Shift = additive), piece drag, piece rotate (handle), right-drag pan, group/ungroup
+- **Interactive 2D Canvas** — zoom/pan, lasso multi-select (Shift = additive), piece drag, piece rotate (handle), right-drag pan, group/ungroup, 6-way piece alignment (left/right/center/top/bottom/center)
 - **Auto-Arrange** — strip-packs pieces onto pages, trying a 90° rotation per piece to reduce paper waste
 - **UV Texture Rendering** — affine UV-mapped triangle fill in both 3D (SceneKit) and 2D canvas
 - **3D Viewer** — SceneKit (Metal), multi-material, UV textures, face selection highlight
-- **Export** — SVG (vector) and PDF (print-ready), grayscale option
+- **Export** — SVG (vector, with Inkscape-style cutting-machine layers for LightBurn/Cricut/Inkscape), PDF (print-ready), PNG (one raster image per page, for bitmap-only cutting software), grayscale option
 - **Project Bundles** — `.4hu` self-contained ZIP (mesh + textures + overrides + piece positions + groups), cross-platform
 - **Undo / Redo** — lightweight override snapshots
 - **Preferences** — 4-tab settings window (macOS) / settings panel (Windows)
@@ -110,7 +110,7 @@ cd 4h-unfolder-mac-swift
 swift build -c release
 
 # Build distributable .app bundle + ZIP:
-./scripts/build-release.sh v0.0.0.6-alpha
+./scripts/build-release.sh v0.0.0.7-alpha
 ```
 
 See [4h-unfolder-mac-swift/README.md](4h-unfolder-mac-swift/README.md) and [PROGRESS.md](4h-unfolder-mac-swift/PROGRESS.md) for full documentation.
@@ -121,10 +121,10 @@ See [4h-unfolder-mac-swift/README.md](4h-unfolder-mac-swift/README.md) and [PROG
 
 | Version | Platform | Download |
 |---------|----------|---------|
-| v0.0.0.6-alpha | macOS 13+ | `publish/mac/v0.0.0.6-alpha/4H-Unfolder_v0.0.0.6-alpha_mac.zip` |
-| v0.3.0.A | Windows 10+ | `publish/win/v0.3.0.A/` |
+| v0.0.0.7-alpha | macOS 13+ | `publish/mac/v0.0.0.7-alpha/4H-Unfolder_v0.0.0.7-alpha_mac.zip` |
+| v0.4.0.A | Windows 10+ | `publish/win/v0.4.0.A/` |
 
-> Both platforms are packaged and released together under the shared git tag `v0.3.0.A`
+> Both platforms are packaged and released together under the shared git tag `v0.4.0.A`
 > (triggers the CI release pipeline for both) — each platform's *own* version number above is
 > what's shown in its About dialog / bundle metadata.
 

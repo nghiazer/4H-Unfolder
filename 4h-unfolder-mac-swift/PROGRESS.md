@@ -9,7 +9,7 @@ swift build                  # debug
 swift build -c release       # release
 
 # Publish build (creates .app bundle + ZIP):
-./scripts/build-release.sh v0.0.0.6-alpha
+./scripts/build-release.sh v0.0.0.7-alpha
 
 # Tests — must use Xcode (swift test fails, XCTest needs full SDK):
 # Product → Test (⌘U) or Test Navigator (⌘5)
@@ -39,6 +39,9 @@ swift build -c release       # release
 | GĐ2 | Papercraft-parity phase 2 — edge-matching labels (cut-edge pair numbers) wired to canvas toggle + new export-only toggle on both SVG and PDF exporters; fixed a GĐ1 gap where `PDFExporter` was missing coplanar-hide entirely | ✅ Done | `6a2ce1f` |
 | GĐ3 | Papercraft-parity phase 3 — `autoArrange()` now tries a 90° rotation per piece (matches Windows); overlap-reducing unfold retry (perturbed near-minimal spanning trees when the default MST overlaps) | ✅ Done | `a4ca1c0` |
 | FIX | Cross-review fixes — `coplanarAngleDeg` floor clamp (values &lt;1° were silently overridden by the engine's fan-triangulation cutoff); tie-break retry switched from exact-equality to an epsilon-bounded perturbation (exact ties almost never occur on irregular meshes, so the retry was ~0% effective before this) | ✅ Done | `049f365` `53897fb` |
+| GĐ4 | Papercraft-parity phase 4 — `PNGExporter` (Core Graphics bitmap, one image per page, configurable DPI) + Inkscape-style `<g>` cutting-machine layers in `SVGExporter` (Fold/Cut/Labels/Tabs/Padding) | ✅ Done | `fe4c478` `c2b4da6` |
+| GĐ3.3 | Papercraft-parity phase 3.3 — `EdgeGroupFinder` (join whole connected chain of cut edges via ⌥-click) + `PieceAligner` (6-way piece alignment, extracted to Core for testability) | ✅ Done | `5698b13` |
+| FIX2 | Cross-review fixes for GĐ3.3+GĐ4 — `joinEdgeGroup` was wiping the entire canvas layout via `autoArrange()` instead of preserving unrelated pieces' positions (fixed with `repositionAfterGroupJoin`); `grayscaleOutput` never grayed out fold/cut line or label colors across SVG/PDF/PNG exporters (fixed in all three) | ✅ Done | `af04709` |
 
 _See [`PARITY-PROGRESS.md`](../PARITY-PROGRESS.md) at the repo root for the full papercraft-parity plan, per-item status, and verification log (both platforms)._
 
@@ -89,6 +92,11 @@ _See [`PARITY-PROGRESS.md`](../PARITY-PROGRESS.md) at the repo root for the full
 | Edge-matching labels (cut-edge pair numbers) | ✅ | ✅ |
 | Auto-arrange tries 90° piece rotation | ✅ | ✅ |
 | Overlap-reducing unfold retry (MST tie-break) | ✅ | ✅ |
+| Join connected cut edges (batch, whole chain) | ✅ | ✅ |
+| Align pieces (6-way: L/R/center-H/T/B/center-V) | ✅ | ✅ |
+| PNG export (one image per page) | ✅ | ✅ |
+| SVG cutting-machine layers (Inkscape `<g>` groups) | ✅ | ✅ |
+| Undo covers piece positions (drag/align), not just edge/flap | ✅ | ❌ Tech debt (undo stack redesign needed) |
 
 ---
 
@@ -101,6 +109,8 @@ _See [`PARITY-PROGRESS.md`](../PARITY-PROGRESS.md) at the repo root for the full
 | TD-M-3 | 🟢 Low | `.onDrop` in `MainView` accepts any file URL before `loadMesh` validates the extension — user sees an error message on bad drop but no early rejection UI |
 | TD-M-4 | 🟢 Low | `@testable import FourHUnfolderCore` used in all production view files; works because `Package.swift` sets `-enable-testing` on the library target, but semantically wrong. Resolve by making public API `public` and switching to plain `import`. |
 | PERF | 🟢 Low | SVG/PDF export does not render UV texture — solid fill only |
+| TD-M-5 | 🟡 Med | Undo stack (`pushUndo`/`undo`) never snapshots piece positions/rotations — only edge/flap overrides. Affects manual piece drag and `alignSelectedPieces`. Windows unifies edge+flap+layout into one undo stack (`EditSnapshot`/`PushDragUndo`); macOS needs the same redesign, not a per-call patch. Found in GĐ3.3 cross-review (2026-07-24). |
+| TD-M-6 | 🟡 Med | `PNGExporter` ignores `settings.svgScaleFactor` for geometry (SVG/PDF both apply it) — latent while the setting defaults to 1.0. Fix needs a design call since PNG uses a fixed-page multi-page grid, unlike PDF's auto-sized single page. Found in GĐ4 cross-review (2026-07-24). |
 
 ---
 
@@ -120,7 +130,7 @@ Findings from automated cross-review after Phase 12:
 
 ---
 
-## Test Summary (128 tests across 12 files)
+## Test Summary (152 tests across 15 files)
 
 | File | Tests | Covers |
 |------|-------|--------|
@@ -131,11 +141,14 @@ Findings from automated cross-review after Phase 12:
 | `OverlapDetectorTests` | 13 | SAT epsilon, shared-edge false-positive guard, spatial grid, `countOverlaps` severity counting |
 | `ObjMeshLoaderTests` | 14 | Euler V−E+F=2, boundary edges, error cases, missing MTL graceful load |
 | `ProjectSerializerTests` | 3 | Round-trip edge/flap overrides, pieceOffsets, missing state.json error |
-| `SVGExporterTests` | 17 | XML structure, polygon count, dimensions, fold/cut/tab flags, grayscale, empty result, coordinate origin |
+| `SVGExporterTests` | 19 | XML structure, polygon count, dimensions, fold/cut/tab flags, grayscale (fill + line/label colors), empty result, coordinate origin |
 | `FlapMergerTests` | 9 | Convex polygon union (overlap/disjoint/containment/touching), adjacent-tab merge |
 | `EdgeLabelAndCoplanarExportTests` | 11 | Edge-label export toggle (SVG/PDF), coplanar-hide (SVG/PDF), `isCoplanarFold` threshold clamp |
 | `PieceRotationTests` | 4 | `rotated90InLocalBBox` — isometry, swaps w/h, genuine quarter turn |
 | `UnfoldServiceMultiSeedTests` | 4 | No-overlap baseline preserved, mesh-marking consistency invariant, determinism |
+| `SVGLayerTests` | 5 | Inkscape namespace + layer `<g>` tags present, existing comment markers preserved |
+| `EdgeGroupFinderTests` | 5 | BFS chain-join (from end/middle), isolated cut edge, unknown/fold edge id guards |
+| `PieceAlignerTests` | 12 | `effectiveAABB` (rotation, offset), all 6 align modes, guards (&lt;2 selected, out-of-range index), pre-existing-offset interaction |
 
 ---
 
@@ -157,10 +170,11 @@ Findings from automated cross-review after Phase 12:
 │   │   │   ├── Graph/                    ← DualGraph, DualGraphBuilder, UnionFind
 │   │   │   └── Algorithms/               ← UnfoldEngine, KruskalMSTBuilder,
 │   │   │                                   GlueTabGenerator, OverlapDetector,
-│   │   │                                   EdgeMarker, PieceComputer
+│   │   │                                   EdgeMarker, PieceComputer,
+│   │   │                                   EdgeGroupFinder, PieceAligner
 │   │   ├── IO/
 │   │   │   ├── Loaders/                  ← ObjMeshLoader, PdoMeshLoader, MeshLoaderFactory
-│   │   │   └── Exporters/                ← SVGExporter, PDFExporter
+│   │   │   └── Exporters/                ← SVGExporter, PDFExporter, PNGExporter
 │   │   └── Services/                     ← UnfoldService (actor), ProjectSerializer
 │   └── FourHUnfolder/                    ← SwiftUI app (macOS 13+)
 │       ├── App.swift                     ← @main, CommandGroup, Settings scene
@@ -173,7 +187,7 @@ Findings from automated cross-review after Phase 12:
 │           ├── PatternCanvasView.swift   ← 9-layer SwiftUI Canvas + all 2D interactions
 │           ├── UnfoldSetupSheet.swift    ← Target-size dialog (mm per model unit)
 │           └── PreferencesView.swift     ← 4-tab Preferences (General/Print/Canvas/3D)
-└── Tests/FourHUnfolderTests/             ← 128 XCTest cases
+└── Tests/FourHUnfolderTests/             ← 152 XCTest cases
     ├── Helpers/TestMeshBuilders.swift
     ├── UnionFindTests.swift
     ├── KruskalMSTTests.swift
@@ -186,7 +200,10 @@ Findings from automated cross-review after Phase 12:
     ├── FlapMergerTests.swift
     ├── EdgeLabelAndCoplanarExportTests.swift
     ├── PieceRotationTests.swift
-    └── UnfoldServiceMultiSeedTests.swift
+    ├── UnfoldServiceMultiSeedTests.swift
+    ├── SVGLayerTests.swift
+    ├── EdgeGroupFinderTests.swift
+    └── PieceAlignerTests.swift
 ```
 
 ### SPM target layout

@@ -5,7 +5,7 @@ is a native Swift port catching up to it. This page tracks where they match and 
 
 | | Windows | macOS |
 |--|---------|-------|
-| **Status** | ✅ Production `v0.3.0.A` | 🚧 Alpha `v0.0.0.6-alpha` |
+| **Status** | ✅ Production `v0.4.0.A` | 🚧 Alpha `v0.0.0.7-alpha` |
 | **Stack** | WPF · .NET 8 · C# | SwiftUI · SceneKit · Swift |
 | **Distribution** | Inno Setup installer + portable ZIP | Ad-hoc signed `.app` (notarization pending) |
 
@@ -29,25 +29,30 @@ is a native Swift port catching up to it. This page tracks where they match and 
 | UV texture rendering (2D + 3D) | ✅ | ✅ |
 | Overlap detection (spatial grid + SAT) | ✅ | ✅ |
 | Auto-arrange + paper sizes | ✅ | ✅ |
-| SVG + PDF export (grayscale option) | ✅ | ✅ |
+| SVG + PDF + PNG export (grayscale option) | ✅ | ✅ |
 | `.4hu` project bundles (cross-platform) | ✅ | ✅ |
 | Undo / redo | ✅ | ✅ |
 | Preferences panel | ✅ | ✅ |
 | **Outline padding** | ✅ (v0.1.1.A) | 🟡 computed, not wired to export/canvas |
 | **Merge adjacent flaps** | ✅ (v0.1.1.A) | ✅ (v0.0.0.6-alpha) |
-| **Join connected cut edges** | ✅ (v0.1.1.A) | ❔ |
+| **Join connected cut edges** | ✅ (v0.1.1.A) | ✅ (v0.0.0.7-alpha) |
 | **Coplanar fold-line hide** | ✅ (v0.3.0.A) | ✅ (v0.0.0.6-alpha) |
 | **Edge-matching labels** | ✅ (v0.3.0.A) | ✅ (v0.0.0.6-alpha) |
 | **Auto-arrange tries 90° rotation** | ✅ | ✅ (v0.0.0.6-alpha) |
 | **Overlap-reducing unfold retry** | ✅ (v0.3.0.A) | ✅ (v0.0.0.6-alpha) |
+| **Align pieces (6-way)** | ✅ | ✅ (v0.0.0.7-alpha) |
+| **PNG export (one image per page)** | ✅ (v0.4.0.A) | ✅ (v0.0.0.7-alpha) |
+| **SVG cutting-machine layers (Inkscape `<g>`)** | ✅ (v0.4.0.A) | ✅ (v0.0.0.7-alpha) |
 
 ✅ present · 🟡 partial · ❌ not implemented · ❔ not yet verified on macOS
 
-> The core feature set is at parity, and the papercraft-parity effort (coplanar-hide,
-> edge-matching labels, merge adjacent flaps, auto-arrange rotation, overlap-reducing retry) has
-> now landed on **both** platforms. Windows still leads on **extra import formats** (Assimp),
-> **outline padding actually rendering** (macOS has the math but hasn't wired it to export/canvas
-> yet), and **join connected cut edges** — tracked on the [Roadmap](Roadmap). See
+> The core feature set is at parity, and the full papercraft-parity effort (coplanar-hide,
+> edge-matching labels, merge adjacent flaps, auto-arrange rotation, overlap-reducing retry, join
+> connected cut edges, align pieces, PNG export, SVG cutting-machine layers) has now landed on
+> **both** platforms. Windows still leads on **extra import formats** (Assimp) and **outline
+> padding actually rendering** (macOS has the math but hasn't wired it to export/canvas yet) —
+> tracked on the [Roadmap](Roadmap). macOS still has a gap where **undo doesn't cover piece
+> positions** (drag/align), only edge/flap overrides — also tracked on the Roadmap. See
 > [`PARITY-PROGRESS.md`](https://github.com/nghiazer/4H-Unfolder/blob/main/PARITY-PROGRESS.md) at
 > the repo root for the full plan and verification log.
 

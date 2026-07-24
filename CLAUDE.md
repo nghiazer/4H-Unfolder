@@ -142,7 +142,7 @@ the exact line from `find_definition`.
 
 ---
 
-## Current release: `v0.3.0.A` (Windows) / `v0.0.0.6-alpha` (macOS) — branch `main`
+## Current release: `v0.4.0.A` (Windows) / `v0.0.0.7-alpha` (macOS) — branch `main`
 
 > Public-facing plan + status live in the [wiki Roadmap](https://github.com/nghiazer/4H-Unfolder/wiki/Roadmap).
 > Full papercraft-parity plan, per-item status, and verification log: [`PARITY-PROGRESS.md`](PARITY-PROGRESS.md).
@@ -155,10 +155,11 @@ the exact line from `find_definition`.
 | TD-36-3 | 🟢 Low | `FlapOverride.Deserialize`: silent-ignore on corrupt data — add warning |
 | Performance | 🟢 Low | O(n²) AABB+SAT overlap; spatial grid used, but the overlap-reducing retry (v0.3.0.A) multiplies unfold cost up to 9× when a mesh has an unavoidable overlap — profile meshes > 2000 faces |
 
-Resolved this release: TD-38-1 (Outline Padding), TD-38-2 (Merge Adjacent Flaps), TD-38-3 (Join
-Adjacent Isolated Edges) were already done on Windows before v0.3.0.A; TD-36-1 (FlapOverride/
-GlueTabGenerator test coverage) confirmed already covered by `FlapOverrideTests.cs` /
-`GlueTabGeneratorTests.cs`.
+Resolved this release: macOS "port join connected cut edges from Windows" (GĐ3.3 — Windows
+already had it) — see [`PARITY-PROGRESS.md`](PARITY-PROGRESS.md) for the full GĐ4 (PNG
+export/page + SVG cutting-machine layers) and GĐ3.3 (join connected cut edges + align pieces)
+writeup, plus the cross-review findings fixed afterward (layout-wipe bug in group-join,
+Grayscale Output not covering line/label colors).
 
 ### macOS tech debt open
 | ID | Priority | Description |

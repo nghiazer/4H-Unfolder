@@ -3,12 +3,12 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![.NET 8](https://img.shields.io/badge/.NET-8.0-blueviolet)](https://dotnet.microsoft.com/download/dotnet/8.0)
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%2F11-blue)]()
-[![Tests](https://img.shields.io/badge/Tests-121%2F121%20pass-brightgreen)]()
+[![Tests](https://img.shields.io/badge/Tests-127%2F127%20pass-brightgreen)]()
 
 A Pepakura-style paper model unfolder built with **WPF / .NET 8**.  
-Load a 3-D mesh, unfold it into a printable 2-D pattern, customise the layout, and export to SVG or PDF.
+Load a 3-D mesh, unfold it into a printable 2-D pattern, customise the layout, and export to SVG, PDF, or PNG.
 
-> Current version: **v0.3.0.A** (win-x64 self-contained EXE) — Coplanar fold-line hide, edge-matching labels, overlap-reducing MST tie-break retry
+> Current version: **v0.4.0.A** (win-x64 self-contained EXE) — PNG export/page, SVG cutting-machine layers (Inkscape/LightBurn/Cricut), join connected cut edges, align pieces
 
 ---
 
@@ -22,8 +22,8 @@ Load a 3-D mesh, unfold it into a printable 2-D pattern, customise the layout, a
 
 | Package | Link |
 |---------|------|
-| **Installer** (recommended) | [4H-Unfolder-v0.3.0.A-setup.exe](https://github.com/NghiaZer/4H-Unfolder/releases/download/v0.3.0.A/4H-Unfolder-v0.3.0.A-setup.exe) |
-| **Portable ZIP** | [4H-Unfolder-v0.3.0.A-portable.zip](https://github.com/NghiaZer/4H-Unfolder/releases/download/v0.3.0.A/4H-Unfolder-v0.3.0.A-portable.zip) |
+| **Installer** (recommended) | [4H-Unfolder-v0.4.0.A-setup.exe](https://github.com/NghiaZer/4H-Unfolder/releases/download/v0.4.0.A/4H-Unfolder-v0.4.0.A-setup.exe) |
+| **Portable ZIP** | [4H-Unfolder-v0.4.0.A-portable.zip](https://github.com/NghiaZer/4H-Unfolder/releases/download/v0.4.0.A/4H-Unfolder-v0.4.0.A-portable.zip) |
 
 > **No runtime required** — fully self-contained win-x64 binary.  
 > Requires Windows 10 / 11 (x64).
@@ -51,7 +51,7 @@ dotnet run --project src/FourHUnfolder.App
 ### Tests
 
 ```bash
-dotnet test tests/FourHUnfolder.Tests   # 121 / 121 pass
+dotnet test tests/FourHUnfolder.Tests   # 127 / 127 pass
 ```
 
 ---
@@ -190,8 +190,9 @@ Custom Width/Height fields are dimmed (Opacity 0.45) and locked when a fixed pre
 - **Unsaved-changes warning** on Load / Open / Close
 
 ### Export
-- **SVG** — UV-mapped texture per face (base64 data URI + affine transform); fold/cut/tab lines; edge dedup
+- **SVG** — UV-mapped texture per face (base64 data URI + affine transform); fold/cut/tab lines; edge dedup; Inkscape-style `<g>` layers (Fold Lines / Cut Lines / Edge Labels / Glue Tabs / Outline Padding) plus inline `stroke=` for cutting-machine software (LightBurn, Cricut Design Space) that doesn't execute the CSS `<style>` block
 - **PDF** — multi-page; fold/cut/tab lines; page labels
+- **PNG** — one raster image per page, for cutting-machine software that only imports bitmaps; configurable DPI
 
 ---
 
@@ -236,12 +237,12 @@ Custom Width/Height fields are dimmed (Opacity 0.45) and locked when a fixed pre
 │       └── MainWindow.xaml
 │
 └── tests/
-    └── FourHUnfolder.Tests   # xUnit + FluentAssertions — 121 tests
+    └── FourHUnfolder.Tests   # xUnit + FluentAssertions — 127 tests
         MstAlgorithmTests, UnfoldEngineTests, GeometryAlgorithmTests,
         SvgExporterTests, SvgCoplanarFoldTests, SvgEdgeLabelTests,
         PdoMeshLoaderTests, PdoUnfoldBuilderTests, GlueTabGeneratorTests,
         ProjectSerializerTests, FlapOverrideTests,
-        UnfoldServiceMultiSeedTests, UnfoldServicePdoDihedralTests
+        UnfoldServiceMultiSeedTests, UnfoldServicePdoDihedralTests, GD4ExportTests
 ```
 
 ### Dependency graph
