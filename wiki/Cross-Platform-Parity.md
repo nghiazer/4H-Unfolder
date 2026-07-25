@@ -5,9 +5,9 @@ is a native Swift port catching up to it. This page tracks where they match and 
 
 | | Windows | macOS |
 |--|---------|-------|
-| **Status** | ✅ Production `v0.4.0.A` | 🚧 Alpha `v0.0.0.7-alpha` |
+| **Status** | ✅ Production `v1.0.0.A` | 🚧 Beta `v1.0.0-beta` |
 | **Stack** | WPF · .NET 8 · C# | SwiftUI · SceneKit · Swift |
-| **Distribution** | Inno Setup installer + portable ZIP | Ad-hoc signed `.app` (notarization pending) |
+| **Distribution** | Inno Setup installer + portable ZIP | Ad-hoc signed `.app` (Developer ID + notarize scaffolding ready in `build-release.sh`, pending a maintainer with a paid Apple Developer account) |
 
 ---
 
@@ -17,7 +17,7 @@ is a native Swift port catching up to it. This page tracks where they match and 
 |---------|:------:|:-----:|
 | OBJ import (+ MTL + UV textures) | ✅ | ✅ |
 | PDO v3 import | ✅ | ✅ |
-| Extra mesh formats (Assimp) | ✅ | ❌ |
+| Extra mesh formats (Assimp: FBX/DAE/3DS/DXF/LWO/PLY, + STL) | ✅ | 🟡 STL only |
 | Auto-unfold (Kruskal MST → BFS) | ✅ | ✅ |
 | Real-world target-size dialog | ✅ | ✅ |
 | Edge fold ↔ cut toggle | ✅ | ✅ |
@@ -33,7 +33,7 @@ is a native Swift port catching up to it. This page tracks where they match and 
 | `.4hu` project bundles (cross-platform) | ✅ | ✅ |
 | Undo / redo | ✅ | ✅ |
 | Preferences panel | ✅ | ✅ |
-| **Outline padding** | ✅ (v0.1.1.A) | 🟡 computed, not wired to export/canvas |
+| **Outline padding** | ✅ (v0.1.1.A) | ✅ (v1.0.0-beta) |
 | **Merge adjacent flaps** | ✅ (v0.1.1.A) | ✅ (v0.0.0.6-alpha) |
 | **Join connected cut edges** | ✅ (v0.1.1.A) | ✅ (v0.0.0.7-alpha) |
 | **Coplanar fold-line hide** | ✅ (v0.3.0.A) | ✅ (v0.0.0.6-alpha) |
@@ -43,16 +43,21 @@ is a native Swift port catching up to it. This page tracks where they match and 
 | **Align pieces (6-way)** | ✅ | ✅ (v0.0.0.7-alpha) |
 | **PNG export (one image per page)** | ✅ (v0.4.0.A) | ✅ (v0.0.0.7-alpha) |
 | **SVG cutting-machine layers (Inkscape `<g>`)** | ✅ (v0.4.0.A) | ✅ (v0.0.0.7-alpha) |
+| **Undo covers piece layout (drag/rotate/align)** | ✅ | ✅ (v1.0.0-beta) |
+| **PNG export honors print-scale calibration** | ❌ (same latent gap, not yet fixed) | ✅ (v1.0.0-beta) |
+| **Configurable overlap-retry budget** | ✅ (v1.0.0.A) | ✅ (v1.0.0-beta) |
+| **STL import** | ✅ (via Assimp) | ✅ (v1.0.0-beta) |
+| **Select Symmetrical Pair** | ✅ (v1.0.0.A) | ❌ not planned |
 
 ✅ present · 🟡 partial · ❌ not implemented · ❔ not yet verified on macOS
 
 > The core feature set is at parity, and the full papercraft-parity effort (coplanar-hide,
 > edge-matching labels, merge adjacent flaps, auto-arrange rotation, overlap-reducing retry, join
-> connected cut edges, align pieces, PNG export, SVG cutting-machine layers) has now landed on
-> **both** platforms. Windows still leads on **extra import formats** (Assimp) and **outline
-> padding actually rendering** (macOS has the math but hasn't wired it to export/canvas yet) —
-> tracked on the [Roadmap](Roadmap). macOS still has a gap where **undo doesn't cover piece
-> positions** (drag/align), only edge/flap overrides — also tracked on the Roadmap. See
+> connected cut edges, align pieces, PNG export, SVG cutting-machine layers) plus an 8-phase
+> backlog-clearing pass (outline padding wired to macOS export/canvas, undo unified to cover piece
+> layout, PNG print-scale fix, STL import, notarize scaffolding, Windows Select Symmetrical Pair)
+> has now landed. Windows still leads on **extra import formats** (Assimp covers many more formats
+> than macOS's OBJ/PDO/STL) — tracked on the [Roadmap](Roadmap). See
 > [`PARITY-PROGRESS.md`](https://github.com/nghiazer/4H-Unfolder/blob/main/PARITY-PROGRESS.md) at
 > the repo root for the full plan and verification log.
 

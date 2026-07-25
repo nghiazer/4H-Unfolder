@@ -11,7 +11,8 @@ public version. Priorities: 🔴 High · 🟡 Medium · 🟢 Low.
 
 ## Recently shipped
 
-Backlog-clearing pass (2026-07-25), both platforms unless noted:
+Delivered in **v1.0.0.A** (Windows) / **v1.0.0-beta** (macOS) — 8-phase backlog-clearing pass
+(2026-07-25), both platforms unless noted:
 
 - ✅ **Outline padding wired into export/canvas on macOS** — the offset math (`PolygonOffset`)
   existed since GĐ1 but had no piece-boundary tracer to hand it a polygon; ported Windows'
@@ -98,7 +99,7 @@ Goal: reach **feature parity with Windows**, then graduate from alpha → beta.
 ## Version history
 
 For released versions and their changes, see the git tags
-([`v0.0.1.A` … `v0.4.0.A`](https://github.com/nghiazer/4H-Unfolder/tags)) and
+([`v0.0.1.A` … `v1.0.0.A`](https://github.com/nghiazer/4H-Unfolder/tags)) and
 `4h-unfolder-win/BUGS_HISTORY.md` in the repo.
 
 > This roadmap reflects intent, not commitment — priorities may shift.

@@ -9,7 +9,7 @@ swift build                  # debug
 swift build -c release       # release
 
 # Publish build (creates .app bundle + ZIP):
-./scripts/build-release.sh v0.0.0.7-alpha
+./scripts/build-release.sh v1.0.0-beta
 
 # Tests — must use Xcode (swift test fails, XCTest needs full SDK):
 # Product → Test (⌘U) or Test Navigator (⌘5)
@@ -42,6 +42,11 @@ swift build -c release       # release
 | GĐ4 | Papercraft-parity phase 4 — `PNGExporter` (Core Graphics bitmap, one image per page, configurable DPI) + Inkscape-style `<g>` cutting-machine layers in `SVGExporter` (Fold/Cut/Labels/Tabs/Padding) | ✅ Done | `fe4c478` `c2b4da6` |
 | GĐ3.3 | Papercraft-parity phase 3.3 — `EdgeGroupFinder` (join whole connected chain of cut edges via ⌥-click) + `PieceAligner` (6-way piece alignment, extracted to Core for testability) | ✅ Done | `5698b13` |
 | FIX2 | Cross-review fixes for GĐ3.3+GĐ4 — `joinEdgeGroup` was wiping the entire canvas layout via `autoArrange()` instead of preserving unrelated pieces' positions (fixed with `repositionAfterGroupJoin`); `grayscaleOutput` never grayed out fold/cut line or label colors across SVG/PDF/PNG exporters (fixed in all three) | ✅ Done | `af04709` |
+| BL1 | Backlog Phase 1 — Outline Padding wired into export/canvas: ported Windows' `BoundaryPolygonComputer` (edge-chain boundary tracer), fixed a duplicate-closing-vertex bug that would've dropped a corner's arc in the Clipper-free `PolygonOffset` | ✅ Done | `2b9b11e` |
+| BL3 | Backlog Phase 3 — Undo stack unified to cover piece layout (drag, pivot-rotate, Align Selected), not just edge/flap overrides; found `unfold()` itself (not just `autoArrange()`) unconditionally clears piece layout state, fixed by restoring after `unfold()` completes | ✅ Done | `2de297e` |
+| BL4 | Backlog Phase 4 — `PNGExporter` now honors `svgScaleFactor` print-calibration, matching SVG/PDF; PNG's fixed physical page size stays put, only content scales around each page's own origin | ✅ Done | `c46ae1e` |
+| BL5 | Backlog Phase 5 — STL import (binary + ASCII), dependency-free, with position-based vertex welding since STL has no shared-vertex topology | ✅ Done | `09cbeec` |
+| BL6 | Backlog Phase 6 — Signed/notarized distribution scaffolding in `build-release.sh` (gated behind env vars, ad-hoc default unchanged); incidental fix: `Info.plist` was missing an STL file-type entry | ✅ Done | `1c3f3cd` |
 
 _See [`PARITY-PROGRESS.md`](../PARITY-PROGRESS.md) at the repo root for the full papercraft-parity plan, per-item status, and verification log (both platforms)._
 
@@ -87,7 +92,7 @@ _See [`PARITY-PROGRESS.md`](../PARITY-PROGRESS.md) at the repo root for the full
 | PDO v4 / PD6 format | ✅ | ❌ Not planned |
 | Assembly 3D viewer | ✅ | ❌ Not planned |
 | Merge adjacent flaps (union tab polygons) | ✅ | ✅ |
-| Outline padding (seam allowance) | ✅ | 🟡 Computed, not wired to export/canvas |
+| Outline padding (seam allowance) | ✅ | ✅ |
 | Coplanar fold-line hide | ✅ | ✅ |
 | Edge-matching labels (cut-edge pair numbers) | ✅ | ✅ |
 | Auto-arrange tries 90° piece rotation | ✅ | ✅ |
@@ -96,7 +101,11 @@ _See [`PARITY-PROGRESS.md`](../PARITY-PROGRESS.md) at the repo root for the full
 | Align pieces (6-way: L/R/center-H/T/B/center-V) | ✅ | ✅ |
 | PNG export (one image per page) | ✅ | ✅ |
 | SVG cutting-machine layers (Inkscape `<g>` groups) | ✅ | ✅ |
-| Undo covers piece positions (drag/align), not just edge/flap | ✅ | ❌ Tech debt (undo stack redesign needed) |
+| Undo covers piece positions (drag/align), not just edge/flap | ✅ | ✅ |
+| PNG export honors print-scale calibration (`svgScaleFactor`) | N/A (Windows has the same latent gap, not yet fixed) | ✅ |
+| STL mesh import (binary + ASCII) | N/A (Windows uses Assimp for STL/FBX/etc.) | ✅ |
+| Select Symmetrical Pair | ✅ | ❌ Not planned (Windows-only feature) |
+| Configurable overlap-retry budget (was hardcoded 8) | ✅ | ✅ |
 
 ---
 
@@ -109,8 +118,10 @@ _See [`PARITY-PROGRESS.md`](../PARITY-PROGRESS.md) at the repo root for the full
 | TD-M-3 | 🟢 Low | `.onDrop` in `MainView` accepts any file URL before `loadMesh` validates the extension — user sees an error message on bad drop but no early rejection UI |
 | TD-M-4 | 🟢 Low | `@testable import FourHUnfolderCore` used in all production view files; works because `Package.swift` sets `-enable-testing` on the library target, but semantically wrong. Resolve by making public API `public` and switching to plain `import`. |
 | PERF | 🟢 Low | SVG/PDF export does not render UV texture — solid fill only |
-| TD-M-5 | 🟡 Med | Undo stack (`pushUndo`/`undo`) never snapshots piece positions/rotations — only edge/flap overrides. Affects manual piece drag and `alignSelectedPieces`. Windows unifies edge+flap+layout into one undo stack (`EditSnapshot`/`PushDragUndo`); macOS needs the same redesign, not a per-call patch. Found in GĐ3.3 cross-review (2026-07-24). |
-| TD-M-6 | 🟡 Med | `PNGExporter` ignores `settings.svgScaleFactor` for geometry (SVG/PDF both apply it) — latent while the setting defaults to 1.0. Fix needs a design call since PNG uses a fixed-page multi-page grid, unlike PDF's auto-sized single page. Found in GĐ4 cross-review (2026-07-24). |
+| TD-M-7 | 🟢 Low | `View2DSettings`/`View3DSettings`/`GeneralSettings` lack the tolerant `init(from:)` that `PrintSettings` has — adding a new field to any of them risks the same "missing key wipes the whole sub-object" bug `PrintSettings` was fixed for. Found incidentally in backlog Phase 1+2 cross-review (2026-07-25). |
+
+~~TD-M-5~~ (undo didn't cover piece positions) and ~~TD-M-6~~ (`PNGExporter` ignored `svgScaleFactor`) —
+both fixed in backlog Phase 3 and Phase 4 (2026-07-25), see the Phase Completion table above.
 
 ---
 
@@ -130,7 +141,7 @@ Findings from automated cross-review after Phase 12:
 
 ---
 
-## Test Summary (152 tests across 15 files)
+## Test Summary (173 tests across 17 files)
 
 | File | Tests | Covers |
 |------|-------|--------|
@@ -149,6 +160,8 @@ Findings from automated cross-review after Phase 12:
 | `SVGLayerTests` | 5 | Inkscape namespace + layer `<g>` tags present, existing comment markers preserved |
 | `EdgeGroupFinderTests` | 5 | BFS chain-join (from end/middle), isolated cut edge, unknown/fold edge id guards |
 | `PieceAlignerTests` | 12 | `effectiveAABB` (rotation, offset), all 6 align modes, guards (&lt;2 selected, out-of-range index), pre-existing-offset interaction |
+| `BoundaryPolygonComputerTests` | 5 | Edge-chain boundary tracing (fold-edge exclusion, closing-duplicate trim), degenerate cases, `vertsFor` closure application |
+| `StlMeshLoaderTests` | 16 | Binary/ASCII parsing, size-based binary detection (incl. "solid"-prefixed binary), vertex welding, edge topology, error cases |
 
 ---
 
@@ -171,9 +184,11 @@ Findings from automated cross-review after Phase 12:
 │   │   │   └── Algorithms/               ← UnfoldEngine, KruskalMSTBuilder,
 │   │   │                                   GlueTabGenerator, OverlapDetector,
 │   │   │                                   EdgeMarker, PieceComputer,
-│   │   │                                   EdgeGroupFinder, PieceAligner
+│   │   │                                   EdgeGroupFinder, PieceAligner,
+│   │   │                                   BoundaryPolygonComputer, PolygonOffset
 │   │   ├── IO/
-│   │   │   ├── Loaders/                  ← ObjMeshLoader, PdoMeshLoader, MeshLoaderFactory
+│   │   │   ├── Loaders/                  ← ObjMeshLoader, PdoMeshLoader, StlMeshLoader,
+│   │   │   │                               MeshLoaderFactory
 │   │   │   └── Exporters/                ← SVGExporter, PDFExporter, PNGExporter
 │   │   └── Services/                     ← UnfoldService (actor), ProjectSerializer
 │   └── FourHUnfolder/                    ← SwiftUI app (macOS 13+)
@@ -187,7 +202,7 @@ Findings from automated cross-review after Phase 12:
 │           ├── PatternCanvasView.swift   ← 9-layer SwiftUI Canvas + all 2D interactions
 │           ├── UnfoldSetupSheet.swift    ← Target-size dialog (mm per model unit)
 │           └── PreferencesView.swift     ← 4-tab Preferences (General/Print/Canvas/3D)
-└── Tests/FourHUnfolderTests/             ← 152 XCTest cases
+└── Tests/FourHUnfolderTests/             ← 173 XCTest cases
     ├── Helpers/TestMeshBuilders.swift
     ├── UnionFindTests.swift
     ├── KruskalMSTTests.swift
@@ -203,7 +218,9 @@ Findings from automated cross-review after Phase 12:
     ├── UnfoldServiceMultiSeedTests.swift
     ├── SVGLayerTests.swift
     ├── EdgeGroupFinderTests.swift
-    └── PieceAlignerTests.swift
+    ├── PieceAlignerTests.swift
+    ├── BoundaryPolygonComputerTests.swift
+    └── StlMeshLoaderTests.swift
 ```
 
 ### SPM target layout
