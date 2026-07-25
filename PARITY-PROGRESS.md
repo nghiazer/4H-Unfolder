@@ -945,6 +945,32 @@ lúc review lần đầu và giữ nguyên đánh giá đó) hay Phase 8 (chỉ 
 
 ---
 
+## Release v1.0.0.A (Windows) / v1.0.0-beta (macOS) — 2026-07-25
+
+**Đóng vòng backlog-clearing 8 phase** (Phase 1-8, khảo sát + lên kế hoạch + triển khai + cross-review
+sau mỗi cụm phase, tất cả đã merge vào `main` qua PR #66/#67/#68, CI thật xanh trước mỗi lần merge).
+Nâng major version (0→1) vì đã đạt trạng thái đủ tính năng + ổn định cho Windows (major bump thật,
+không chỉ đổi số) — macOS gắn nhãn "-beta" thay vì cùng nhảy lên 1.0 ổn định, vì macOS tự đặt tiêu chí
+"đạt parity với Windows rồi mới graduate alpha→beta" trong chính `wiki/Roadmap.md`, và hiện còn 2 việc
+mở (định dạng import khác STL, notarize thật cần Developer ID thật) — gắn "-beta" là trung thực với
+tiêu chí tự đặt ra, không phải tự thổi phồng.
+
+**Số liệu cuối cùng:** Windows **138/138** test (127 cũ + 11 `SymmetryDetectorTests`). macOS **173**
+test case qua 17 file (đã tự tay đếm lại chính xác bằng `grep -c "func test"` — phát hiện luôn 1 số
+liệu SAI trong write-up Phase 5 trước đó, ghi "19" cho `StlMeshLoaderTests.swift` trong khi thực tế
+đúng là **16** — sửa lại ở đây, không lặng lẽ để sai số cũ trôi qua vì đây là lượt rà soát số liệu
+chính thức cho bản release).
+
+**Đã cập nhật đồng bộ trong lượt này:** phiên bản trong `FourHUnfolder.App.csproj` (Windows) và
+`Info.plist` (macOS); `README.md` gốc + 2 README riêng từng nền tảng; `4h-unfolder-mac-swift/
+PROGRESS.md` (thêm 5 phase entry BL1/BL3/BL4/BL5/BL6, xoá 2 tech-debt đã fix TD-M-5/TD-M-6, cập nhật
+bảng feature-parity + test summary); `CLAUDE.md`; `.github/SECURITY.md` + `bug_report.yml`; toàn bộ
+`wiki/*.md` liên quan (`Home.md`, `_Footer.md`, `Cross-Platform-Parity.md` — thêm 5 dòng feature mới
+vào bảng, `Roadmap.md` — gắn nhãn "Delivered in v1.0.0.A" cho cụm backlog-clearing, mở rộng version-
+history range).
+
+---
+
 ### Lưu ý môi trường verify (máy Darwin)
 - WPF App **không chạy runtime** được trên macOS (`NETSDK1100`) — dùng `-p:EnableWindowsTargeting=true`
   để compile-check C#/XAML. Hành vi runtime WPF **cần verify trên Windows thật**.

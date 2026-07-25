@@ -12,10 +12,10 @@
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
 
     <!-- Version — bump suffix letter for patch releases within a minor version -->
-    <Version>0.4.0.0</Version>
-    <AssemblyVersion>0.4.0.0</AssemblyVersion>
-    <FileVersion>0.4.0.0</FileVersion>
-    <InformationalVersion>0.4.0.A — Papercraft-parity GĐ4 (PNG export/page, SVG cutting-machine layers) + GĐ3.3 (join connected cut edges, align pieces — macOS parity port)</InformationalVersion>
+    <Version>1.0.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <InformationalVersion>1.0.0.A — First stable release: 8-phase backlog clearing (macOS undo/piece-layout unification, PNG print-scale fix, STL import, notarize scaffolding, Windows Select Symmetrical Pair) on top of the full papercraft-parity effort (GĐ1–GĐ4, 3.3)</InformationalVersion>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\FourHUnfolder.Application\FourHUnfolder.Application.csproj" />

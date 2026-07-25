@@ -8,8 +8,8 @@ Papercraft / pepakura unfolder — loads 3D meshes (`.obj`, `.pdo`) and unfolds 
 
 | Platform | Stack | Version | Status |
 |----------|-------|---------|--------|
-| **Windows** | WPF · .NET 8 · C# | v0.4.0.A | Production |
-| **macOS** | Swift 5.9 · SwiftUI · SceneKit · Metal | v0.0.0.7-alpha | Alpha |
+| **Windows** | WPF · .NET 8 · C# | v1.0.0.A | Production |
+| **macOS** | Swift 5.9 · SwiftUI · SceneKit · Metal | v1.0.0-beta | Beta |
 
 ---
 
@@ -19,15 +19,15 @@ Papercraft / pepakura unfolder — loads 3D meshes (`.obj`, `.pdo`) and unfolds 
 4H-Unfolder/
 ├── 4h-unfolder-win/          WPF / .NET 8 — Windows native (production)
 │   ├── src/                  C# projects (Domain → Geometry → Application → Infrastructure → App)
-│   ├── tests/                xUnit tests (121 passing)
+│   ├── tests/                xUnit tests (138 passing)
 │   ├── installer/            Inno Setup script
 │   └── 4H-Unfolder.sln
-├── 4h-unfolder-mac-swift/    Swift / SwiftUI / SceneKit — macOS native (alpha)
+├── 4h-unfolder-mac-swift/    Swift / SwiftUI / SceneKit — macOS native (beta)
 │   ├── Package.swift         SPM manifest
 │   ├── Sources/
 │   │   ├── FourHUnfolderCore/   Pure-Swift library (algorithms, IO, services)
 │   │   └── FourHUnfolder/       SwiftUI app target
-│   ├── Tests/                128 XCTest cases
+│   ├── Tests/                173 XCTest cases
 │   ├── Resources/Info.plist  App bundle metadata + file-type associations
 │   └── scripts/              build-release.sh
 ├── publish/
@@ -41,7 +41,7 @@ Papercraft / pepakura unfolder — loads 3D meshes (`.obj`, `.pdo`) and unfolds 
 
 ## Features
 
-- **3D Mesh Import** — `.obj` (Wavefront OBJ + MTL + UV textures) and Pepakura `.pdo` v3
+- **3D Mesh Import** — `.obj` (Wavefront OBJ + MTL + UV textures), Pepakura `.pdo` v3, and `.stl` (binary + ASCII, macOS)
 - **Auto-Unfold** — Kruskal MST on face-adjacency dual graph → BFS face placement; real-world target size dialog
 - **Overlap-Reducing Retry** — when the default unfold overlaps, automatically retries alternate near-minimal spanning trees (epsilon-bounded tie-break) and keeps the least-overlap result
 - **Edge Control** — click any edge to toggle fold ↔ cut; join/disjoin edges with preview arrow; join a whole connected chain of cut edges in one action; per-edge FlapMode (10 variants)
@@ -54,10 +54,11 @@ Papercraft / pepakura unfolder — loads 3D meshes (`.obj`, `.pdo`) and unfolds 
 - **3D Viewer** — SceneKit (Metal), multi-material, UV textures, face selection highlight
 - **Export** — SVG (vector, with Inkscape-style cutting-machine layers for LightBurn/Cricut/Inkscape), PDF (print-ready), PNG (one raster image per page, for bitmap-only cutting software), grayscale option
 - **Project Bundles** — `.4hu` self-contained ZIP (mesh + textures + overrides + piece positions + groups), cross-platform
-- **Undo / Redo** — lightweight override snapshots
+- **Undo / Redo** — full snapshot covering edge/flap overrides *and* piece layout (drag, rotate, align) on both platforms
+- **Select Symmetrical Pair** (Windows) — pick a piece, auto-select its mirror-image counterpart on bilaterally-symmetric models
 - **Preferences** — 4-tab settings window (macOS) / settings panel (Windows)
 
-> macOS note: outline padding is computed but not yet wired into export/canvas rendering — tracked on the [Roadmap](https://github.com/nghiazer/4H-Unfolder/wiki/Roadmap).
+> See the [Roadmap](https://github.com/nghiazer/4H-Unfolder/wiki/Roadmap) for what's still open on each platform.
 
 ---
 
@@ -110,7 +111,7 @@ cd 4h-unfolder-mac-swift
 swift build -c release
 
 # Build distributable .app bundle + ZIP:
-./scripts/build-release.sh v0.0.0.7-alpha
+./scripts/build-release.sh v1.0.0-beta
 ```
 
 See [4h-unfolder-mac-swift/README.md](4h-unfolder-mac-swift/README.md) and [PROGRESS.md](4h-unfolder-mac-swift/PROGRESS.md) for full documentation.
@@ -121,10 +122,10 @@ See [4h-unfolder-mac-swift/README.md](4h-unfolder-mac-swift/README.md) and [PROG
 
 | Version | Platform | Download |
 |---------|----------|---------|
-| v0.0.0.7-alpha | macOS 13+ | `publish/mac/v0.0.0.7-alpha/4H-Unfolder_v0.0.0.7-alpha_mac.zip` |
-| v0.4.0.A | Windows 10+ | `publish/win/v0.4.0.A/` |
+| v1.0.0-beta | macOS 13+ | `publish/mac/v1.0.0.A/4H-Unfolder_v1.0.0.A_mac.zip` |
+| v1.0.0.A | Windows 10+ | `publish/win/v1.0.0.A/` |
 
-> Both platforms are packaged and released together under the shared git tag `v0.4.0.A`
+> Both platforms are packaged and released together under the shared git tag `v1.0.0.A`
 > (triggers the CI release pipeline for both) — each platform's *own* version number above is
 > what's shown in its About dialog / bundle metadata.
 

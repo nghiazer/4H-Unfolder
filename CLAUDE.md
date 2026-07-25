@@ -35,7 +35,7 @@ cd 4h-unfolder-win
 dotnet restore
 dotnet build                                    # 0 errors, 7 NuGet NU1603 warnings only
 dotnet run --project src/FourHUnfolder.App
-dotnet test tests/FourHUnfolder.Tests           # 56/56 pass
+dotnet test tests/FourHUnfolder.Tests           # 138/138 pass
 ```
 
 ## macOS Build & Run
@@ -142,7 +142,7 @@ the exact line from `find_definition`.
 
 ---
 
-## Current release: `v0.4.0.A` (Windows) / `v0.0.0.7-alpha` (macOS) — branch `main`
+## Current release: `v1.0.0.A` (Windows) / `v1.0.0-beta` (macOS) — branch `main`
 
 > Public-facing plan + status live in the [wiki Roadmap](https://github.com/nghiazer/4H-Unfolder/wiki/Roadmap).
 > Full papercraft-parity plan, per-item status, and verification log: [`PARITY-PROGRESS.md`](PARITY-PROGRESS.md).
@@ -160,8 +160,9 @@ scaffolding, Windows Select Symmetrical Pair (TD-38-4), and 3 small Windows item
 (`EditFlapsViewModel` magic-number cleanup, `FlapOverride.Deserialize` corrupt-data warning,
 configurable overlap-retry budget on both platforms) — see [`PARITY-PROGRESS.md`](PARITY-PROGRESS.md)
 for the full GĐ4 (PNG export/page + SVG cutting-machine layers), GĐ3.3 (join connected cut edges +
-align pieces), and backlog-clearing Phase 1-7 writeups, plus the cross-review findings fixed
-afterward (layout-wipe bug in group-join, Grayscale Output not covering line/label colors).
+align pieces), and backlog-clearing Phase 1-8 writeups (perf profiling + docs audit in Phase 8),
+plus the cross-review findings fixed afterward (layout-wipe bug in group-join, Grayscale Output
+not covering line/label colors, `FindMirrorPiece`'s fixed 5mm tolerance not scaling with mesh size).
 
 ### macOS tech debt open
 | ID | Priority | Description |

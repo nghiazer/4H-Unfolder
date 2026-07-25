@@ -2,7 +2,9 @@
 
 Native macOS port of 4H-Unfolder, built with Swift 5.9 + SwiftUI + SceneKit (Metal). Unfolds 3D meshes into 2D printable papercraft patterns.
 
-> **Status: v0.0.0.7-alpha** — Phases 1–12 + papercraft-parity (GĐ1–GĐ4, incl. 3.3) complete, 152 unit tests passing.
+> **Status: v1.0.0-beta** — Phases 1–12 + papercraft-parity (GĐ1–GĐ4, incl. 3.3) + 8-phase backlog
+> clearing (undo/piece-layout unification, outline padding wired to export/canvas, PNG print-scale
+> fix, STL import, notarize scaffolding) complete, 173 unit tests passing.
 > See [PROGRESS.md](PROGRESS.md) for detailed phase tracking.
 
 ---
@@ -12,7 +14,7 @@ Native macOS port of 4H-Unfolder, built with Swift 5.9 + SwiftUI + SceneKit (Met
 Pre-built ad-hoc signed bundle (macOS 13+, no installer needed):
 
 ```
-publish/mac/v0.0.0.7-alpha/4H-Unfolder_v0.0.0.7-alpha_mac.zip
+publish/mac/v1.0.0.A/4H-Unfolder_v1.0.0.A_mac.zip
 ```
 
 > **First launch**: Right-click `4H Unfolder.app` → **Open** (Gatekeeper bypass for unsigned builds).
@@ -24,7 +26,7 @@ publish/mac/v0.0.0.7-alpha/4H-Unfolder_v0.0.0.7-alpha_mac.zip
 
 | Category | Feature |
 |----------|---------|
-| **Import** | OBJ (+ MTL material + UV textures), PDO v3 (binary, embedded zlib textures) |
+| **Import** | OBJ (+ MTL material + UV textures), PDO v3 (binary, embedded zlib textures), STL (binary + ASCII) |
 | **Unfold** | Kruskal MST on face-adjacency dual graph → BFS face placement in paper-space mm; setup dialog for real-world target size |
 | **2D Canvas** | Zoom/pan, click edge to toggle fold ↔ cut, join/disjoin edges with preview arrow, ⌥-click a cut edge to join its whole connected chain in one action, drag piece to reposition, rotate handle on selection |
 | **Multi-select** | Lasso rubber-band selection (Shift = additive); right-drag to pan |
@@ -36,9 +38,9 @@ publish/mac/v0.0.0.7-alpha/4H-Unfolder_v0.0.0.7-alpha_mac.zip
 | **Assembly Aid** | Edge-matching labels — cut-edge pair numbers on canvas + export |
 | **Overlap** | Spatial grid + AABB + SAT detection; automatic overlap-reducing retry (alternate near-minimal spanning trees) when the default unfold overlaps |
 | **Layout** | Auto-arrange pieces on page (tries 90° rotation per piece); paper size picker (A4/A3/A2/A1/Letter/Legal); portrait/landscape |
-| **Export** | SVG (vector, Inkscape-style cutting-machine layers), PDF (Core Graphics), PNG (one raster image per page, configurable DPI), grayscale option |
+| **Export** | SVG (vector, Inkscape-style cutting-machine layers, outline padding), PDF (Core Graphics), PNG (one raster image per page, configurable DPI, honors print-scale calibration), grayscale option |
 | **Project** | Save/load `.4hu` ZIP bundle — mesh + overrides + piece positions + groups (cross-platform with Windows) |
-| **Undo/Redo** | Lightweight snapshot of edge/flap overrides |
+| **Undo/Redo** | Full snapshot covering edge/flap overrides *and* piece layout (drag, pivot-rotate, Align Selected) |
 | **Preferences** | 4-tab window — General, Print, Canvas, 3D View |
 
 ---
@@ -76,13 +78,13 @@ swift build -c release        # optimised release
 
 ```bash
 cd 4h-unfolder-mac-swift
-./scripts/build-release.sh v0.0.0.7-alpha
-# → publish/mac/v0.0.0.7-alpha/4H-Unfolder_v0.0.0.7-alpha_mac.zip
+./scripts/build-release.sh v1.0.0-beta
+# → publish/mac/v1.0.0-beta/4H-Unfolder_v1.0.0-beta_mac.zip
 ```
 
 ### Tests
 
-Open in Xcode → **Product → Test (⌘U)**. All 152 tests must pass before release.
+Open in Xcode → **Product → Test (⌘U)**. All 173 tests must pass before release.
 
 ---
 
@@ -144,7 +146,7 @@ Open in Xcode → **Product → Test (⌘U)**. All 152 tests must pass before re
 │       ├── AppState.swift           ← @MainActor ObservableObject, undo stack
 │       └── Views/                   ← MainView, SidebarView, SceneKitView,
 │                                       PatternCanvasView, UnfoldSetupSheet, PreferencesView
-└── Tests/FourHUnfolderTests/        ← 152 XCTest cases (15 files)
+└── Tests/FourHUnfolderTests/        ← 173 XCTest cases (17 files)
 ```
 
 ---
@@ -155,6 +157,7 @@ Open in Xcode → **Product → Test (⌘U)**. All 152 tests must pass before re
 |--------|------|------|
 | `.obj` (Wavefront OBJ + MTL + UV textures) | ✅ | — |
 | `.pdo` (Pepakura Designer v3, embedded textures) | ✅ | — |
+| `.stl` (binary + ASCII) | ✅ | — |
 | `.svg` (Scalable Vector Graphics) | — | ✅ |
 | `.pdf` (Portable Document Format) | — | ✅ |
 | `.png` (one raster image per page) | — | ✅ |
