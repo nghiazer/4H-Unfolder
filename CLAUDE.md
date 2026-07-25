@@ -151,7 +151,7 @@ the exact line from `find_definition`.
 | ID | Priority | Description |
 |----|----------|-------------|
 | TD-38-5/6 | 🟢 Low | Split Window / Change Coordinates — deferred as too complex / scope unclear, see `SESSION_PROGRESS.md` |
-| Performance | 🟢 Low | O(n²) AABB+SAT overlap; spatial grid used, but the overlap-reducing retry (v0.3.0.A) multiplies unfold cost up to 9× when a mesh has an unavoidable overlap — profile meshes > 2000 faces |
+| Performance | 🟢 Low | Profiled with a 3200-face synthetic mesh that has unavoidable overlaps (backlog Phase 8, 2026-07-25): the retry loop costs **33-56×** a single pass, not the ~9× its 8-attempt budget suggests — root cause is `OverlapDetector.CountOverlaps` (used to compare retry candidates) having no early exit, unlike `HasOverlaps` (~9-22× cheaper on the same mesh, both platforms). Real numbers + a concrete fix direction (give `CountOverlaps` an early-exit cap, or avoid recomputing it from scratch per candidate) in `PARITY-PROGRESS.md` — not fixed here, this was a profiling pass, not a redesign |
 
 Resolved this release: macOS "port join connected cut edges from Windows" (GĐ3.3 — Windows
 already had it), macOS Outline Padding wired into export/canvas, macOS undo unified to cover piece

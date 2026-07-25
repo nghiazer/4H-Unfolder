@@ -845,6 +845,86 @@ cho tuyệt đại đa số model thực tế, mà không cần thuật toán PC
 
 ---
 
+### Phase 8a — Cross-cutting: profile overlap-retry cost trên mesh lớn (2026-07-25)
+
+**Không có fixture/benchmark sẵn** trên cả 2 nền tảng trước đây (đã xác nhận từ khảo sát backlog ban
+đầu) — phải tự dựng mesh lớn để đo, không phải chỉ "chạy lại benchmark có sẵn".
+
+**Mesh tổng hợp:** UV-sphere dựng bằng vòng lặp lat/long (không cần thuật toán icosphere phức tạp),
+độ phân giải 20×20/30×30/40×40 → 800/1800/3200 mặt tam giác. Chọn hình cầu **có chủ đích**: một mặt
+cầu về bản chất **không thể trải phẳng thành 1 mảnh liền mà không chồng lấn** — đảm bảo trigger overlap
++ retry loop THẬT, thay vì phải đoán/ép 1 mesh nhân tạo có overlap.
+
+**Kết quả đo thật (Release build, cả 2 nền tảng):**
+
+| Mesh | Windows: 1 lần (không retry) | Windows: mặc định (retry 8) | Tỉ lệ | macOS: 1 lần | macOS: mặc định | Tỉ lệ |
+|---|---|---|---|---|---|---|
+| 800 mặt | 34,6 ms | 155,8 ms | 4,5× | 29,4 ms | 1189,5 ms | 40,5× |
+| 1800 mặt | 7,6 ms | 248,1 ms | 32,5× | 54,3 ms | 3006,2 ms | 55,4× |
+| 3200 mặt | 16,6 ms | 555,4 ms | 33,5× | 97,2 ms | 5471,8 ms | 56,3× |
+
+**Phát hiện quan trọng — tỉ lệ thật (33-56×) tệ hơn nhiều so với con số "9×" vẫn được nhắc trong
+`CLAUDE.md`/`wiki/Roadmap.md` từ trước (dựa trên "1 lần chạy gốc + tối đa 8 lần retry = 9 lần"):**
+đo tách riêng `HasOverlaps` (early-exit, dừng ngay khi thấy 1 cặp chồng lấn) và `CountOverlaps` (quét
+hết, dùng để SO SÁNH các candidate retry — bắt buộc phải biết chính xác số lượng, không thể early-exit)
+trên cùng 1 kết quả unfold (mesh 3200 mặt, 849/922 cặp chồng lấn thật — mesh cầu chồng lấn RẤT nặng):
+
+| | Windows | macOS |
+|---|---|---|
+| `HasOverlaps`/`hasOverlaps` (early-exit) | 5,48 ms | 20,62 ms |
+| `CountOverlaps`/`countOverlaps` (quét hết) | 48,76 ms | 456,17 ms |
+| Tỉ lệ | ~9× | ~22× |
+
+Retry loop gọi `CountOverlaps` **9 lần** (1 lần tính `bestCount` ban đầu + tối đa 8 lần trong vòng
+lặp), trong khi đường "1 lần, không retry" (dùng để so `Single pass` ở bảng trên) **không bao giờ**
+gọi `CountOverlaps` — chỉ dùng `HasOverlaps` rẻ hơn nhiều bên trong `UnfoldOnce`. Đây chính là lý do
+tỉ lệ thật cao hơn hẳn "9×" ngây thơ: không phải bản thân `UnfoldOnce` (dual graph + MST + BFS + glue
+tabs) đắt hơn 9 lần mỗi lượt, mà là **riêng phần đếm overlap để so sánh candidate đã đắt gấp ~9-22 lần
+so với chỉ cần biết có/không** — nhân dồn với 9 lần gọi.
+
+**macOS chậm hơn Windows đáng kể về số tuyệt đối** (5,4 giây so với 555 ms cho mesh 3200 mặt, cùng 1
+workload) — ghi nhận trung thực, không đi sâu điều tra nguyên nhân chênh lệch nền tảng (ngoài phạm vi
+"profile & document" của phase này; có thể do khác biệt cấu trúc dữ liệu `struct`-heavy của Swift hay
+chi tiết cài đặt spatial grid — cần điều tra riêng nếu muốn tối ưu).
+
+**Hướng fix khả dĩ cho tương lai (không làm ngay — đúng phạm vi phase này là "đo & ghi nhận", không
+phải "redesign"):** cho `CountOverlaps` một early-exit CÓ ĐIỀU KIỆN (dừng sớm khi đã chắc chắn candidate
+hiện tại không thể thắng `bestCount` đang giữ, ví dụ dừng ngay khi đếm vượt quá best hiện tại — vẫn
+chính xác, không cần đổi thuật toán) — đây là optimization tự nhiên nhất, không cần đổi kiến trúc.
+
+**Không thêm fixture/benchmark cố định vào repo** — đúng theo kế hoạch ban đầu ("chỉ thêm benchmark
+lâu dài nếu profiling thực sự lộ ra hotspot đáng sửa"); phát hiện lần này ĐÃ đáng ghi nhận cụ thể
+(con số thật + cơ chế chính xác) nhưng bản thân việc FIX là 1 quyết định thiết kế riêng (early-exit
+điều kiện làm thay đổi hành vi retry loop, cần cân nhắc kỹ, không phải thay đổi nhỏ) — để lại cho
+phiên làm việc riêng, không tự ý mở rộng phạm vi phase này.
+
+---
+
+### Phase 8b — Cross-cutting: wiki docs placeholder (2026-07-25)
+
+**Glossary: đã xong từ trước, không phải việc cần làm** — đọc `wiki/Glossary.md` xác nhận đầy đủ,
+chính xác (13 mục thuật ngữ, khớp đúng kiến thức đã tích luỹ suốt các phase trong tài liệu này) — mục
+"add a Glossary" trong mô tả tech-debt cũ đã lỗi thời, chỉ đơn giản chưa ai xoá khỏi `wiki/Roadmap.md`.
+Đã sửa lại mô tả cho đúng thực tế.
+
+**1 GIF demo (`Home.md`) + 3 screenshot (`Quick-Start.md`, bước 1/2/4): đã thử thật, không chỉ giả
+định bị chặn.** Khởi chạy app đã build (`FourHUnfolder` binary), xác nhận qua `System Events` app CÓ
+cửa sổ thật (`{name: "FourHUnfolder", windows: 1}`), lấy được toạ độ cửa sổ thật (`{8, 33, 1664, 946}`)
+— tức là quyền Accessibility CÓ hoạt động, khác với đánh giá "không xác nhận được" ở Phase 1. Nhưng khi
+chụp bằng `screencapture -R` theo đúng toạ độ đó, ảnh chụp lại ra **cửa sổ IDE/terminal của phiên làm
+việc này, không phải app** — xác nhận `screencapture` trong môi trường này không map đúng tới cùng
+"màn hình" mà `System Events` báo cáo toạ độ (khả năng cao đây là 1 kiểu remote/virtual display, nơi
+"màn hình" IDE nhìn thấy khác với nơi ứng dụng GUI thật sự render). Đây là giới hạn **thật của môi
+trường**, không phải giả định — đã tự tay xác nhận trước khi kết luận, không đoán liều rồi bỏ cuộc.
+
+**Kết luận:** không tạo ảnh/GIF giả hoặc placeholder rỗng để "coi như xong" — việc này cần 1 người có
+phiên desktop thật (không phải qua remote-IDE) để: mở app → load model mẫu → unfold → xếp trang → chụp
+màn hình 3 bước + quay 1 đoạn GIF ngắn. Để nguyên placeholder hiện có trong wiki (đã ghi rõ ràng nội
+dung cần chụp cho từng vị trí) — không đụng vào, không giả vờ giải quyết được việc không thể làm trong
+môi trường này.
+
+---
+
 ### Lưu ý môi trường verify (máy Darwin)
 - WPF App **không chạy runtime** được trên macOS (`NETSDK1100`) — dùng `-p:EnableWindowsTargeting=true`
   để compile-check C#/XAML. Hành vi runtime WPF **cần verify trên Windows thật**.
