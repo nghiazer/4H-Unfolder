@@ -613,7 +613,8 @@ final class AppState: ObservableObject {
         panel.title = "Open Mesh File"
         panel.allowedContentTypes = [
             .init(filenameExtension: "obj")!,
-            .init(filenameExtension: "pdo")!
+            .init(filenameExtension: "pdo")!,
+            .init(filenameExtension: "stl")!
         ]
         panel.canChooseFiles = true
         panel.canChooseDirectories = false

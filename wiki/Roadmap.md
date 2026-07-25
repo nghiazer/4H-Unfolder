@@ -23,6 +23,11 @@ Backlog-clearing pass (2026-07-25), both platforms unless noted:
   project-load warnings pipeline instead of only a debug-only log line
 - ✅ **`EditFlapsViewModel` settings wiring cleanup** (Windows) — cosmetic; the dialog already read
   live defaults from `AppSettings`, this just removed the misleading duplicate hardcoded values
+- ✅ **Undo now covers piece layout on macOS** — drag, pivot-rotate, and Align Selected are all
+  undoable, matching Windows' unified `EditSnapshot`/`PushDragUndo`
+- ✅ **`PNGExporter` now honors the `svgScaleFactor` print-calibration setting on macOS** — matches
+  SVG/PDF; PNG's physical page size stays fixed to the real paper dimensions, only content scales
+- ✅ **STL import on macOS** — first non-OBJ/PDO format, dependency-free (binary + ASCII)
 
 Delivered in **v0.4.0.A** (Windows) / **v0.0.0.7-alpha** (macOS) — GĐ4 + GĐ3.3 of the
 papercraft-parity effort:
@@ -74,7 +79,7 @@ Goal: reach **feature parity with Windows**, then graduate from alpha → beta.
 
 | Priority | Item |
 |:---:|------|
-| 🟡 | Extra import formats (Assimp equivalent) |
+| 🟡 | More import formats beyond OBJ/PDO/STL (Assimp covers 3DS/DXF/LWO/FBX/DAE/PLY/X on Windows) |
 | 🟡 | Notarized, signed distribution (Developer ID) |
 
 ---

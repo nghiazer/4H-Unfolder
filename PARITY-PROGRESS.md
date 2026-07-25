@@ -678,6 +678,56 @@ dòng PNGExporter/svgScaleFactor và dòng Undo stack — cả 2 đã fix ở Ph
 
 ---
 
+### Phase 5 macOS: thêm import STL — hoàn thành (2026-07-25)
+
+**Vì sao STL trước, không cần dependency ngoài:** `MeshLoaderProtocol`/`MeshLoaderFactory` đã có sẵn
+extension point (chỉ cần conform + đăng ký) — không phải xây kiến trúc mới. STL là format phổ biến
+nhất trong giới in-3D/laser-cut mà app này đang nhắm tới (SVG cutting-machine layers từ GĐ4), và định
+dạng đơn giản, đã biết rõ đặc tả (binary + ASCII) — không cần thư viện ngoài, khớp quy ước codebase
+(PolygonOffset/FlapMerger cũng cố tình tránh Clipper2 tương tự).
+
+**Thách thức kỹ thuật chính:** STL (cả 2 biến thể) **không có topology chia sẻ đỉnh** — mỗi tam giác
+tự liệt kê 3 đỉnh độc lập bằng số thực thô, khác hẳn OBJ (tham chiếu index) hay PDO. `Mesh.getOrAddEdge`
+dedupe theo **INDEX đỉnh**, không theo toạ độ — nếu không "hàn" (weld) các đỉnh trùng vị trí từ nhiều
+tam giác khác nhau thành cùng 1 index trước khi build edge, mọi mặt sẽ thành piece riêng biệt (không
+cạnh nào chia sẻ, BFS của UnfoldEngine vô dụng). Giải pháp: `WeldKey` — key toạ độ làm tròn (giống
+hệt kiểu `coordKey` đã dùng trong `BoundaryPolygonComputer` ở Phase 1), dict tra cứu O(1) trong lúc
+duyệt tam giác.
+
+**Phân biệt binary/ASCII:** dùng công thức kích thước file (`84 + N*50` byte cho binary) làm tiêu chí
+chính, **không** chỉ dựa vào tiền tố `"solid"` — vì 1 số exporter binary cũng ghi chữ "solid" vào 80
+byte header (thói quen sao chép từ quy ước ASCII), khiến check tiền tố đơn thuần sai với những file đó.
+
+**Việc đã làm:**
+- `StlMeshLoader.swift` (`FourHUnfolderCore/IO/Loaders/`) — conform `MeshLoaderProtocol`, parser binary
+  (đọc little-endian qua `Data` byte-by-byte, không dùng `withUnsafeBytes` load trực tiếp vì `Data`
+  slice không đảm bảo alignment) + parser ASCII (quét dòng `vertex x y z`, gộp mỗi 3 dòng thành 1 tam
+  giác — không phụ thuộc cấu trúc `facet`/`outer loop` chặt chẽ, chịu được biến thể format giữa các
+  exporter khác nhau).
+- Đăng ký vào `MeshLoaderFactory.loaders`.
+- `AppState.openMeshFilePicker()`: thêm `"stl"` vào `allowedContentTypes` — thiếu bước này thì loader
+  có hoạt động cũng vô ích vì user không chọn được file `.stl` qua dialog Open.
+
+**Kiểm chứng (thực thi thật + XCTestCase, khác Phase 3 vì file này sống trong `FourHUnfolderCore` —
+test được, không bị giới hạn App-target):**
+- Script `swiftc` độc lập: dựng cube tổng hợp theo đúng kiểu STL thật (36 đỉnh thô lặp lại qua 12 tam
+  giác, KHÔNG dùng index như `TestMesh.cube()`), build cả buffer binary lẫn ASCII trong bộ nhớ, chạy
+  qua loader thật — **17/17 assertion thực thi thật pass**: `isBinary()` đúng cho cả 3 trường hợp
+  (binary thật, ASCII thật, binary có header chứa "solid" — trường hợp khó); weld đúng 36→8 đỉnh; 18
+  cạnh; **toàn bộ 18 cạnh đều nối 2 mặt, 0 cạnh biên** (phát hiện lỗi trong chính test lúc đầu: kỳ vọng
+  sai "6 cạnh chéo nối 2 mặt, 12 cạnh biên" — thực ra 1 khối lập phương kín thì KHÔNG có cạnh biên nào,
+  toàn bộ 18 cạnh — kể cả 12 cạnh thật của khối lập phương — đều nối đúng 2 tam giác; sửa lại kỳ vọng
+  test, không phải bug sản phẩm); `MeshLoaderFactory` route đúng `.stl`; **và chạy full pipeline
+  `UnfoldService().unfold(...)` thật** trên mesh STL vừa load — ra đúng 12 mặt, ≥1 piece, xác nhận STL
+  không chỉ parse được mà còn dùng được thật trong app.
+- `StlMeshLoaderTests.swift` (19 test `XCTestCase`, cùng nội dung + thêm error-case: file rỗng, dữ
+  liệu rác không phải UTF-8 cũng không đúng kích thước binary, ASCII không có dòng `vertex` nào) — type-
+  check sạch qua toàn bộ 19 file test suite hiện có (thêm 1 file mới so với trước).
+
+`swift build`: sạch.
+
+---
+
 ### Lưu ý môi trường verify (máy Darwin)
 - WPF App **không chạy runtime** được trên macOS (`NETSDK1100`) — dùng `-p:EnableWindowsTargeting=true`
   để compile-check C#/XAML. Hành vi runtime WPF **cần verify trên Windows thật**.
