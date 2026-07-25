@@ -140,6 +140,10 @@ struct PatternCanvasView: View {
     @State private var pivotFixedMm: SIMD2<Float> = .zero  // effective pivot pos in mm at phase 2 start
     @State private var pivotScreenPt: CGPoint = .zero      // screen position of pivot (fixed during drag)
     @State private var handleInitialAngle: Float = 0       // atan2 of handle screen pos at phase 2 start
+    // True once beginLayoutEdit() has been called for the current phase-2 drag gesture — phase 2
+    // can span multiple separate mouse-down/up cycles (pivot stays picked until reset), so each
+    // discrete drag needs its own begin/commit pair rather than one at the phase 0→2 transition.
+    @State private var pivotDragActive: Bool = false
     @State private var pieceInitialRot: Float = 0          // piece rotation at phase 2 start
 
     // Scroll-wheel zoom support
@@ -277,6 +281,7 @@ struct PatternCanvasView: View {
                 // ── Rotate pivot phase 2 ──────────────────────────────────────
                 if appState.canvasMode == .rotatePivot && pivotPhase == 2,
                    let pi = pivotPieceIdx {
+                    if !pivotDragActive { appState.beginLayoutEdit(); pivotDragActive = true }
                     let dx = Float(val.location.x - CGFloat(pivotScreenPt.x))
                     let dy = Float(val.location.y - CGFloat(pivotScreenPt.y))
                     let currentAngle = atan2(dy, dx)
@@ -306,6 +311,7 @@ struct PatternCanvasView: View {
                     let dx = val.startLocation.x - info.handlePos.x
                     let dy = val.startLocation.y - info.handlePos.y
                     if hypot(dx, dy) <= 16 {
+                        appState.beginLayoutEdit()
                         let pieces = expandedSelectedPieces(result: result)
                         isHandleRotating = true
                         handleRotatePieceIndices = pieces
@@ -361,6 +367,7 @@ struct PatternCanvasView: View {
                     }
 
                     if let pi = hitPieceIdx {
+                        appState.beginLayoutEdit()
                         // Select the piece if not already selected
                         if !appState.selectedPieceIndices.contains(pi) {
                             appState.selectedPieceIndices = [pi]
@@ -393,6 +400,8 @@ struct PatternCanvasView: View {
                 if isLassoing { lassoTip = val.location }
             }
             .onEnded { val in
+                let wasDraggingPieces = isDraggingPieces
+                let wasHandleRotating = isHandleRotating
                 defer {
                     isDraggingPieces = false
                     dragPieceIndices = []
@@ -401,9 +410,20 @@ struct PatternCanvasView: View {
                     handleRotatePieceIndices = []
                 }
 
-                if appState.canvasMode == .rotatePivot && pivotPhase == 2 { return }
+                if appState.canvasMode == .rotatePivot && pivotPhase == 2 {
+                    if pivotDragActive { appState.commitPendingLayoutUndo(); pivotDragActive = false }
+                    return
+                }
                 if appState.canvasMode == .rotatePivot {
                     basePan = pan; return
+                }
+
+                // Multi-piece drag / rotate-handle drag: commit the pre-drag snapshot captured in
+                // beginLayoutEdit() now that we know the gesture actually moved something (matches
+                // Windows' pre-capture-then-PushDragUndo — a click that doesn't drag shouldn't
+                // pollute undo history).
+                if wasDraggingPieces || wasHandleRotating {
+                    appState.commitPendingLayoutUndo()
                 }
 
                 if isLassoing {

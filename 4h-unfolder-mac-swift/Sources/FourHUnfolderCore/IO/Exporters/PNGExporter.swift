@@ -26,6 +26,16 @@ struct PNGExporter {
     ) -> [URL] {
         let dpi     = settings.pngDpi > 0 ? settings.pngDpi : 300.0
         let pxPerMm = dpi / 25.4
+        // Print-calibration scale (mirrors SVG/PDF, which both apply this to geometry). PNG's
+        // physical page size (pixelW/pixelH below) stays fixed to the real paper dimensions — a
+        // printed sheet's actual size can't change — only the content drawn on each page grows
+        // or shrinks around that page's own origin, same as a small over/under-print correction
+        // would on SVG/PDF. Not layout-aware: autoArrange() positions pieces into page slots
+        // without knowing about this factor, so a large scale value can still push content past
+        // its nominal page (same limitation SVG/PDF don't have, since they have no page grid to
+        // conflict with) — acceptable for this setting's realistic range (small corrections near
+        // 1.0), not a general-purpose page-aware rescale.
+        let sc = settings.svgScaleFactor
 
         let pixelW = max(1, Int((paperWidthMm  * pxPerMm).rounded()))
         let pixelH = max(1, Int((paperHeightMm * pxPerMm).rounded()))
@@ -49,8 +59,8 @@ struct PNGExporter {
                     bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
                 ) else { continue }
 
-                func px(_ v: SIMD2<Float>) -> CGFloat { CGFloat((Double(v.x) - oxMm) * pxPerMm) }
-                func py(_ v: SIMD2<Float>) -> CGFloat { CGFloat(pixelH) - CGFloat((Double(v.y) - oyMm) * pxPerMm) }
+                func px(_ v: SIMD2<Float>) -> CGFloat { CGFloat((Double(v.x) - oxMm) * pxPerMm * sc) }
+                func py(_ v: SIMD2<Float>) -> CGFloat { CGFloat(pixelH) - CGFloat((Double(v.y) - oyMm) * pxPerMm * sc) }
                 func pt(_ v: SIMD2<Float>) -> CGPoint { CGPoint(x: px(v), y: py(v)) }
 
                 drawPage(ctx: ctx, result: result, settings: settings, pt: pt,
@@ -184,7 +194,7 @@ struct PNGExporter {
                     guard mid >= 0, let pairId = result.cutEdgePairIds[mid],
                           drawn.insert(mid).inserted else { continue }
                     let mp = (verts[ei] + verts[(ei + 1) % 3]) / 2
-                    drawLabel(ctx, text: "\(pairId)", at: pt(mp), fontSize: 5 * CGFloat(pxPerMm / (settings.svgScaleFactor)), color: labelColor)
+                    drawLabel(ctx, text: "\(pairId)", at: pt(mp), fontSize: 5 * CGFloat(pxPerMm * settings.svgScaleFactor), color: labelColor)
                 }
             }
         }
@@ -192,7 +202,7 @@ struct PNGExporter {
         // ── page footer label ────────────────────────────────────────────────
         if settings.includePageLabel {
             drawLabel(ctx, text: pageLabel, at: CGPoint(x: 4 * pxPerMm, y: 4 * pxPerMm),
-                      fontSize: 6 * CGFloat(pxPerMm / settings.svgScaleFactor), color: CGColor(gray: 0.4, alpha: 1))
+                      fontSize: 6 * CGFloat(pxPerMm * settings.svgScaleFactor), color: CGColor(gray: 0.4, alpha: 1))
         }
     }
 

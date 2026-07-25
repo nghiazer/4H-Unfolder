@@ -20,7 +20,7 @@ enum MeshLoadError: LocalizedError {
 }
 
 struct MeshLoaderFactory {
-    private let loaders: [MeshLoaderProtocol] = [ObjMeshLoader(), PdoMeshLoader()]
+    private let loaders: [MeshLoaderProtocol] = [ObjMeshLoader(), PdoMeshLoader(), StlMeshLoader()]
 
     func load(from url: URL) async throws -> Mesh {
         let ext = url.pathExtension.lowercased()

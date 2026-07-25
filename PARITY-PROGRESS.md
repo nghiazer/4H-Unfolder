@@ -570,6 +570,228 @@ trong cross-review này.
 
 ---
 
+### Phase 3 macOS: hợp nhất undo stack cho piece layout — hoàn thành (2026-07-25)
+
+**Phát hiện kiến trúc quan trọng trước khi code (thay đổi hẳn cách tiếp cận so với kế hoạch ban đầu):**
+kế hoạch gốc định "thêm `pieceOffsets`/`pieceRotations`/`userGroups` vào snapshot rồi restore trực
+tiếp" — nhưng đọc kỹ `unfold()` mới thấy nó **tự xoá `pieceOffsets`/`pieceRotations` về `{:}`** ở cuối
+mỗi lần chạy (không chỉ `autoArrange()` như tài liệu cũ mô tả). `undo()`/`redo()` cũ gọi
+`unfold(); autoArrange()` sau khi restore edges/flaps — nếu chỉ thêm field vào snapshot mà không đổi
+gì khác, `autoArrange()` sẽ xoá sạch giá trị vừa restore ngay lập tức. Đối chiếu với
+`splitEdge`/`joinEdge`/`joinEdgeGroup` (đã có sẵn từ GĐ3.3) xác nhận đúng pattern cần dùng: gọi
+`unfold()` **một mình** (không `autoArrange()`), rồi gán lại `pieceOffsets`/`pieceRotations` SAU khi
+`unfold()` hoàn tất — an toàn để restore theo index thô vì `unfold()` xác định (deterministic) với
+cùng `(mesh, edgeOverrides, flapOverrides)`, nên `result.pieces` dựng lại đúng thứ tự/thành phần như
+lúc chụp snapshot.
+
+**Việc đã làm** (`AppState.swift`):
+- `OverrideSnapshot` mở rộng từ `(edges, flaps)` thành `(edges, flaps, pieceOffsets, pieceRotations,
+  userGroups)`; `pushUndo()`/`undo()`/`redo()` dùng chung `currentSnapshot()`/`restoreSnapshot()`.
+- `restoreSnapshot()` gọi `unfold()` rồi mới gán `pieceOffsets`/`pieceRotations` (đè lên `{:}` vừa bị
+  `unfold()` xoá) + `recomputePagesForOffsets()` — không gọi `autoArrange()`.
+- `alignSelectedPieces()`: thêm `pushUndo()` trước khi áp delta — xoá đoạn doc-comment cũ giải thích
+  giới hạn (nay đã fix), theo đúng khuyến nghị closing-the-loop.
+- Thêm cặp `beginLayoutEdit()`/`commitPendingLayoutUndo()`/`cancelPendingLayoutUndo()` — snapshot
+  "chờ" (`pendingLayoutUndo`) chụp TRƯỚC khi gesture bắt đầu mutate, chỉ thật sự push vào undo stack
+  ở cuối gesture nếu có thay đổi thật — mirror `PushDragUndo(preDragPositions)` bên Windows (capture
+  trước, quyết định push sau, tránh gesture click-không-kéo làm bẩn lịch sử undo).
+
+**Việc đã làm** (`PatternCanvasView.swift`) — wire 3 luồng gesture mutate `pieceOffsets`/
+`pieceRotations` vào cặp begin/commit trên, xác nhận bằng cách đọc lại toàn bộ
+`makeUnifiedDragGesture` rằng 3 luồng **loại trừ lẫn nhau trong cùng 1 gesture** (handle-rotate và
+piece-drag đều yêu cầu `!isHandleRotating && !isDraggingPieces` làm tiền đề, nên không bao giờ cả 2
+cùng true) — tránh double-commit:
+1. Rotate-pivot phase 2 — `beginLayoutEdit()` ở `.onChanged` đầu tiên của MỖI lần kéo rời rạc (phase
+   có thể tồn tại qua nhiều lần nhấn-kéo-thả riêng biệt do pivot vẫn "được chọn" cho tới khi user tự
+   reset — cần cờ `pivotDragActive` riêng thay vì chỉ gọi 1 lần ở lúc phase chuyển 0→1→2).
+2. Rotate-handle drag (selection) — tận dụng đúng điểm code cũ đã detect "lần đầu" (nơi
+   `isHandleRotating = true` được set).
+3. Multi-piece translate drag — tương tự, tại điểm `isDraggingPieces = true`.
+
+`.onEnded` commit dựa vào cờ local đã lưu TRƯỚC `defer` (vì `defer` reset các cờ về false trước khi
+code trong `.onEnded` kịp đọc) — không cần ngưỡng "đã di chuyển >0.5mm" kiểu Windows vì
+`DragGesture(minimumDistance: 4)` của SwiftUI đã tự đảm bảo ≥4pt di chuyển trước khi `.onChanged` bắn
+lần đầu, nên nếu 1 trong 3 cờ từng true nghĩa là đã có thay đổi thật.
+
+**Kiểm chứng (thực thi thật, không chỉ build):** `AppState`/`PatternCanvasView` sống ở App target mà
+test target không phụ thuộc vào (giới hạn đã ghi nhận từ GĐ3.3, giống `alignSelectedPieces`/
+`repositionAfterSplit`) — không viết được `XCTestCase`. Thay vào đó: build thành công
+`Sources/FourHUnfolderCore` (28 file `.o` có sẵn từ `swift build`) + `AppState.swift` thành 1
+executable độc lập bằng `swiftc` (link trực tiếp `.o`, không qua SPM), dựng mesh cube thật (12 mặt,
+2 cạnh ép `.cut`), gọi `unfold()` thật (không giả lập), rồi thực thi kịch bản kéo→undo→redo→gesture-huỷ
+qua **8 assertion thực thi thật, tất cả pass**:
+- `undo()` sau khi drag khôi phục đúng `pieceOffsets[0]`/`pieceRotations[0]` về `nil` (giá trị trước
+  drag) — xác nhận qua `unfoldResult` thật được build lại bởi `unfold()` async thật, không phải mock.
+- `redo()` khôi phục đúng lại `(42,17)`/`90°` đã drag.
+- `beginLayoutEdit()` rồi `cancelPendingLayoutUndo()` (mô phỏng click không kéo) **không** tạo thêm
+  entry trong undo stack — xác nhận gián tiếp qua việc `undo()` lần tiếp theo vẫn về đúng state trước
+  drag, không có bước thừa nào chen giữa.
+- Lỗi thực khi viết script lần đầu (không phải bug sản phẩm): dùng `Task { @MainActor in ... };
+  sem.wait()` để chờ async từ 1 script top-level → deadlock thật (semaphore chặn main thread trước khi
+  Task kịp chạy trên main actor) — sửa bằng top-level `await run()` trực tiếp (Swift hỗ trợ async
+  top-level code trong `main.swift`).
+
+`swift build` (Core+App): sạch. Không có regression trong 18 file `XCTestCase` hiện có (Phase 3 không
+đụng file nào trong `FourHUnfolderCore`).
+
+---
+
+### Phase 4 macOS: fix PNGExporter bỏ qua svgScaleFactor — hoàn thành (2026-07-25)
+
+**Quyết định thiết kế (lý do phase này trước đây bị coi là "cần design call"):** SVG/PDF không có khái
+niệm trang cố định — cả document co giãn theo `content_bbox * sc + margin`. PNG thì khác hẳn: cần
+kích thước trang CỐ ĐỊNH tính bằng pixel (khớp giấy in thật @ DPI thật), vì đó chính là ý nghĩa của
+"PNG mỗi trang cho máy cắt" — in/cắt trên khổ giấy vật lý thật. Quyết định: **giữ nguyên `pixelW`/
+`pixelH`** (kích thước trang vật lý, không đổi theo `sc`) — trang in vẫn là khổ giấy thật; chỉ áp `sc`
+vào phép biến đổi toạ độ mm→px (`px`/`py`), khiến nội dung to/nhỏ lại quanh gốc toạ độ CỦA TỪNG TRANG,
+giống hệt cách 1 hệ số hiệu chỉnh in nhỏ (gần 1.0) hoạt động trên SVG/PDF. Không cố gắng làm cho
+`autoArrange()` (vốn không biết gì về `sc`) nhận biết trang-theo-tỉ-lệ — ngoài phạm vi "fix bug bỏ
+qua setting", sẽ cần thiết kế lại thuật toán xếp trang, chỉ hợp lý nếu setting này được dùng cho hiệu
+chỉnh LỚN thay vì hiệu chỉnh in nhỏ (trường hợp dùng thực tế).
+
+**Việc đã làm** (`PNGExporter.swift`):
+- `px`/`py` nhân thêm `* sc` (`sc = settings.svgScaleFactor`) vào phép biến đổi toạ độ — khớp cách
+  SVG/PDF áp `sc` lên hình học.
+- **Không** đổi `ctx.setLineWidth(...)` (độ dày nét fold/cut) — đối chiếu `SVGExporter.swift` xác nhận
+  SVG cũng **không** nhân `stroke-width` với `sc` (độ dày nét đại diện cho đặc tính công cụ cắt — dao
+  laser/dao kéo, không phải thứ cần hiệu chỉnh theo giấy co giãn) — giữ nhất quán, không tự ý mở rộng.
+- Sửa 2 chỗ tính `fontSize` (nhãn cặp cạnh + nhãn trang) từ `pxPerMm / sc` (chia — không nhất quán,
+  hình học không hề nhân sc ở bất cứ đâu khác trong file trước fix này) thành `pxPerMm * sc` — khớp
+  cách `SVGExporter`'s `font-size="3"` tự động co giãn theo `sc` (vì toạn bộ hệ toạ độ SVG viewBox đã
+  ở "đơn vị mm-của-output-đã-scale").
+
+**Kiểm chứng (thực thi thật, lấy mẫu pixel):**
+- Script `swiftc` độc lập dựng 1 tam giác biết trước toạ độ mm, export PNG ở `sc=0.5/1.0/2.0`, đếm số
+  pixel không-trắng trong ảnh xuất ra (foolproof hơn dò 1 pixel đơn lẻ — lần thử đầu dùng cách lấy mẫu
+  1 pixel bị lỗi Y-flip trong chính script test, không phải bug sản phẩm; đổi sang đo diện tích tô màu
+  toàn ảnh để tránh hẳn lớp toán map toạ độ dễ sai).
+- Diện tích tô màu tỉ lệ đúng theo **bình phương** hệ số scale (hình học 2D): `sc=2.0` cho diện tích
+  gấp **4.007×** so với `sc=1.0` (lý thuyết 4×); `sc=0.5` cho **0.254×** (lý thuyết 0.25×) — sai số
+  ~0.2%, xác nhận scale áp dụng đúng vào hình học, không phải hiệu ứng ngẫu nhiên/làm tròn.
+- Smoke test render nhãn (`includePageLabel`/`includeEdgeLabels`) ở `sc=2.0` và `sc=0.1` (biên cực
+  đoan) — không crash, vẫn xuất file — xác nhận công thức `fontSize` mới không tạo giá trị âm/NaN cho
+  `CTFontCreateWithName`.
+
+`swift build`: sạch. Đã đóng 2 mục tech-debt liên quan: `CLAUDE.md` macOS table (chỉ còn 1 mục
+`View2DSettings`/... tolerant-decoder, phát hiện từ Phase 1+2), `wiki/Roadmap.md` macOS table (xoá
+dòng PNGExporter/svgScaleFactor và dòng Undo stack — cả 2 đã fix ở Phase 3/4).
+
+---
+
+### Phase 5 macOS: thêm import STL — hoàn thành (2026-07-25)
+
+**Vì sao STL trước, không cần dependency ngoài:** `MeshLoaderProtocol`/`MeshLoaderFactory` đã có sẵn
+extension point (chỉ cần conform + đăng ký) — không phải xây kiến trúc mới. STL là format phổ biến
+nhất trong giới in-3D/laser-cut mà app này đang nhắm tới (SVG cutting-machine layers từ GĐ4), và định
+dạng đơn giản, đã biết rõ đặc tả (binary + ASCII) — không cần thư viện ngoài, khớp quy ước codebase
+(PolygonOffset/FlapMerger cũng cố tình tránh Clipper2 tương tự).
+
+**Thách thức kỹ thuật chính:** STL (cả 2 biến thể) **không có topology chia sẻ đỉnh** — mỗi tam giác
+tự liệt kê 3 đỉnh độc lập bằng số thực thô, khác hẳn OBJ (tham chiếu index) hay PDO. `Mesh.getOrAddEdge`
+dedupe theo **INDEX đỉnh**, không theo toạ độ — nếu không "hàn" (weld) các đỉnh trùng vị trí từ nhiều
+tam giác khác nhau thành cùng 1 index trước khi build edge, mọi mặt sẽ thành piece riêng biệt (không
+cạnh nào chia sẻ, BFS của UnfoldEngine vô dụng). Giải pháp: `WeldKey` — key toạ độ làm tròn (giống
+hệt kiểu `coordKey` đã dùng trong `BoundaryPolygonComputer` ở Phase 1), dict tra cứu O(1) trong lúc
+duyệt tam giác.
+
+**Phân biệt binary/ASCII:** dùng công thức kích thước file (`84 + N*50` byte cho binary) làm tiêu chí
+chính, **không** chỉ dựa vào tiền tố `"solid"` — vì 1 số exporter binary cũng ghi chữ "solid" vào 80
+byte header (thói quen sao chép từ quy ước ASCII), khiến check tiền tố đơn thuần sai với những file đó.
+
+**Việc đã làm:**
+- `StlMeshLoader.swift` (`FourHUnfolderCore/IO/Loaders/`) — conform `MeshLoaderProtocol`, parser binary
+  (đọc little-endian qua `Data` byte-by-byte, không dùng `withUnsafeBytes` load trực tiếp vì `Data`
+  slice không đảm bảo alignment) + parser ASCII (quét dòng `vertex x y z`, gộp mỗi 3 dòng thành 1 tam
+  giác — không phụ thuộc cấu trúc `facet`/`outer loop` chặt chẽ, chịu được biến thể format giữa các
+  exporter khác nhau).
+- Đăng ký vào `MeshLoaderFactory.loaders`.
+- `AppState.openMeshFilePicker()`: thêm `"stl"` vào `allowedContentTypes` — thiếu bước này thì loader
+  có hoạt động cũng vô ích vì user không chọn được file `.stl` qua dialog Open.
+
+**Kiểm chứng (thực thi thật + XCTestCase, khác Phase 3 vì file này sống trong `FourHUnfolderCore` —
+test được, không bị giới hạn App-target):**
+- Script `swiftc` độc lập: dựng cube tổng hợp theo đúng kiểu STL thật (36 đỉnh thô lặp lại qua 12 tam
+  giác, KHÔNG dùng index như `TestMesh.cube()`), build cả buffer binary lẫn ASCII trong bộ nhớ, chạy
+  qua loader thật — **17/17 assertion thực thi thật pass**: `isBinary()` đúng cho cả 3 trường hợp
+  (binary thật, ASCII thật, binary có header chứa "solid" — trường hợp khó); weld đúng 36→8 đỉnh; 18
+  cạnh; **toàn bộ 18 cạnh đều nối 2 mặt, 0 cạnh biên** (phát hiện lỗi trong chính test lúc đầu: kỳ vọng
+  sai "6 cạnh chéo nối 2 mặt, 12 cạnh biên" — thực ra 1 khối lập phương kín thì KHÔNG có cạnh biên nào,
+  toàn bộ 18 cạnh — kể cả 12 cạnh thật của khối lập phương — đều nối đúng 2 tam giác; sửa lại kỳ vọng
+  test, không phải bug sản phẩm); `MeshLoaderFactory` route đúng `.stl`; **và chạy full pipeline
+  `UnfoldService().unfold(...)` thật** trên mesh STL vừa load — ra đúng 12 mặt, ≥1 piece, xác nhận STL
+  không chỉ parse được mà còn dùng được thật trong app.
+- `StlMeshLoaderTests.swift` (19 test `XCTestCase`, cùng nội dung + thêm error-case: file rỗng, dữ
+  liệu rác không phải UTF-8 cũng không đúng kích thước binary, ASCII không có dòng `vertex` nào) — type-
+  check sạch qua toàn bộ 19 file test suite hiện có (thêm 1 file mới so với trước).
+
+`swift build`: sạch.
+
+---
+
+### Phase 6 macOS: chuẩn bị ký/notarize bản phân phối — hoàn thành phần code, chờ credentials thật (2026-07-25)
+
+**Giới hạn đã biết trước (không phải phát hiện mới):** ký Developer ID + notarize cần tài khoản
+Apple Developer Program trả phí thật của user — không có cách nào tự động hoá bước này. Phạm vi thực
+tế của phase: chuẩn bị đầy đủ script/scaffolding, **gate bằng biến môi trường** để hành vi mặc định
+(không có credentials) giữ nguyên y hệt trước đây — không phải là "làm nửa vời", mà là làm tối đa phần
+code có thể làm, để khi user có tài khoản chỉ cần set 2 biến môi trường là chạy được.
+
+**Việc đã làm:**
+- `Resources/4H-Unfolder.entitlements` (mới) — **cố tình tối giản, không sandbox**: app phân phối qua
+  GitHub release chứ không qua Mac App Store nên không bắt buộc App Sandbox — chỉ cần chữ ký Developer
+  ID hợp lệ + Hardened Runtime (`codesign --options runtime`) là đủ điều kiện notarize. `Package.swift`
+  không có dependency ngoài nào (đã xác nhận từ khảo sát backlog ban đầu), chỉ link framework hệ thống
+  của Apple → không cần entitlement ngoại lệ nào (JIT, unsigned executable memory, disable library
+  validation) — để trống, có comment giải thích, sẵn sàng mở rộng khi cần.
+- `scripts/build-release.sh`: mở rộng bước ký (step 3) — nếu `APPLE_DEVELOPER_ID` được set, ký thật
+  với `--options runtime` + entitlements; nếu không, giữ nguyên ad-hoc sign như cũ (default không đổi
+  hành vi). Thêm step notarize mới (step 4) — chỉ chạy khi **CẢ** `APPLE_DEVELOPER_ID` **VÀ**
+  `APPLE_NOTARY_PROFILE` đều được set: zip tạm → `notarytool submit --wait` → `stapler staple` **lên
+  chính .app bundle** (không phải lên file zip tạm — staple sửa đổi bundle thật, phải làm TRƯỚC khi
+  tạo zip phân phối cuối cùng, thứ tự này dễ làm sai nếu không để ý) → xoá zip tạm → mới tới bước đóng
+  gói zip phân phối cuối (step 5, dùng bundle đã stapled). Comment đầu file hướng dẫn đầy đủ cách lấy
+  credentials (`notarytool store-credentials`) và cách chạy.
+- **Tiện phát hiện khi rà `Info.plist`:** `CFBundleDocumentTypes` liệt kê OBJ/PDO/4hu nhưng **thiếu
+  STL** dù Phase 5 đã thêm loader — nếu không có entry này, Finder/"Open With" sẽ không liên kết file
+  `.stl` với app dù loader hoạt động đúng. Tiện tay fix luôn (không đợi review riêng) vì đang có mặt
+  trong cùng khu vực file này.
+
+**Kiểm chứng (thực thi thật cho phần CÓ THỂ test; phần cần credentials thật thì không):**
+- `bash -n` xác nhận cú pháp script hợp lệ.
+- **Chạy thật** `./scripts/build-release.sh` ở chế độ mặc định (không set biến môi trường) — build
+  release thành công, ký ad-hoc như cũ, notarize bị skip đúng với thông báo rõ ràng, zip tạo thành
+  công, `codesign -dv` xác nhận `flags=0x2(adhoc)` (đúng như trước khi sửa script — không có regression
+  ở đường mặc định). Smoke-launch binary thật trong bundle vừa build — chạy ổn định, không crash.
+  Xác nhận `Info.plist` trong bundle đã đóng gói có entry STL mới. Dọn sạch artifact test sau khi xong
+  (không để lại trong `publish/` — thư mục này đã gitignore nên cũng không lọt vào commit).
+- `plutil -lint` xác nhận cả `Info.plist` (sau khi thêm STL) và `4H-Unfolder.entitlements` là XML plist
+  hợp lệ.
+- **Không kiểm chứng được** (cần Apple Developer ID + notarytool credentials thật, không có trong môi
+  trường này): đường ký thật + notarize thật. Ghi nhận trung thực đây là giới hạn đã biết trước từ lúc
+  lên kế hoạch, không phải bỏ sót.
+
+---
+
+## Cross-review Phase 3–6 (2026-07-25) — không có bug thật
+
+Đọc lại toàn bộ diff 4 phase (so với `main` đã merge Phase 1+2) một cách hoài nghi, đối chiếu tay
+với hành vi kỳ vọng và với Windows reference nơi áp dụng. Không tìm thấy bug chức năng cần sửa.
+
+| # | Phase | Điều đã kiểm tra kỹ | Kết luận |
+|---|-------|----------------------|----------|
+| 1 | 3 | `toggleEdge`/`setFlapOverride`/`clearEdgeOverrides`/`splitEdge`/`joinEdge`/`joinEdgeGroup` đều gọi `pushUndo()` sẵn có — snapshot rộng hơn (thêm piece layout) có phá các đường undo CŨ này không? | **Không những không phá, còn tốt hơn trước**: undo 1 thao tác `splitEdge`/`joinEdge` giờ khôi phục đúng layout piece TRƯỚC thao tác đó (vì `unfold()` xác định + edgeOverrides khôi phục đúng → topology dựng lại y hệt lúc chụp snapshot → offset theo index vẫn đúng piece). Trước Phase 3, undo các thao tác này gọi `autoArrange()` nên **xáo trộn toàn bộ layout** thay vì khôi phục đúng — Phase 3 sửa luôn 1 bug tiềm ẩn ở các đường undo cũ, không chỉ thêm undo cho drag/align mới. |
+| 2 | 3 | Race lý thuyết: `beginLayoutEdit()` chụp snapshot "chờ" — nếu 1 hành động khác gọi `pushUndo()`/`undo()` xen giữa lúc đang kéo (trước `.onEnded`), `pendingLayoutUndo` có thể bị lệch | Biên độ cực hẹp: SwiftUI/AppKit không dispatch phím tắt trong lúc 1 gesture kéo chuột đang giữ input; không tìm được đường thực tế nào kích hoạt được. Ghi nhận là giới hạn lý thuyết của chính pattern "capture trước, commit sau" (Windows `PushDragUndo` cũng có cùng lớp rủi ro về nguyên tắc) — không fix (over-engineering cho 1 kịch bản không tái hiện được). |
+| 3 | 4 | Công thức mới `(v.x - oxMm) * pxPerMm * sc` có còn đúng khi `pagesWide/pagesTall > 1` (nhiều trang), không chỉ trường hợp 1 trang đã test? | Đúng về mặt công thức cho hiệu chỉnh NHỎ (giá trị thực tế của setting này, gần 1.0) — mỗi trang co giãn quanh gốc CỦA CHÍNH nó (`oxMm` không đổi). Giới hạn kiến trúc đã ghi nhận sẵn trong comment code + PARITY-PROGRESS (Phase 4): `sc` lớn vẫn có thể đẩy nội dung tràn trang vì `autoArrange()` không biết về `sc` — không phải bug mới, là giới hạn đã biết trước, đã viết rõ trong code. |
+| 4 | 5 | Tam giác suy biến (3 đỉnh khác nhau nhưng thẳng hàng, diện tích 0) — `StlMeshLoader` chỉ chặn trường hợp 2 đỉnh trùng nhau (`a != b, b != c, a != c`), không chặn thẳng hàng | Đối chiếu `ObjMeshLoader`: **cũng không** chặn tam giác thẳng hàng (không `guard` nào cho collinearity). `StlMeshLoader` đang ở đúng mức độ chặt chẽ ngang bằng loader tham chiếu hiện có trong repo — không phải hổng riêng của STL, không tự ý làm chặt hơn tiêu chuẩn đã chấp nhận sẵn trong codebase. |
+| 5 | 6 | Thứ tự notarize/staple/zip trong `build-release.sh` — staple đúng lên `.app` bundle (không phải lên zip tạm dùng để submit), và đúng TRƯỚC khi tạo zip phân phối cuối | Đọc lại từng dòng xác nhận đúng thứ tự: `zip tạm → notarytool submit --wait → stapler staple "$BUNDLE" → xoá zip tạm → (cd "$STAGE") → zip zip phân phối cuối từ chính `$BUNDLE` vừa stapled`. Đúng. |
+| 6 | — | Branch ancestry: `wip/backlog-phase6-...` có phải hậu duệ sạch của `main` hiện tại (đã merge Phase 1+2) không, hay lẫn commit trùng/conflict? | `git merge-base` == tip `origin/main` chính xác — 4 commit Phase 3-6 nằm gọn phía trên, không trùng lặp, PR sẽ ra diff sạch. |
+
+**Không tìm thấy finding nào cần code fix mới** trong lượt cross-review này (khác Phase 1+2, nơi tự
+bắt được 1 scope gap thật) — 3 sửa "tiện tay" đã làm ngay trong lúc code (STL vào `Info.plist`) đã
+tính là một phần commit Phase 6, không phải phát hiện riêng của cross-review.
+
+---
+
 ### Lưu ý môi trường verify (máy Darwin)
 - WPF App **không chạy runtime** được trên macOS (`NETSDK1100`) — dùng `-p:EnableWindowsTargeting=true`
   để compile-check C#/XAML. Hành vi runtime WPF **cần verify trên Windows thật**.
