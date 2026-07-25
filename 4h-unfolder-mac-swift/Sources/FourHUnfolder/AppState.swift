@@ -59,31 +59,80 @@ final class AppState: ObservableObject {
     private let unfoldSvc    = UnfoldService()
     private let serializer   = ProjectSerializer()
 
-    // MARK: - Undo / Redo (snapshots of overrides only)
+    // MARK: - Undo / Redo (backlog Phase 3: unified snapshot — edge/flap overrides AND piece
+    // layout, mirroring Windows' EditSnapshot/PushDragUndo. Piece-layout fields are safe to
+    // restore by raw index: unfold() is deterministic given identical (mesh, edgeOverrides,
+    // flapOverrides), so result.pieces reconstructs with the same membership/order it had when
+    // the snapshot was captured — no index drift between capture and restore.
 
-    private typealias OverrideSnapshot = (edges: [Int: EdgeType], flaps: [Int: FlapOverride])
+    private typealias OverrideSnapshot = (
+        edges: [Int: EdgeType],
+        flaps: [Int: FlapOverride],
+        pieceOffsets: [Int: SIMD2<Float>],
+        pieceRotations: [Int: Float],
+        userGroups: [Int: Int]
+    )
     private var undoStack: [OverrideSnapshot] = []
     private var redoStack: [OverrideSnapshot] = []
 
+    /// A layout-only snapshot captured at the start of a drag/rotate gesture, committed to
+    /// `undoStack` only if the gesture actually changed something (see `beginLayoutEdit`).
+    private var pendingLayoutUndo: OverrideSnapshot?
+
+    private func currentSnapshot() -> OverrideSnapshot {
+        (edgeOverrides, flapOverrides, pieceOffsets, pieceRotations, userGroups)
+    }
+
     func pushUndo() {
-        undoStack.append((edgeOverrides, flapOverrides))
+        undoStack.append(currentSnapshot())
         redoStack.removeAll()
+    }
+
+    /// Call once at the start of a piece-layout gesture (drag, pivot-rotate), before any
+    /// mutation. Pairs with `commitPendingLayoutUndo()`/`cancelPendingLayoutUndo()` at the end —
+    /// mirrors Windows' pattern of capturing pre-drag state up front (since by the time the drag
+    /// ends, live state already reflects the *new* position) and only pushing an undo entry if
+    /// the gesture actually moved something, so a click that doesn't drag doesn't pollute history.
+    func beginLayoutEdit() {
+        pendingLayoutUndo = currentSnapshot()
+    }
+
+    func commitPendingLayoutUndo() {
+        guard let snap = pendingLayoutUndo else { return }
+        undoStack.append(snap)
+        redoStack.removeAll()
+        pendingLayoutUndo = nil
+    }
+
+    func cancelPendingLayoutUndo() {
+        pendingLayoutUndo = nil
     }
 
     func undo() {
         guard let snap = undoStack.popLast() else { return }
-        redoStack.append((edgeOverrides, flapOverrides))
-        edgeOverrides = snap.edges
-        flapOverrides = snap.flaps
-        Task { await unfold(); autoArrange() }
+        redoStack.append(currentSnapshot())
+        restoreSnapshot(snap)
     }
 
     func redo() {
         guard let snap = redoStack.popLast() else { return }
-        undoStack.append((edgeOverrides, flapOverrides))
+        undoStack.append(currentSnapshot())
+        restoreSnapshot(snap)
+    }
+
+    /// Restores a full snapshot. Deliberately calls `unfold()` alone (never `autoArrange()`,
+    /// which would immediately scramble the just-restored piece positions back to a fresh
+    /// packing) — same reasoning as `splitEdge`/`joinEdge`/`joinEdgeGroup`'s reposition helpers.
+    private func restoreSnapshot(_ snap: OverrideSnapshot) {
         edgeOverrides = snap.edges
         flapOverrides = snap.flaps
-        Task { await unfold(); autoArrange() }
+        userGroups    = snap.userGroups
+        Task {
+            await unfold()
+            pieceOffsets   = snap.pieceOffsets
+            pieceRotations = snap.pieceRotations
+            recomputePagesForOffsets()
+        }
     }
 
     // MARK: - Edge / flap overrides
@@ -135,14 +184,9 @@ final class AppState: ObservableObject {
 
     /// Aligns the bounding boxes of the ≥2 currently-selected pieces to their common
     /// left/right/top/bottom edge or horizontal/vertical center — only ever adjusts
-    /// `pieceOffsets` (rotation is left untouched); the alignment math matches Windows'
-    /// equivalent toolbar action, but NOT its undo behavior: Windows' AlignSelected pushes onto
-    /// its unified undo stack (EditSnapshot bundles edge/flap overrides AND piece layout, via
-    /// PushDragUndo), so ⌘Z there restores prior piece positions too. macOS `pushUndo`/`undo`
-    /// only ever snapshot edge/flap overrides, never `pieceOffsets`/`pieceRotations` — same
-    /// pre-existing limitation as the manual piece-drag gesture below (cross-review finding;
-    /// tracked as tech debt rather than fixed here since it needs a broader undo-stack redesign
-    /// covering the drag gesture too, not just this method).
+    /// `pieceOffsets` (rotation is left untouched); matches Windows' equivalent toolbar action,
+    /// including undo behavior as of backlog Phase 3 (`pushUndo()` below joins the unified
+    /// snapshot, matching Windows' AlignSelected → PushDragUndo).
     /// Geometry lives in PieceAligner (FourHUnfolderCore) so it's unit-testable — see
     /// PieceAlignerTests.swift.
     func alignSelectedPieces(_ mode: PieceAlignMode) {
@@ -155,6 +199,7 @@ final class AppState: ObservableObject {
             mode: mode
         )
         guard !deltas.isEmpty else { return }
+        pushUndo()
         for (pi, d) in deltas {
             pieceOffsets[pi] = (pieceOffsets[pi] ?? .zero) + d
         }

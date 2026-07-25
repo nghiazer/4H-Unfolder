@@ -164,7 +164,6 @@ afterward (layout-wipe bug in group-join, Grayscale Output not covering line/lab
 ### macOS tech debt open
 | ID | Priority | Description |
 |----|----------|-------------|
-| — | 🟡 Med | Undo stack (`pushUndo`/`undo`) never snapshots piece positions/rotations (`pieceOffsets`/`pieceRotations`) — only edge/flap overrides. Affects manual piece drag, `alignSelectedPieces`. Windows' equivalent (`EditSnapshot`/`PushDragUndo`) unifies edge+flap+layout into one undo stack; macOS needs the same redesign, not a per-call patch. Found in GĐ3.3 cross-review (2026-07-24) |
 | — | 🟡 Med | `PNGExporter.swift` ignores `settings.svgScaleFactor` for geometry (SVG/PDF both apply it) — latent while the setting defaults to 1.0, but wrong for anyone calibrating print scale. Fix needs a design call: PNG uses a fixed-page multi-page grid (unlike PDF's auto-sized single page), so "how should the scale factor apply without moving content off-page" isn't obvious. Found in GĐ4 cross-review (2026-07-24) |
 | — | 🟢 Low | `View2DSettings`/`View3DSettings`/`GeneralSettings` lack the tolerant `init(from:)` that `PrintSettings` has — adding a new field to any of them without one risks the same "missing key wipes the whole sub-object" bug `PrintSettings` was fixed for. Latent (no field has been added to those 3 structs since `PrintSettings` got its fix), found incidentally in backlog Phase 1+2 cross-review (2026-07-25) |
 

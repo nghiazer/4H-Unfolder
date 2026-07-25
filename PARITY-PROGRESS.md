@@ -570,6 +570,72 @@ trong cross-review này.
 
 ---
 
+### Phase 3 macOS: hợp nhất undo stack cho piece layout — hoàn thành (2026-07-25)
+
+**Phát hiện kiến trúc quan trọng trước khi code (thay đổi hẳn cách tiếp cận so với kế hoạch ban đầu):**
+kế hoạch gốc định "thêm `pieceOffsets`/`pieceRotations`/`userGroups` vào snapshot rồi restore trực
+tiếp" — nhưng đọc kỹ `unfold()` mới thấy nó **tự xoá `pieceOffsets`/`pieceRotations` về `{:}`** ở cuối
+mỗi lần chạy (không chỉ `autoArrange()` như tài liệu cũ mô tả). `undo()`/`redo()` cũ gọi
+`unfold(); autoArrange()` sau khi restore edges/flaps — nếu chỉ thêm field vào snapshot mà không đổi
+gì khác, `autoArrange()` sẽ xoá sạch giá trị vừa restore ngay lập tức. Đối chiếu với
+`splitEdge`/`joinEdge`/`joinEdgeGroup` (đã có sẵn từ GĐ3.3) xác nhận đúng pattern cần dùng: gọi
+`unfold()` **một mình** (không `autoArrange()`), rồi gán lại `pieceOffsets`/`pieceRotations` SAU khi
+`unfold()` hoàn tất — an toàn để restore theo index thô vì `unfold()` xác định (deterministic) với
+cùng `(mesh, edgeOverrides, flapOverrides)`, nên `result.pieces` dựng lại đúng thứ tự/thành phần như
+lúc chụp snapshot.
+
+**Việc đã làm** (`AppState.swift`):
+- `OverrideSnapshot` mở rộng từ `(edges, flaps)` thành `(edges, flaps, pieceOffsets, pieceRotations,
+  userGroups)`; `pushUndo()`/`undo()`/`redo()` dùng chung `currentSnapshot()`/`restoreSnapshot()`.
+- `restoreSnapshot()` gọi `unfold()` rồi mới gán `pieceOffsets`/`pieceRotations` (đè lên `{:}` vừa bị
+  `unfold()` xoá) + `recomputePagesForOffsets()` — không gọi `autoArrange()`.
+- `alignSelectedPieces()`: thêm `pushUndo()` trước khi áp delta — xoá đoạn doc-comment cũ giải thích
+  giới hạn (nay đã fix), theo đúng khuyến nghị closing-the-loop.
+- Thêm cặp `beginLayoutEdit()`/`commitPendingLayoutUndo()`/`cancelPendingLayoutUndo()` — snapshot
+  "chờ" (`pendingLayoutUndo`) chụp TRƯỚC khi gesture bắt đầu mutate, chỉ thật sự push vào undo stack
+  ở cuối gesture nếu có thay đổi thật — mirror `PushDragUndo(preDragPositions)` bên Windows (capture
+  trước, quyết định push sau, tránh gesture click-không-kéo làm bẩn lịch sử undo).
+
+**Việc đã làm** (`PatternCanvasView.swift`) — wire 3 luồng gesture mutate `pieceOffsets`/
+`pieceRotations` vào cặp begin/commit trên, xác nhận bằng cách đọc lại toàn bộ
+`makeUnifiedDragGesture` rằng 3 luồng **loại trừ lẫn nhau trong cùng 1 gesture** (handle-rotate và
+piece-drag đều yêu cầu `!isHandleRotating && !isDraggingPieces` làm tiền đề, nên không bao giờ cả 2
+cùng true) — tránh double-commit:
+1. Rotate-pivot phase 2 — `beginLayoutEdit()` ở `.onChanged` đầu tiên của MỖI lần kéo rời rạc (phase
+   có thể tồn tại qua nhiều lần nhấn-kéo-thả riêng biệt do pivot vẫn "được chọn" cho tới khi user tự
+   reset — cần cờ `pivotDragActive` riêng thay vì chỉ gọi 1 lần ở lúc phase chuyển 0→1→2).
+2. Rotate-handle drag (selection) — tận dụng đúng điểm code cũ đã detect "lần đầu" (nơi
+   `isHandleRotating = true` được set).
+3. Multi-piece translate drag — tương tự, tại điểm `isDraggingPieces = true`.
+
+`.onEnded` commit dựa vào cờ local đã lưu TRƯỚC `defer` (vì `defer` reset các cờ về false trước khi
+code trong `.onEnded` kịp đọc) — không cần ngưỡng "đã di chuyển >0.5mm" kiểu Windows vì
+`DragGesture(minimumDistance: 4)` của SwiftUI đã tự đảm bảo ≥4pt di chuyển trước khi `.onChanged` bắn
+lần đầu, nên nếu 1 trong 3 cờ từng true nghĩa là đã có thay đổi thật.
+
+**Kiểm chứng (thực thi thật, không chỉ build):** `AppState`/`PatternCanvasView` sống ở App target mà
+test target không phụ thuộc vào (giới hạn đã ghi nhận từ GĐ3.3, giống `alignSelectedPieces`/
+`repositionAfterSplit`) — không viết được `XCTestCase`. Thay vào đó: build thành công
+`Sources/FourHUnfolderCore` (28 file `.o` có sẵn từ `swift build`) + `AppState.swift` thành 1
+executable độc lập bằng `swiftc` (link trực tiếp `.o`, không qua SPM), dựng mesh cube thật (12 mặt,
+2 cạnh ép `.cut`), gọi `unfold()` thật (không giả lập), rồi thực thi kịch bản kéo→undo→redo→gesture-huỷ
+qua **8 assertion thực thi thật, tất cả pass**:
+- `undo()` sau khi drag khôi phục đúng `pieceOffsets[0]`/`pieceRotations[0]` về `nil` (giá trị trước
+  drag) — xác nhận qua `unfoldResult` thật được build lại bởi `unfold()` async thật, không phải mock.
+- `redo()` khôi phục đúng lại `(42,17)`/`90°` đã drag.
+- `beginLayoutEdit()` rồi `cancelPendingLayoutUndo()` (mô phỏng click không kéo) **không** tạo thêm
+  entry trong undo stack — xác nhận gián tiếp qua việc `undo()` lần tiếp theo vẫn về đúng state trước
+  drag, không có bước thừa nào chen giữa.
+- Lỗi thực khi viết script lần đầu (không phải bug sản phẩm): dùng `Task { @MainActor in ... };
+  sem.wait()` để chờ async từ 1 script top-level → deadlock thật (semaphore chặn main thread trước khi
+  Task kịp chạy trên main actor) — sửa bằng top-level `await run()` trực tiếp (Swift hỗ trợ async
+  top-level code trong `main.swift`).
+
+`swift build` (Core+App): sạch. Không có regression trong 18 file `XCTestCase` hiện có (Phase 3 không
+đụng file nào trong `FourHUnfolderCore`).
+
+---
+
 ### Lưu ý môi trường verify (máy Darwin)
 - WPF App **không chạy runtime** được trên macOS (`NETSDK1100`) — dùng `-p:EnableWindowsTargeting=true`
   để compile-check C#/XAML. Hành vi runtime WPF **cần verify trên Windows thật**.
