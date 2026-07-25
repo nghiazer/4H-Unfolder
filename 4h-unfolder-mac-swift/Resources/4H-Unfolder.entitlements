@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Entitlements for Developer-ID + notarized builds (backlog Phase 6).
+
+  Intentionally minimal / non-sandboxed: this app is distributed via GitHub releases, not the
+  Mac App Store, so App Sandbox is not required — only a valid Developer ID signature + Hardened
+  Runtime (`codesign --options runtime`) are needed for notarization. The app has zero SPM
+  dependencies (Package.swift has no `dependencies:` entries) and only links Apple system
+  frameworks (AppKit/SwiftUI/SceneKit/Foundation/CoreGraphics), so no Hardened Runtime exceptions
+  (JIT, unsigned executable memory, disabled library validation, etc.) are needed today. Extend
+  this file if a future feature needs one (e.g. network access for an update checker).
+-->
+<plist version="1.0">
+<dict>
+</dict>
+</plist>

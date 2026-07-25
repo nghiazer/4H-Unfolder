@@ -728,6 +728,50 @@ test được, không bị giới hạn App-target):**
 
 ---
 
+### Phase 6 macOS: chuẩn bị ký/notarize bản phân phối — hoàn thành phần code, chờ credentials thật (2026-07-25)
+
+**Giới hạn đã biết trước (không phải phát hiện mới):** ký Developer ID + notarize cần tài khoản
+Apple Developer Program trả phí thật của user — không có cách nào tự động hoá bước này. Phạm vi thực
+tế của phase: chuẩn bị đầy đủ script/scaffolding, **gate bằng biến môi trường** để hành vi mặc định
+(không có credentials) giữ nguyên y hệt trước đây — không phải là "làm nửa vời", mà là làm tối đa phần
+code có thể làm, để khi user có tài khoản chỉ cần set 2 biến môi trường là chạy được.
+
+**Việc đã làm:**
+- `Resources/4H-Unfolder.entitlements` (mới) — **cố tình tối giản, không sandbox**: app phân phối qua
+  GitHub release chứ không qua Mac App Store nên không bắt buộc App Sandbox — chỉ cần chữ ký Developer
+  ID hợp lệ + Hardened Runtime (`codesign --options runtime`) là đủ điều kiện notarize. `Package.swift`
+  không có dependency ngoài nào (đã xác nhận từ khảo sát backlog ban đầu), chỉ link framework hệ thống
+  của Apple → không cần entitlement ngoại lệ nào (JIT, unsigned executable memory, disable library
+  validation) — để trống, có comment giải thích, sẵn sàng mở rộng khi cần.
+- `scripts/build-release.sh`: mở rộng bước ký (step 3) — nếu `APPLE_DEVELOPER_ID` được set, ký thật
+  với `--options runtime` + entitlements; nếu không, giữ nguyên ad-hoc sign như cũ (default không đổi
+  hành vi). Thêm step notarize mới (step 4) — chỉ chạy khi **CẢ** `APPLE_DEVELOPER_ID` **VÀ**
+  `APPLE_NOTARY_PROFILE` đều được set: zip tạm → `notarytool submit --wait` → `stapler staple` **lên
+  chính .app bundle** (không phải lên file zip tạm — staple sửa đổi bundle thật, phải làm TRƯỚC khi
+  tạo zip phân phối cuối cùng, thứ tự này dễ làm sai nếu không để ý) → xoá zip tạm → mới tới bước đóng
+  gói zip phân phối cuối (step 5, dùng bundle đã stapled). Comment đầu file hướng dẫn đầy đủ cách lấy
+  credentials (`notarytool store-credentials`) và cách chạy.
+- **Tiện phát hiện khi rà `Info.plist`:** `CFBundleDocumentTypes` liệt kê OBJ/PDO/4hu nhưng **thiếu
+  STL** dù Phase 5 đã thêm loader — nếu không có entry này, Finder/"Open With" sẽ không liên kết file
+  `.stl` với app dù loader hoạt động đúng. Tiện tay fix luôn (không đợi review riêng) vì đang có mặt
+  trong cùng khu vực file này.
+
+**Kiểm chứng (thực thi thật cho phần CÓ THỂ test; phần cần credentials thật thì không):**
+- `bash -n` xác nhận cú pháp script hợp lệ.
+- **Chạy thật** `./scripts/build-release.sh` ở chế độ mặc định (không set biến môi trường) — build
+  release thành công, ký ad-hoc như cũ, notarize bị skip đúng với thông báo rõ ràng, zip tạo thành
+  công, `codesign -dv` xác nhận `flags=0x2(adhoc)` (đúng như trước khi sửa script — không có regression
+  ở đường mặc định). Smoke-launch binary thật trong bundle vừa build — chạy ổn định, không crash.
+  Xác nhận `Info.plist` trong bundle đã đóng gói có entry STL mới. Dọn sạch artifact test sau khi xong
+  (không để lại trong `publish/` — thư mục này đã gitignore nên cũng không lọt vào commit).
+- `plutil -lint` xác nhận cả `Info.plist` (sau khi thêm STL) và `4H-Unfolder.entitlements` là XML plist
+  hợp lệ.
+- **Không kiểm chứng được** (cần Apple Developer ID + notarytool credentials thật, không có trong môi
+  trường này): đường ký thật + notarize thật. Ghi nhận trung thực đây là giới hạn đã biết trước từ lúc
+  lên kế hoạch, không phải bỏ sót.
+
+---
+
 ### Lưu ý môi trường verify (máy Darwin)
 - WPF App **không chạy runtime** được trên macOS (`NETSDK1100`) — dùng `-p:EnableWindowsTargeting=true`
   để compile-check C#/XAML. Hành vi runtime WPF **cần verify trên Windows thật**.

@@ -42,6 +42,18 @@
 		</dict>
 		<dict>
 			<key>CFBundleTypeName</key>
+			<string>STL 3D Model</string>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>stl</string>
+			</array>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
 			<string>Pepakura Designer File</string>
 			<key>CFBundleTypeExtensions</key>
 			<array>

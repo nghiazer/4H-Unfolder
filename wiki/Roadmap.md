@@ -80,7 +80,7 @@ Goal: reach **feature parity with Windows**, then graduate from alpha → beta.
 | Priority | Item |
 |:---:|------|
 | 🟡 | More import formats beyond OBJ/PDO/STL (Assimp covers 3DS/DXF/LWO/FBX/DAE/PLY/X on Windows) |
-| 🟡 | Notarized, signed distribution (Developer ID) |
+| 🟡 | Notarized, signed distribution (Developer ID) — `build-release.sh` now supports this via `APPLE_DEVELOPER_ID`/`APPLE_NOTARY_PROFILE` env vars (see script header), just needs a maintainer with a paid Developer account to actually run it |
 
 ---
 
