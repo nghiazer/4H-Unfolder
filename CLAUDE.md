@@ -150,15 +150,17 @@ the exact line from `find_definition`.
 ### Windows tech debt open
 | ID | Priority | Description |
 |----|----------|-------------|
-| TD-38-4/5/6 | 🟢 Low | Select Symmetrical Pair / Split Window / Change Coordinates |
+| TD-38-5/6 | 🟢 Low | Split Window / Change Coordinates — deferred as too complex / scope unclear, see `SESSION_PROGRESS.md` |
 | Performance | 🟢 Low | O(n²) AABB+SAT overlap; spatial grid used, but the overlap-reducing retry (v0.3.0.A) multiplies unfold cost up to 9× when a mesh has an unavoidable overlap — profile meshes > 2000 faces |
 
 Resolved this release: macOS "port join connected cut edges from Windows" (GĐ3.3 — Windows
-already had it), macOS Outline Padding wired into export/canvas, and 3 small Windows items
+already had it), macOS Outline Padding wired into export/canvas, macOS undo unified to cover piece
+layout, macOS PNG export scale-factor fix, macOS STL import, macOS/Windows notarize+distribution
+scaffolding, Windows Select Symmetrical Pair (TD-38-4), and 3 small Windows items
 (`EditFlapsViewModel` magic-number cleanup, `FlapOverride.Deserialize` corrupt-data warning,
 configurable overlap-retry budget on both platforms) — see [`PARITY-PROGRESS.md`](PARITY-PROGRESS.md)
 for the full GĐ4 (PNG export/page + SVG cutting-machine layers), GĐ3.3 (join connected cut edges +
-align pieces), and backlog-clearing Phase 1+2 writeups, plus the cross-review findings fixed
+align pieces), and backlog-clearing Phase 1-7 writeups, plus the cross-review findings fixed
 afterward (layout-wipe bug in group-join, Grayscale Output not covering line/label colors).
 
 ### macOS tech debt open

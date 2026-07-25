@@ -124,6 +124,7 @@
              E8D6=Tag(names)  E9D9=NumberField(pages)
              E749=Print(transparency)  E721=Search(find)
              EB9F=AddPhoto(insert)  E894=Remove(delete image)
+             E7B8=Flip(select symmetrical pair — same glyph as MainWindow's Mirror Inversion)
         -->
         <Border Grid.Row="1" Background="{DynamicResource Toolbar2DBg}" Padding="6,3">
             <StackPanel Orientation="Horizontal">
@@ -150,6 +151,10 @@
                 <!-- Auto-arrange -->
                 <Button Style="{StaticResource Icon2D}" Content="&#xE9B5;" Click="AutoArrange_Click"
                         ToolTip="Auto-arrange pieces"/>
+                <Separator Margin="4,0"/>
+                <!-- Symmetry -->
+                <Button Style="{StaticResource Icon2D}" Content="&#xE7B8;" Click="SelectSymmetricalPair_Click"
+                        ToolTip="Select Symmetrical Pair — with exactly 1 piece selected, also selects its mirror-image piece"/>
                 <Separator Margin="4,0"/>
                 <!-- Edit modes -->
                 <ToggleButton Style="{StaticResource Toggle2D}" x:Name="RotatePointBtn"

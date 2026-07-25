@@ -792,6 +792,59 @@ tính là một phần commit Phase 6, không phải phát hiện riêng của c
 
 ---
 
+### Phase 7 Windows: Select Symmetrical Pair (TD-38-4) — hoàn thành (2026-07-25)
+
+**Thu hẹp phạm vi có chủ đích:** TD-38 gốc gộp chung 3 việc "quá phức tạp" (Select Symmetrical Pair /
+Split Window / Change Coordinates). Đúng như plan ban đầu đã phân tích: chỉ Select Symmetrical Pair
+đủ rõ ràng để làm ngay ("chọn 1 piece, tự động chọn thêm piece đối xứng gương") — Split Window (multi-
+window WPF, chưa có scaffolding) và Change Coordinates (chính `SESSION_PROGRESS.md` ghi "scope
+unclear") **cố tình để lại**, không tự ý thu hẹp phạm vi cho vừa 1 phiên code.
+
+**Quyết định thiết kế — chỉ đối xứng theo trục toạ độ chính (X/Y/Z), không tìm mặt phẳng đối xứng bất
+kỳ hướng nào:** đối xứng tổng quát (arbitrary-orientation) là lý do TD-38-4 bị coi "quá phức tạp" từ
+đầu. Hầu hết model đối xứng thật (nhân vật, xe, robot) đều được dựng thẳng đứng, cân đối theo 1 trong
+3 trục toạ độ chính — thu hẹp còn 3 mặt phẳng ứng viên (qua tâm bounding-box, vuông góc X/Y/Z) là đủ
+cho tuyệt đại đa số model thực tế, mà không cần thuật toán PCA/tối ưu hướng phức tạp.
+
+**Kiến trúc — tách thuật toán thuần khỏi glue code WPF** (đúng khuôn `PieceAligner`/
+`BoundaryPolygonComputer` bên macOS): `SymmetryDetector` mới trong `FourHUnfolder.Geometry.Algorithms`
+(test được trong suite portable):
+- `DetectMirrorPlane(positions, threshold=0.9)` — với mỗi trục X/Y/Z, tính điểm đối xứng bằng lưới
+  không gian (spatial hash, bucket = epsilon, tra cứu hàng xóm 3×3×3 — cùng hình dạng thuật toán với
+  `OverlapDetector`'s candidate-pair phase) đo tỉ lệ đỉnh có ảnh gương trùng khớp; chọn trục điểm cao
+  nhất, chỉ chấp nhận nếu ≥90% đỉnh khớp (dưới ngưỡng → coi model không đối xứng, trả `null` thay vì
+  đoán liều).
+- `FindMirrorPiece(plane, pickedPieceId, pieceCentroids, tolerance=5mm)` — so khớp centroid 3D (KHÔNG
+  phải vị trí 2D sau unfold — vị trí 2D không liên quan gì tới đối xứng 3D thật) của piece được chọn,
+  phản chiếu qua mặt phẳng, tìm piece khác có centroid gần ảnh phản chiếu nhất; loại piece tự thân
+  (piece nằm đúng trên mặt phẳng — như mảnh "xương sống" — không có cặp riêng biệt) và loại kết quả
+  nếu khoảng cách vượt ngưỡng dung sai (tránh trả về "gần nhất dù xa" như thể là cặp thật).
+- Glue code trong `PatternCanvasControl.xaml.cs` (`SelectSymmetricalPair()`, theo đúng mẫu
+  `AlignSelected`/`RotateSelected` — thao tác 1 lần trên piece đang chọn, không phải mode toggle như
+  Rotate-by-Point/Edit-Edges): yêu cầu đúng 1 piece đang chọn, dựng dict `pieceId → centroid 3D` từ
+  `PieceViewModel.Faces[].FaceId` tra `mesh.Faces`/`mesh.Vertices`, gọi `SymmetryDetector`, set
+  `IsSelected=true` cho piece khớp + báo `StatusText` (tận dụng cơ chế đã có, không dựng UI mới —
+  giống cách Phase 2 xử lý cảnh báo `FlapOverride`).
+- Icon toolbar: tái dùng **`&#xE7B8;` (Flip)** — glyph đã dùng sẵn cho tính năng "Mirror Inversion"
+  hiện có trong `MainWindow.xaml`, tránh đoán liều 1 codepoint Segoe Fluent Icons chưa được xác nhận
+  hiển thị đúng (rủi ro thật vì máy Darwin không cài font này để tự kiểm tra bằng mắt).
+
+**Kiểm chứng (thực thi thật — C#/.NET chạy được trên Darwin, khác nhóm WPF-only):**
+- `SymmetryDetectorTests.cs` (9 test `xUnit`+`FluentAssertions`, đúng convention
+  `GeometryAlgorithmTests.cs`) — **chạy thật qua `dotnet test`, không phải chỉ compile-check**: phát
+  hiện đúng trục X + tâm 0 cho tập điểm đối xứng tổng hợp (bao gồm 1 điểm nằm đúng trên mặt phẳng);
+  trả `null` cho tập điểm rải rác không đối xứng; xử lý an toàn input rỗng/1 điểm (bounding-box suy
+  biến, tránh chia 0); `Mirror()` đúng công thức phản chiếu cho cả 3 trục + tâm lệch khỏi gốc toạ độ;
+  `FindMirrorPiece` chọn đúng centroid gần nhất, từ chối piece ở xa dù cùng phía trục khớp, không bao
+  giờ tự khớp với chính piece đang chọn.
+- `dotnet build -p:EnableWindowsTargeting=true`: 0 lỗi. `dotnet test`: **136/136 pass** (127 cũ + 9
+  mới), không regression.
+- Glue code `PatternCanvasControl.xaml.cs` (WPF, không compile-check được ngoài Windows runtime theo
+  đúng giới hạn đã ghi nhận nhiều lần) — code ngắn, chỉ gọi vào `SymmetryDetector` đã test kỹ, khớp
+  đúng mẫu `AlignSelected` hiện có (không unit test riêng, giống tiền lệ).
+
+---
+
 ### Lưu ý môi trường verify (máy Darwin)
 - WPF App **không chạy runtime** được trên macOS (`NETSDK1100`) — dùng `-p:EnableWindowsTargeting=true`
   để compile-check C#/XAML. Hành vi runtime WPF **cần verify trên Windows thật**.

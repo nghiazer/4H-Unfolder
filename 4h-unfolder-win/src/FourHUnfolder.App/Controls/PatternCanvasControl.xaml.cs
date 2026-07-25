@@ -1163,6 +1163,55 @@ public partial class PatternCanvasControl : UserControl
     private void AutoArrange_Click(object s, RoutedEventArgs e) =>
         _vm?.AutoArrangeCommand.Execute(null);
 
+    // ── Select Symmetrical Pair (backlog Phase 7, TD-38-4) ───────────────────
+    //
+    // Mirror-plane detection lives in Geometry.SymmetryDetector (pure, unit-testable) — this
+    // handler's only job is the App-layer glue: read the picked piece + mesh, build the
+    // pieceId -> 3-D centroid map SymmetryDetector needs, and apply the result to selection.
+    private void SelectSymmetricalPair_Click(object s, RoutedEventArgs e) => SelectSymmetricalPair();
+
+    private void SelectSymmetricalPair()
+    {
+        if (_vm?.CurrentMesh is not { } mesh) return;
+        var picked = _vm.Pieces.Where(p => p.IsSelected).ToList();
+        if (picked.Count != 1) return;
+
+        var plane = SymmetryDetector.DetectMirrorPlane(mesh.Vertices.Select(v => v.Position).ToList());
+        if (plane == null)
+        {
+            _vm.StatusText = "No symmetry detected for this model.";
+            return;
+        }
+
+        var centroids = _vm.Pieces.ToDictionary(p => p.GroupId, p => PieceCentroid3D(p, mesh));
+        var mirrorId = SymmetryDetector.FindMirrorPiece(plane.Value, picked[0].GroupId, centroids);
+        var mirrorPiece = mirrorId.HasValue ? _vm.Pieces.FirstOrDefault(p => p.GroupId == mirrorId.Value) : null;
+        if (mirrorPiece == null)
+        {
+            _vm.StatusText = "No symmetrical pair found for the selected piece.";
+            return;
+        }
+
+        mirrorPiece.IsSelected = true;
+        _vm.StatusText = $"Selected symmetrical pair: P{picked[0].GroupId} ↔ P{mirrorPiece.GroupId}.";
+    }
+
+    /// Average 3-D mesh-space position of a piece's faces — the piece's ORIGINAL model position,
+    /// not its 2-D unfolded canvas position (which has no relation to 3-D mirror symmetry).
+    private static Vector3 PieceCentroid3D(PieceViewModel piece, Mesh mesh)
+    {
+        var sum = Vector3.Zero;
+        int count = 0;
+        foreach (var faceData in piece.Faces)
+        {
+            if (faceData.FaceId < 0 || faceData.FaceId >= mesh.Faces.Count) continue;
+            var f = mesh.Faces[faceData.FaceId];
+            sum += mesh.Vertices[f.A].Position + mesh.Vertices[f.B].Position + mesh.Vertices[f.C].Position;
+            count += 3;
+        }
+        return count > 0 ? sum / count : Vector3.Zero;
+    }
+
     // ── grid toggle (via ViewModel command) ──────────────────────────────────
     private void GridToggle_Click(object s, RoutedEventArgs e) =>
         _vm?.ToggleGridCommand.Execute(null);

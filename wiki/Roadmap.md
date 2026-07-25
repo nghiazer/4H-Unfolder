@@ -28,6 +28,9 @@ Backlog-clearing pass (2026-07-25), both platforms unless noted:
 - ✅ **`PNGExporter` now honors the `svgScaleFactor` print-calibration setting on macOS** — matches
   SVG/PDF; PNG's physical page size stays fixed to the real paper dimensions, only content scales
 - ✅ **STL import on macOS** — first non-OBJ/PDO format, dependency-free (binary + ASCII)
+- ✅ **Select Symmetrical Pair (Windows)** — pick 1 piece, auto-selects its mirror-image
+  counterpart. Scoped to axis-aligned mirror symmetry (cardinal-axis plane through the mesh's
+  bounding-box center) rather than arbitrary-orientation detection
 
 Delivered in **v0.4.0.A** (Windows) / **v0.0.0.7-alpha** (macOS) — GĐ4 + GĐ3.3 of the
 papercraft-parity effort:
@@ -67,7 +70,6 @@ Delivered in **Windows v0.1.1.A**:
 
 | Priority | Item | Notes |
 |:---:|------|-------|
-| 🟢 | Select symmetrical pair | Pick an edge/piece and auto-select its mirror |
 | 🟢 | Split window | Detachable / side-by-side 3D + 2D panes |
 | 🟢 | Change coordinates | Re-origin / re-orient the model interactively |
 
