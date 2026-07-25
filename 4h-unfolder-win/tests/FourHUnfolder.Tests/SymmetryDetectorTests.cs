@@ -69,7 +69,7 @@ public class SymmetryDetectorTests
     [Fact]
     public void FindMirrorPiece_picksTheClosestMirroredCentroid()
     {
-        var plane = new SymmetryDetector.MirrorPlane(SymmetryDetector.Axis.X, 0f);
+        var plane = new SymmetryDetector.MirrorPlane(SymmetryDetector.Axis.X, 0f, MeshDiagonal: 30f);
         var centroids = new Dictionary<int, Vector3>
         {
             [1] = new(5, 2, 0),     // picked piece
@@ -86,7 +86,7 @@ public class SymmetryDetectorTests
     [Fact]
     public void FindMirrorPiece_noCloseMatch_returnsNull()
     {
-        var plane = new SymmetryDetector.MirrorPlane(SymmetryDetector.Axis.X, 0f);
+        var plane = new SymmetryDetector.MirrorPlane(SymmetryDetector.Axis.X, 0f, MeshDiagonal: 30f);
         var centroids = new Dictionary<int, Vector3>
         {
             [1] = new(5, 2, 0),
@@ -101,17 +101,53 @@ public class SymmetryDetectorTests
     [Fact]
     public void FindMirrorPiece_pickedPieceNotInDictionary_returnsNull()
     {
-        var plane = new SymmetryDetector.MirrorPlane(SymmetryDetector.Axis.X, 0f);
+        var plane = new SymmetryDetector.MirrorPlane(SymmetryDetector.Axis.X, 0f, MeshDiagonal: 30f);
         var centroids = new Dictionary<int, Vector3> { [2] = new(-5, 2, 0) };
 
         SymmetryDetector.FindMirrorPiece(plane, pickedPieceId: 1, centroids).Should().BeNull();
     }
 
     [Fact]
+    public void DetectMirrorPlane_populatesMeshDiagonalFromTheActualBoundingBox()
+    {
+        // Points span exactly 6 units on X (±3), matching SymmetricAboutXZero()'s extent.
+        var plane = SymmetryDetector.DetectMirrorPlane(SymmetricAboutXZero());
+
+        plane.Should().NotBeNull();
+        plane!.Value.MeshDiagonal.Should().BeGreaterThan(0f);
+    }
+
+    [Fact]
+    public void FindMirrorPiece_defaultTolerance_scalesWithMeshSize_notOneFixedValueForEveryModel()
+    {
+        // A LARGE model (diagonal 1000mm, e.g. a life-size statue): mirrored centroids 15mm apart
+        // is unremarkable for a model that size (minor asymmetric triangulation/averaging), and
+        // should still be accepted as a real pair -- a fixed 5mm tolerance would wrongly reject it.
+        var largePlane = new SymmetryDetector.MirrorPlane(SymmetryDetector.Axis.X, 0f, MeshDiagonal: 1000f);
+        var largeCentroids = new Dictionary<int, Vector3>
+        {
+            [1] = new(100, 50, 50),
+            [2] = new(-100, 50, 65),   // 15mm off on Z -- within 2% of 1000mm (20mm), should match
+        };
+        SymmetryDetector.FindMirrorPiece(largePlane, pickedPieceId: 1, largeCentroids).Should().Be(2);
+
+        // A TINY model (diagonal 20mm, e.g. a small figurine): the SAME 15mm gap here is huge
+        // relative to the model (75% of its whole size) and must NOT be accepted as a real pair --
+        // confirms the tolerance actually shrinks for small models instead of always being >=15mm.
+        var tinyPlane = new SymmetryDetector.MirrorPlane(SymmetryDetector.Axis.X, 0f, MeshDiagonal: 20f);
+        var tinyCentroids = new Dictionary<int, Vector3>
+        {
+            [1] = new(3, 1, 1),
+            [2] = new(-3, 1, 16),   // same 15mm Z gap, now way outside tolerance (max(5, 20*0.02)=5mm)
+        };
+        SymmetryDetector.FindMirrorPiece(tinyPlane, pickedPieceId: 1, tinyCentroids).Should().BeNull();
+    }
+
+    [Fact]
     public void FindMirrorPiece_neverReturnsThePickedPieceItself()
     {
         // A piece exactly on the mirror plane has no distinct pair -- must not match itself.
-        var plane = new SymmetryDetector.MirrorPlane(SymmetryDetector.Axis.X, 0f);
+        var plane = new SymmetryDetector.MirrorPlane(SymmetryDetector.Axis.X, 0f, MeshDiagonal: 30f);
         var centroids = new Dictionary<int, Vector3>
         {
             [1] = new(0, 3, 3),   // sits exactly on the plane; its own mirror equals itself

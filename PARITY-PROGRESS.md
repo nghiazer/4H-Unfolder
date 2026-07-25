@@ -925,6 +925,26 @@ môi trường này.
 
 ---
 
+## Cross-review Phase 7–8 (2026-07-25) — 1 bug thật, đã fix
+
+Đọc lại diff Phase 7+8 một cách hoài nghi. Phase 8 (chỉ đổi docs, không code) không có gì để review
+thêm ngoài kiểm tra số liệu khớp với output terminal thật (đã đối chiếu, khớp). Phase 7 tìm ra 1 vấn
+đề thật, đã fix ngay trong lượt cross-review này.
+
+| # | Mức độ | Phát hiện | Xử lý |
+|---|--------|-----------|-------|
+| 1 | 🟡 Bug thật | `FindMirrorPiece`'s `matchToleranceMm` mặc định **cố định 5mm** cho MỌI kích thước model — mô hình nhỏ (vd. tượng nhỏ 20mm) 5mm dung sai quá RỘNG (25% kích thước cả model, dễ nhận nhầm piece sai làm cặp); mô hình lớn (vd. tượng 1-2 mét) 5mm quá HẸP (piece đối xứng thật có thể lệch centroid hơn 5mm do khác biệt tam giác hoá nhỏ giữa 2 bên, bị từ chối oan). Glue code không truyền tolerance riêng, luôn dùng mặc định cứng này | Thêm field `MeshDiagonal` vào `MirrorPlane` (tính sẵn trong `DetectMirrorPlane`, không tốn thêm chi phí tính lại bbox); `FindMirrorPiece`'s tolerance mặc định đổi thành `max(5mm, 2% đường chéo mesh)` khi caller không truyền riêng — glue code trong `PatternCanvasControl.xaml.cs` **không cần đổi gì** (đã không truyền tolerance tường minh từ đầu, tự động hưởng default mới). Thêm 2 test mới xác nhận: model 1000mm chấp nhận lệch 15mm (trong 2%=20mm); model 20mm KHÔNG chấp nhận cùng mức lệch 15mm tuyệt đối (vượt `max(5,20*0.02)=5mm`) — chứng minh tolerance thực sự co giãn theo kích thước, không phải luôn ≥15mm bất kể test data. |
+
+**Kiểm chứng fix (thực thi thật):** `dotnet build -p:EnableWindowsTargeting=true` 0 lỗi. `dotnet test`:
+**138/138 pass** (136 + 2 test mới cho hành vi scale-aware tolerance) — không regression trên 9 test
+gốc của `SymmetryDetectorTests.cs` (đã cập nhật constructor `MirrorPlane` thêm tham số thứ 3, verify
+lại từng test vẫn đúng ý nghĩa ban đầu).
+
+Không tìm thêm bug nào khác trong Phase 7 (glue code, icon tái dùng, thứ tự early-exit đều đã soát kỹ
+lúc review lần đầu và giữ nguyên đánh giá đó) hay Phase 8 (chỉ số liệu + docs, không code).
+
+---
+
 ### Lưu ý môi trường verify (máy Darwin)
 - WPF App **không chạy runtime** được trên macOS (`NETSDK1100`) — dùng `-p:EnableWindowsTargeting=true`
   để compile-check C#/XAML. Hành vi runtime WPF **cần verify trên Windows thật**.

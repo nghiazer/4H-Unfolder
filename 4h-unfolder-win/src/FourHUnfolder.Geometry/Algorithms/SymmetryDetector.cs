@@ -16,7 +16,11 @@ public static class SymmetryDetector
 {
     public enum Axis { X, Y, Z }
 
-    public readonly record struct MirrorPlane(Axis Axis, float Center);
+    /// <param name="MeshDiagonal">Bounding-box diagonal length of the mesh this plane was
+    /// detected from — carried along so FindMirrorPiece's default match tolerance can scale with
+    /// model size instead of using one fixed absolute value for both a 20mm figurine and a
+    /// 2-meter statue.</param>
+    public readonly record struct MirrorPlane(Axis Axis, float Center, float MeshDiagonal);
 
     /// <summary>
     /// Detects the best-fit axis-aligned mirror plane, or null if no candidate axis has enough
@@ -52,7 +56,7 @@ public static class SymmetryDetector
             if (score > bestScore)
             {
                 bestScore = score;
-                best = new MirrorPlane(axis, center);
+                best = new MirrorPlane(axis, center, diagonal);
             }
         }
 
@@ -113,14 +117,20 @@ public static class SymmetryDetector
     /// centroid. Returns null if no other piece is close enough to the mirrored position to be
     /// confident it's a real pair (as opposed to just "the nearest piece, however far").
     /// </summary>
+    /// <param name="matchToleranceMm">Override the default tolerance. Left null, it scales with
+    /// the mesh (2% of its bounding-box diagonal, floored at 5mm) — a fixed absolute value would
+    /// be too loose for a small figurine and too tight for a large statue built from the same
+    /// heuristic (mirrored centroids only shift a little relative to model size in practice).
+    /// </param>
     public static int? FindMirrorPiece(
         MirrorPlane plane,
         int pickedPieceId,
         IReadOnlyDictionary<int, Vector3> pieceCentroids,
-        float matchToleranceMm = 5.0f)
+        float? matchToleranceMm = null)
     {
         if (!pieceCentroids.TryGetValue(pickedPieceId, out var centroid)) return null;
         var mirrored = Mirror(centroid, plane.Axis, plane.Center);
+        float tolerance = matchToleranceMm ?? Math.Max(5.0f, plane.MeshDiagonal * 0.02f);
 
         int? best = null;
         float bestDistSq = float.MaxValue;
@@ -131,6 +141,6 @@ public static class SymmetryDetector
             if (distSq < bestDistSq) { bestDistSq = distSq; best = pieceId; }
         }
 
-        return best.HasValue && bestDistSq <= matchToleranceMm * matchToleranceMm ? best : null;
+        return best.HasValue && bestDistSq <= tolerance * tolerance ? best : null;
     }
 }
