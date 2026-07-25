@@ -772,6 +772,26 @@ code có thể làm, để khi user có tài khoản chỉ cần set 2 biến m�
 
 ---
 
+## Cross-review Phase 3–6 (2026-07-25) — không có bug thật
+
+Đọc lại toàn bộ diff 4 phase (so với `main` đã merge Phase 1+2) một cách hoài nghi, đối chiếu tay
+với hành vi kỳ vọng và với Windows reference nơi áp dụng. Không tìm thấy bug chức năng cần sửa.
+
+| # | Phase | Điều đã kiểm tra kỹ | Kết luận |
+|---|-------|----------------------|----------|
+| 1 | 3 | `toggleEdge`/`setFlapOverride`/`clearEdgeOverrides`/`splitEdge`/`joinEdge`/`joinEdgeGroup` đều gọi `pushUndo()` sẵn có — snapshot rộng hơn (thêm piece layout) có phá các đường undo CŨ này không? | **Không những không phá, còn tốt hơn trước**: undo 1 thao tác `splitEdge`/`joinEdge` giờ khôi phục đúng layout piece TRƯỚC thao tác đó (vì `unfold()` xác định + edgeOverrides khôi phục đúng → topology dựng lại y hệt lúc chụp snapshot → offset theo index vẫn đúng piece). Trước Phase 3, undo các thao tác này gọi `autoArrange()` nên **xáo trộn toàn bộ layout** thay vì khôi phục đúng — Phase 3 sửa luôn 1 bug tiềm ẩn ở các đường undo cũ, không chỉ thêm undo cho drag/align mới. |
+| 2 | 3 | Race lý thuyết: `beginLayoutEdit()` chụp snapshot "chờ" — nếu 1 hành động khác gọi `pushUndo()`/`undo()` xen giữa lúc đang kéo (trước `.onEnded`), `pendingLayoutUndo` có thể bị lệch | Biên độ cực hẹp: SwiftUI/AppKit không dispatch phím tắt trong lúc 1 gesture kéo chuột đang giữ input; không tìm được đường thực tế nào kích hoạt được. Ghi nhận là giới hạn lý thuyết của chính pattern "capture trước, commit sau" (Windows `PushDragUndo` cũng có cùng lớp rủi ro về nguyên tắc) — không fix (over-engineering cho 1 kịch bản không tái hiện được). |
+| 3 | 4 | Công thức mới `(v.x - oxMm) * pxPerMm * sc` có còn đúng khi `pagesWide/pagesTall > 1` (nhiều trang), không chỉ trường hợp 1 trang đã test? | Đúng về mặt công thức cho hiệu chỉnh NHỎ (giá trị thực tế của setting này, gần 1.0) — mỗi trang co giãn quanh gốc CỦA CHÍNH nó (`oxMm` không đổi). Giới hạn kiến trúc đã ghi nhận sẵn trong comment code + PARITY-PROGRESS (Phase 4): `sc` lớn vẫn có thể đẩy nội dung tràn trang vì `autoArrange()` không biết về `sc` — không phải bug mới, là giới hạn đã biết trước, đã viết rõ trong code. |
+| 4 | 5 | Tam giác suy biến (3 đỉnh khác nhau nhưng thẳng hàng, diện tích 0) — `StlMeshLoader` chỉ chặn trường hợp 2 đỉnh trùng nhau (`a != b, b != c, a != c`), không chặn thẳng hàng | Đối chiếu `ObjMeshLoader`: **cũng không** chặn tam giác thẳng hàng (không `guard` nào cho collinearity). `StlMeshLoader` đang ở đúng mức độ chặt chẽ ngang bằng loader tham chiếu hiện có trong repo — không phải hổng riêng của STL, không tự ý làm chặt hơn tiêu chuẩn đã chấp nhận sẵn trong codebase. |
+| 5 | 6 | Thứ tự notarize/staple/zip trong `build-release.sh` — staple đúng lên `.app` bundle (không phải lên zip tạm dùng để submit), và đúng TRƯỚC khi tạo zip phân phối cuối | Đọc lại từng dòng xác nhận đúng thứ tự: `zip tạm → notarytool submit --wait → stapler staple "$BUNDLE" → xoá zip tạm → (cd "$STAGE") → zip zip phân phối cuối từ chính `$BUNDLE` vừa stapled`. Đúng. |
+| 6 | — | Branch ancestry: `wip/backlog-phase6-...` có phải hậu duệ sạch của `main` hiện tại (đã merge Phase 1+2) không, hay lẫn commit trùng/conflict? | `git merge-base` == tip `origin/main` chính xác — 4 commit Phase 3-6 nằm gọn phía trên, không trùng lặp, PR sẽ ra diff sạch. |
+
+**Không tìm thấy finding nào cần code fix mới** trong lượt cross-review này (khác Phase 1+2, nơi tự
+bắt được 1 scope gap thật) — 3 sửa "tiện tay" đã làm ngay trong lúc code (STL vào `Info.plist`) đã
+tính là một phần commit Phase 6, không phải phát hiện riêng của cross-review.
+
+---
+
 ### Lưu ý môi trường verify (máy Darwin)
 - WPF App **không chạy runtime** được trên macOS (`NETSDK1100`) — dùng `-p:EnableWindowsTargeting=true`
   để compile-check C#/XAML. Hành vi runtime WPF **cần verify trên Windows thật**.
