@@ -28,6 +28,9 @@ Backlog-clearing pass (2026-07-25), both platforms unless noted:
 - ✅ **`PNGExporter` now honors the `svgScaleFactor` print-calibration setting on macOS** — matches
   SVG/PDF; PNG's physical page size stays fixed to the real paper dimensions, only content scales
 - ✅ **STL import on macOS** — first non-OBJ/PDO format, dependency-free (binary + ASCII)
+- ✅ **Select Symmetrical Pair (Windows)** — pick 1 piece, auto-selects its mirror-image
+  counterpart. Scoped to axis-aligned mirror symmetry (cardinal-axis plane through the mesh's
+  bounding-box center) rather than arbitrary-orientation detection
 
 Delivered in **v0.4.0.A** (Windows) / **v0.0.0.7-alpha** (macOS) — GĐ4 + GĐ3.3 of the
 papercraft-parity effort:
@@ -67,7 +70,6 @@ Delivered in **Windows v0.1.1.A**:
 
 | Priority | Item | Notes |
 |:---:|------|-------|
-| 🟢 | Select symmetrical pair | Pick an edge/piece and auto-select its mirror |
 | 🟢 | Split window | Detachable / side-by-side 3D + 2D panes |
 | 🟢 | Change coordinates | Re-origin / re-orient the model interactively |
 
@@ -88,8 +90,8 @@ Goal: reach **feature parity with Windows**, then graduate from alpha → beta.
 
 | Priority | Item | Notes |
 |:---:|------|-------|
-| 🟢 | Performance | Overlap detection now uses a spatial grid; profile meshes > 2000 faces for remaining hotspots |
-| 🟢 | Docs | Fill wiki placeholders (demo GIF, per-step screenshots); add a Glossary — see [Glossary](Glossary) |
+| 🟢 | Performance | Profiled (3200-face synthetic mesh, both platforms): the overlap-retry loop costs 33-56× a single unfold pass — worse than its 8-attempt budget suggests, because `CountOverlaps` (used to compare retry candidates) has no early exit unlike the cheaper `HasOverlaps`. See `PARITY-PROGRESS.md` for numbers and a fix direction |
+| 🟢 | Docs | [Glossary](Glossary) is already complete. Still open: 1 demo GIF (`Home.md`) + 3 screenshots (`Quick-Start.md`, steps 1/2/4) — needs interactive capture from a running session (load a model, unfold, arrange pages), attempted in backlog Phase 8 but genuinely blocked: this environment's screen capture doesn't correspond to the actual app window (captures the IDE instead) — needs a maintainer with a normal desktop session, see `PARITY-PROGRESS.md` |
 
 ---
 

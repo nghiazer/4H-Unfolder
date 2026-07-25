@@ -792,6 +792,159 @@ tính là một phần commit Phase 6, không phải phát hiện riêng của c
 
 ---
 
+### Phase 7 Windows: Select Symmetrical Pair (TD-38-4) — hoàn thành (2026-07-25)
+
+**Thu hẹp phạm vi có chủ đích:** TD-38 gốc gộp chung 3 việc "quá phức tạp" (Select Symmetrical Pair /
+Split Window / Change Coordinates). Đúng như plan ban đầu đã phân tích: chỉ Select Symmetrical Pair
+đủ rõ ràng để làm ngay ("chọn 1 piece, tự động chọn thêm piece đối xứng gương") — Split Window (multi-
+window WPF, chưa có scaffolding) và Change Coordinates (chính `SESSION_PROGRESS.md` ghi "scope
+unclear") **cố tình để lại**, không tự ý thu hẹp phạm vi cho vừa 1 phiên code.
+
+**Quyết định thiết kế — chỉ đối xứng theo trục toạ độ chính (X/Y/Z), không tìm mặt phẳng đối xứng bất
+kỳ hướng nào:** đối xứng tổng quát (arbitrary-orientation) là lý do TD-38-4 bị coi "quá phức tạp" từ
+đầu. Hầu hết model đối xứng thật (nhân vật, xe, robot) đều được dựng thẳng đứng, cân đối theo 1 trong
+3 trục toạ độ chính — thu hẹp còn 3 mặt phẳng ứng viên (qua tâm bounding-box, vuông góc X/Y/Z) là đủ
+cho tuyệt đại đa số model thực tế, mà không cần thuật toán PCA/tối ưu hướng phức tạp.
+
+**Kiến trúc — tách thuật toán thuần khỏi glue code WPF** (đúng khuôn `PieceAligner`/
+`BoundaryPolygonComputer` bên macOS): `SymmetryDetector` mới trong `FourHUnfolder.Geometry.Algorithms`
+(test được trong suite portable):
+- `DetectMirrorPlane(positions, threshold=0.9)` — với mỗi trục X/Y/Z, tính điểm đối xứng bằng lưới
+  không gian (spatial hash, bucket = epsilon, tra cứu hàng xóm 3×3×3 — cùng hình dạng thuật toán với
+  `OverlapDetector`'s candidate-pair phase) đo tỉ lệ đỉnh có ảnh gương trùng khớp; chọn trục điểm cao
+  nhất, chỉ chấp nhận nếu ≥90% đỉnh khớp (dưới ngưỡng → coi model không đối xứng, trả `null` thay vì
+  đoán liều).
+- `FindMirrorPiece(plane, pickedPieceId, pieceCentroids, tolerance=5mm)` — so khớp centroid 3D (KHÔNG
+  phải vị trí 2D sau unfold — vị trí 2D không liên quan gì tới đối xứng 3D thật) của piece được chọn,
+  phản chiếu qua mặt phẳng, tìm piece khác có centroid gần ảnh phản chiếu nhất; loại piece tự thân
+  (piece nằm đúng trên mặt phẳng — như mảnh "xương sống" — không có cặp riêng biệt) và loại kết quả
+  nếu khoảng cách vượt ngưỡng dung sai (tránh trả về "gần nhất dù xa" như thể là cặp thật).
+- Glue code trong `PatternCanvasControl.xaml.cs` (`SelectSymmetricalPair()`, theo đúng mẫu
+  `AlignSelected`/`RotateSelected` — thao tác 1 lần trên piece đang chọn, không phải mode toggle như
+  Rotate-by-Point/Edit-Edges): yêu cầu đúng 1 piece đang chọn, dựng dict `pieceId → centroid 3D` từ
+  `PieceViewModel.Faces[].FaceId` tra `mesh.Faces`/`mesh.Vertices`, gọi `SymmetryDetector`, set
+  `IsSelected=true` cho piece khớp + báo `StatusText` (tận dụng cơ chế đã có, không dựng UI mới —
+  giống cách Phase 2 xử lý cảnh báo `FlapOverride`).
+- Icon toolbar: tái dùng **`&#xE7B8;` (Flip)** — glyph đã dùng sẵn cho tính năng "Mirror Inversion"
+  hiện có trong `MainWindow.xaml`, tránh đoán liều 1 codepoint Segoe Fluent Icons chưa được xác nhận
+  hiển thị đúng (rủi ro thật vì máy Darwin không cài font này để tự kiểm tra bằng mắt).
+
+**Kiểm chứng (thực thi thật — C#/.NET chạy được trên Darwin, khác nhóm WPF-only):**
+- `SymmetryDetectorTests.cs` (9 test `xUnit`+`FluentAssertions`, đúng convention
+  `GeometryAlgorithmTests.cs`) — **chạy thật qua `dotnet test`, không phải chỉ compile-check**: phát
+  hiện đúng trục X + tâm 0 cho tập điểm đối xứng tổng hợp (bao gồm 1 điểm nằm đúng trên mặt phẳng);
+  trả `null` cho tập điểm rải rác không đối xứng; xử lý an toàn input rỗng/1 điểm (bounding-box suy
+  biến, tránh chia 0); `Mirror()` đúng công thức phản chiếu cho cả 3 trục + tâm lệch khỏi gốc toạ độ;
+  `FindMirrorPiece` chọn đúng centroid gần nhất, từ chối piece ở xa dù cùng phía trục khớp, không bao
+  giờ tự khớp với chính piece đang chọn.
+- `dotnet build -p:EnableWindowsTargeting=true`: 0 lỗi. `dotnet test`: **136/136 pass** (127 cũ + 9
+  mới), không regression.
+- Glue code `PatternCanvasControl.xaml.cs` (WPF, không compile-check được ngoài Windows runtime theo
+  đúng giới hạn đã ghi nhận nhiều lần) — code ngắn, chỉ gọi vào `SymmetryDetector` đã test kỹ, khớp
+  đúng mẫu `AlignSelected` hiện có (không unit test riêng, giống tiền lệ).
+
+---
+
+### Phase 8a — Cross-cutting: profile overlap-retry cost trên mesh lớn (2026-07-25)
+
+**Không có fixture/benchmark sẵn** trên cả 2 nền tảng trước đây (đã xác nhận từ khảo sát backlog ban
+đầu) — phải tự dựng mesh lớn để đo, không phải chỉ "chạy lại benchmark có sẵn".
+
+**Mesh tổng hợp:** UV-sphere dựng bằng vòng lặp lat/long (không cần thuật toán icosphere phức tạp),
+độ phân giải 20×20/30×30/40×40 → 800/1800/3200 mặt tam giác. Chọn hình cầu **có chủ đích**: một mặt
+cầu về bản chất **không thể trải phẳng thành 1 mảnh liền mà không chồng lấn** — đảm bảo trigger overlap
++ retry loop THẬT, thay vì phải đoán/ép 1 mesh nhân tạo có overlap.
+
+**Kết quả đo thật (Release build, cả 2 nền tảng):**
+
+| Mesh | Windows: 1 lần (không retry) | Windows: mặc định (retry 8) | Tỉ lệ | macOS: 1 lần | macOS: mặc định | Tỉ lệ |
+|---|---|---|---|---|---|---|
+| 800 mặt | 34,6 ms | 155,8 ms | 4,5× | 29,4 ms | 1189,5 ms | 40,5× |
+| 1800 mặt | 7,6 ms | 248,1 ms | 32,5× | 54,3 ms | 3006,2 ms | 55,4× |
+| 3200 mặt | 16,6 ms | 555,4 ms | 33,5× | 97,2 ms | 5471,8 ms | 56,3× |
+
+**Phát hiện quan trọng — tỉ lệ thật (33-56×) tệ hơn nhiều so với con số "9×" vẫn được nhắc trong
+`CLAUDE.md`/`wiki/Roadmap.md` từ trước (dựa trên "1 lần chạy gốc + tối đa 8 lần retry = 9 lần"):**
+đo tách riêng `HasOverlaps` (early-exit, dừng ngay khi thấy 1 cặp chồng lấn) và `CountOverlaps` (quét
+hết, dùng để SO SÁNH các candidate retry — bắt buộc phải biết chính xác số lượng, không thể early-exit)
+trên cùng 1 kết quả unfold (mesh 3200 mặt, 849/922 cặp chồng lấn thật — mesh cầu chồng lấn RẤT nặng):
+
+| | Windows | macOS |
+|---|---|---|
+| `HasOverlaps`/`hasOverlaps` (early-exit) | 5,48 ms | 20,62 ms |
+| `CountOverlaps`/`countOverlaps` (quét hết) | 48,76 ms | 456,17 ms |
+| Tỉ lệ | ~9× | ~22× |
+
+Retry loop gọi `CountOverlaps` **9 lần** (1 lần tính `bestCount` ban đầu + tối đa 8 lần trong vòng
+lặp), trong khi đường "1 lần, không retry" (dùng để so `Single pass` ở bảng trên) **không bao giờ**
+gọi `CountOverlaps` — chỉ dùng `HasOverlaps` rẻ hơn nhiều bên trong `UnfoldOnce`. Đây chính là lý do
+tỉ lệ thật cao hơn hẳn "9×" ngây thơ: không phải bản thân `UnfoldOnce` (dual graph + MST + BFS + glue
+tabs) đắt hơn 9 lần mỗi lượt, mà là **riêng phần đếm overlap để so sánh candidate đã đắt gấp ~9-22 lần
+so với chỉ cần biết có/không** — nhân dồn với 9 lần gọi.
+
+**macOS chậm hơn Windows đáng kể về số tuyệt đối** (5,4 giây so với 555 ms cho mesh 3200 mặt, cùng 1
+workload) — ghi nhận trung thực, không đi sâu điều tra nguyên nhân chênh lệch nền tảng (ngoài phạm vi
+"profile & document" của phase này; có thể do khác biệt cấu trúc dữ liệu `struct`-heavy của Swift hay
+chi tiết cài đặt spatial grid — cần điều tra riêng nếu muốn tối ưu).
+
+**Hướng fix khả dĩ cho tương lai (không làm ngay — đúng phạm vi phase này là "đo & ghi nhận", không
+phải "redesign"):** cho `CountOverlaps` một early-exit CÓ ĐIỀU KIỆN (dừng sớm khi đã chắc chắn candidate
+hiện tại không thể thắng `bestCount` đang giữ, ví dụ dừng ngay khi đếm vượt quá best hiện tại — vẫn
+chính xác, không cần đổi thuật toán) — đây là optimization tự nhiên nhất, không cần đổi kiến trúc.
+
+**Không thêm fixture/benchmark cố định vào repo** — đúng theo kế hoạch ban đầu ("chỉ thêm benchmark
+lâu dài nếu profiling thực sự lộ ra hotspot đáng sửa"); phát hiện lần này ĐÃ đáng ghi nhận cụ thể
+(con số thật + cơ chế chính xác) nhưng bản thân việc FIX là 1 quyết định thiết kế riêng (early-exit
+điều kiện làm thay đổi hành vi retry loop, cần cân nhắc kỹ, không phải thay đổi nhỏ) — để lại cho
+phiên làm việc riêng, không tự ý mở rộng phạm vi phase này.
+
+---
+
+### Phase 8b — Cross-cutting: wiki docs placeholder (2026-07-25)
+
+**Glossary: đã xong từ trước, không phải việc cần làm** — đọc `wiki/Glossary.md` xác nhận đầy đủ,
+chính xác (13 mục thuật ngữ, khớp đúng kiến thức đã tích luỹ suốt các phase trong tài liệu này) — mục
+"add a Glossary" trong mô tả tech-debt cũ đã lỗi thời, chỉ đơn giản chưa ai xoá khỏi `wiki/Roadmap.md`.
+Đã sửa lại mô tả cho đúng thực tế.
+
+**1 GIF demo (`Home.md`) + 3 screenshot (`Quick-Start.md`, bước 1/2/4): đã thử thật, không chỉ giả
+định bị chặn.** Khởi chạy app đã build (`FourHUnfolder` binary), xác nhận qua `System Events` app CÓ
+cửa sổ thật (`{name: "FourHUnfolder", windows: 1}`), lấy được toạ độ cửa sổ thật (`{8, 33, 1664, 946}`)
+— tức là quyền Accessibility CÓ hoạt động, khác với đánh giá "không xác nhận được" ở Phase 1. Nhưng khi
+chụp bằng `screencapture -R` theo đúng toạ độ đó, ảnh chụp lại ra **cửa sổ IDE/terminal của phiên làm
+việc này, không phải app** — xác nhận `screencapture` trong môi trường này không map đúng tới cùng
+"màn hình" mà `System Events` báo cáo toạ độ (khả năng cao đây là 1 kiểu remote/virtual display, nơi
+"màn hình" IDE nhìn thấy khác với nơi ứng dụng GUI thật sự render). Đây là giới hạn **thật của môi
+trường**, không phải giả định — đã tự tay xác nhận trước khi kết luận, không đoán liều rồi bỏ cuộc.
+
+**Kết luận:** không tạo ảnh/GIF giả hoặc placeholder rỗng để "coi như xong" — việc này cần 1 người có
+phiên desktop thật (không phải qua remote-IDE) để: mở app → load model mẫu → unfold → xếp trang → chụp
+màn hình 3 bước + quay 1 đoạn GIF ngắn. Để nguyên placeholder hiện có trong wiki (đã ghi rõ ràng nội
+dung cần chụp cho từng vị trí) — không đụng vào, không giả vờ giải quyết được việc không thể làm trong
+môi trường này.
+
+---
+
+## Cross-review Phase 7–8 (2026-07-25) — 1 bug thật, đã fix
+
+Đọc lại diff Phase 7+8 một cách hoài nghi. Phase 8 (chỉ đổi docs, không code) không có gì để review
+thêm ngoài kiểm tra số liệu khớp với output terminal thật (đã đối chiếu, khớp). Phase 7 tìm ra 1 vấn
+đề thật, đã fix ngay trong lượt cross-review này.
+
+| # | Mức độ | Phát hiện | Xử lý |
+|---|--------|-----------|-------|
+| 1 | 🟡 Bug thật | `FindMirrorPiece`'s `matchToleranceMm` mặc định **cố định 5mm** cho MỌI kích thước model — mô hình nhỏ (vd. tượng nhỏ 20mm) 5mm dung sai quá RỘNG (25% kích thước cả model, dễ nhận nhầm piece sai làm cặp); mô hình lớn (vd. tượng 1-2 mét) 5mm quá HẸP (piece đối xứng thật có thể lệch centroid hơn 5mm do khác biệt tam giác hoá nhỏ giữa 2 bên, bị từ chối oan). Glue code không truyền tolerance riêng, luôn dùng mặc định cứng này | Thêm field `MeshDiagonal` vào `MirrorPlane` (tính sẵn trong `DetectMirrorPlane`, không tốn thêm chi phí tính lại bbox); `FindMirrorPiece`'s tolerance mặc định đổi thành `max(5mm, 2% đường chéo mesh)` khi caller không truyền riêng — glue code trong `PatternCanvasControl.xaml.cs` **không cần đổi gì** (đã không truyền tolerance tường minh từ đầu, tự động hưởng default mới). Thêm 2 test mới xác nhận: model 1000mm chấp nhận lệch 15mm (trong 2%=20mm); model 20mm KHÔNG chấp nhận cùng mức lệch 15mm tuyệt đối (vượt `max(5,20*0.02)=5mm`) — chứng minh tolerance thực sự co giãn theo kích thước, không phải luôn ≥15mm bất kể test data. |
+
+**Kiểm chứng fix (thực thi thật):** `dotnet build -p:EnableWindowsTargeting=true` 0 lỗi. `dotnet test`:
+**138/138 pass** (136 + 2 test mới cho hành vi scale-aware tolerance) — không regression trên 9 test
+gốc của `SymmetryDetectorTests.cs` (đã cập nhật constructor `MirrorPlane` thêm tham số thứ 3, verify
+lại từng test vẫn đúng ý nghĩa ban đầu).
+
+Không tìm thêm bug nào khác trong Phase 7 (glue code, icon tái dùng, thứ tự early-exit đều đã soát kỹ
+lúc review lần đầu và giữ nguyên đánh giá đó) hay Phase 8 (chỉ số liệu + docs, không code).
+
+---
+
 ### Lưu ý môi trường verify (máy Darwin)
 - WPF App **không chạy runtime** được trên macOS (`NETSDK1100`) — dùng `-p:EnableWindowsTargeting=true`
   để compile-check C#/XAML. Hành vi runtime WPF **cần verify trên Windows thật**.
