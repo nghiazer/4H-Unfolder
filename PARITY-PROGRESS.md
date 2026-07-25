@@ -636,6 +636,48 @@ qua **8 assertion thực thi thật, tất cả pass**:
 
 ---
 
+### Phase 4 macOS: fix PNGExporter bỏ qua svgScaleFactor — hoàn thành (2026-07-25)
+
+**Quyết định thiết kế (lý do phase này trước đây bị coi là "cần design call"):** SVG/PDF không có khái
+niệm trang cố định — cả document co giãn theo `content_bbox * sc + margin`. PNG thì khác hẳn: cần
+kích thước trang CỐ ĐỊNH tính bằng pixel (khớp giấy in thật @ DPI thật), vì đó chính là ý nghĩa của
+"PNG mỗi trang cho máy cắt" — in/cắt trên khổ giấy vật lý thật. Quyết định: **giữ nguyên `pixelW`/
+`pixelH`** (kích thước trang vật lý, không đổi theo `sc`) — trang in vẫn là khổ giấy thật; chỉ áp `sc`
+vào phép biến đổi toạ độ mm→px (`px`/`py`), khiến nội dung to/nhỏ lại quanh gốc toạ độ CỦA TỪNG TRANG,
+giống hệt cách 1 hệ số hiệu chỉnh in nhỏ (gần 1.0) hoạt động trên SVG/PDF. Không cố gắng làm cho
+`autoArrange()` (vốn không biết gì về `sc`) nhận biết trang-theo-tỉ-lệ — ngoài phạm vi "fix bug bỏ
+qua setting", sẽ cần thiết kế lại thuật toán xếp trang, chỉ hợp lý nếu setting này được dùng cho hiệu
+chỉnh LỚN thay vì hiệu chỉnh in nhỏ (trường hợp dùng thực tế).
+
+**Việc đã làm** (`PNGExporter.swift`):
+- `px`/`py` nhân thêm `* sc` (`sc = settings.svgScaleFactor`) vào phép biến đổi toạ độ — khớp cách
+  SVG/PDF áp `sc` lên hình học.
+- **Không** đổi `ctx.setLineWidth(...)` (độ dày nét fold/cut) — đối chiếu `SVGExporter.swift` xác nhận
+  SVG cũng **không** nhân `stroke-width` với `sc` (độ dày nét đại diện cho đặc tính công cụ cắt — dao
+  laser/dao kéo, không phải thứ cần hiệu chỉnh theo giấy co giãn) — giữ nhất quán, không tự ý mở rộng.
+- Sửa 2 chỗ tính `fontSize` (nhãn cặp cạnh + nhãn trang) từ `pxPerMm / sc` (chia — không nhất quán,
+  hình học không hề nhân sc ở bất cứ đâu khác trong file trước fix này) thành `pxPerMm * sc` — khớp
+  cách `SVGExporter`'s `font-size="3"` tự động co giãn theo `sc` (vì toạn bộ hệ toạ độ SVG viewBox đã
+  ở "đơn vị mm-của-output-đã-scale").
+
+**Kiểm chứng (thực thi thật, lấy mẫu pixel):**
+- Script `swiftc` độc lập dựng 1 tam giác biết trước toạ độ mm, export PNG ở `sc=0.5/1.0/2.0`, đếm số
+  pixel không-trắng trong ảnh xuất ra (foolproof hơn dò 1 pixel đơn lẻ — lần thử đầu dùng cách lấy mẫu
+  1 pixel bị lỗi Y-flip trong chính script test, không phải bug sản phẩm; đổi sang đo diện tích tô màu
+  toàn ảnh để tránh hẳn lớp toán map toạ độ dễ sai).
+- Diện tích tô màu tỉ lệ đúng theo **bình phương** hệ số scale (hình học 2D): `sc=2.0` cho diện tích
+  gấp **4.007×** so với `sc=1.0` (lý thuyết 4×); `sc=0.5` cho **0.254×** (lý thuyết 0.25×) — sai số
+  ~0.2%, xác nhận scale áp dụng đúng vào hình học, không phải hiệu ứng ngẫu nhiên/làm tròn.
+- Smoke test render nhãn (`includePageLabel`/`includeEdgeLabels`) ở `sc=2.0` và `sc=0.1` (biên cực
+  đoan) — không crash, vẫn xuất file — xác nhận công thức `fontSize` mới không tạo giá trị âm/NaN cho
+  `CTFontCreateWithName`.
+
+`swift build`: sạch. Đã đóng 2 mục tech-debt liên quan: `CLAUDE.md` macOS table (chỉ còn 1 mục
+`View2DSettings`/... tolerant-decoder, phát hiện từ Phase 1+2), `wiki/Roadmap.md` macOS table (xoá
+dòng PNGExporter/svgScaleFactor và dòng Undo stack — cả 2 đã fix ở Phase 3/4).
+
+---
+
 ### Lưu ý môi trường verify (máy Darwin)
 - WPF App **không chạy runtime** được trên macOS (`NETSDK1100`) — dùng `-p:EnableWindowsTargeting=true`
   để compile-check C#/XAML. Hành vi runtime WPF **cần verify trên Windows thật**.

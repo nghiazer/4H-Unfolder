@@ -74,8 +74,6 @@ Goal: reach **feature parity with Windows**, then graduate from alpha → beta.
 
 | Priority | Item |
 |:---:|------|
-| 🟡 | Undo stack doesn't cover piece positions/rotations (drag, align pieces) — only edge/flap overrides. Needs the same unified-snapshot redesign Windows already has (`EditSnapshot`/`PushDragUndo`), not a per-call patch |
-| 🟡 | `PNGExporter` ignores the `svgScaleFactor` print-calibration setting that SVG/PDF both honor — latent at the default value; fix needs a design call given PNG's fixed-page multi-page-grid layout |
 | 🟡 | Extra import formats (Assimp equivalent) |
 | 🟡 | Notarized, signed distribution (Developer ID) |
 
