@@ -136,6 +136,7 @@ public sealed partial class AssemblyViewModel : ObservableObject, IDisposable
     partial void OnCurrentStepChanged(int value)
     {
         if (_suppressStepRefresh) return;
+        if (IsPlaying) StopAnimation();   // manual seek (e.g. Slider drag) overrides autoplay
         _animT = 1.0;
         RefreshModel();
     }

@@ -11,6 +11,19 @@ public version. Priorities: 🔴 High · 🟡 Medium · 🟢 Low.
 
 ## Recently shipped
 
+Delivered in **v1.1.0.A** (Windows) — full-codebase cross-review pass (2026-07-26):
+
+- ✅ **Grouping fixed** — `RerunUnfold` was silently clearing `UserGroupId` on almost every edge/flap
+  edit, and group-drag didn't move ungrouped-but-linked siblings; both fixed together
+- ✅ **Auto-Arrange is now undoable**
+- ✅ **`MainViewModel` lifetime leak on exit fixed** — was disposing a throwaway instance instead of
+  the live one, leaking `.4hu` temp-extraction directories on every normal app exit
+- ✅ **Release-build settings-save failures are no longer silent** — surfaced via `StatusText`
+- ✅ **`.pdo` loader hardened** against unbounded counts/indices read from untrusted file content;
+  `.4hu` bundle loader gained a zip-bomb guard
+- ✅ **PDF export no longer crashes** on a malformed color string in settings
+- ✅ **Quick-Start screenshots captured** — closes the item below that was blocked in backlog Phase 8
+
 Delivered in **v1.0.0.A** (Windows) / **v1.0.0-beta** (macOS) — 8-phase backlog-clearing pass
 (2026-07-25), both platforms unless noted:
 
@@ -73,6 +86,13 @@ Delivered in **Windows v0.1.1.A**:
 |:---:|------|-------|
 | 🟢 | Split window | Detachable / side-by-side 3D + 2D panes |
 | 🟢 | Change coordinates | Re-origin / re-orient the model interactively |
+| 🟡 | [Piece with a hole gets wrong outline padding](https://github.com/nghiazer/4H-Unfolder/issues/72) | `TD-44-1` — `BoundaryPolygonComputer` only traces one boundary loop |
+| 🟢 | [Non-manifold mesh → wrong assembly fold angle](https://github.com/nghiazer/4H-Unfolder/issues/73) | `TD-44-2` |
+| 🟢 | [Inconsistent snap-tolerance constants](https://github.com/nghiazer/4H-Unfolder/issues/74) | `TD-44-3` — `FlapMerger` vs `BoundaryPolygonComputer`, 10× apart |
+| 🟢 | [Mirror-X undo incomplete](https://github.com/nghiazer/4H-Unfolder/issues/75) | `TD-44-4` |
+| 🟢 | [Lasso selection scroll-jump](https://github.com/nghiazer/4H-Unfolder/issues/76) | `TD-44-5` |
+| 🟢 | [Edit Flaps "R =" angle field discarded](https://github.com/nghiazer/4H-Unfolder/issues/77) | `TD-44-6` — needs a domain-model left/right angle concept |
+| 🟢 | [Edit Flaps stale settings if Settings dialog left open](https://github.com/nghiazer/4H-Unfolder/issues/78) | `TD-44-7` |
 
 ---
 
@@ -91,15 +111,16 @@ Goal: reach **feature parity with Windows**, then graduate from alpha → beta.
 
 | Priority | Item | Notes |
 |:---:|------|-------|
-| 🟢 | Performance | Profiled (3200-face synthetic mesh, both platforms): the overlap-retry loop costs 33-56× a single unfold pass — worse than its 8-attempt budget suggests, because `CountOverlaps` (used to compare retry candidates) has no early exit unlike the cheaper `HasOverlaps`. See `PARITY-PROGRESS.md` for numbers and a fix direction |
-| 🟢 | Docs | [Glossary](Glossary) is already complete. Still open: 1 demo GIF (`Home.md`) + 3 screenshots (`Quick-Start.md`, steps 1/2/4) — needs interactive capture from a running session (load a model, unfold, arrange pages), attempted in backlog Phase 8 but genuinely blocked: this environment's screen capture doesn't correspond to the actual app window (captures the IDE instead) — needs a maintainer with a normal desktop session, see `PARITY-PROGRESS.md` |
+| 🟢 | Performance (unfold pipeline) | Profiled (3200-face synthetic mesh, both platforms): the overlap-retry loop costs 33-56× a single unfold pass — worse than its 8-attempt budget suggests, because `CountOverlaps` (used to compare retry candidates) has no early exit unlike the cheaper `HasOverlaps`. See `PARITY-PROGRESS.md` for numbers and a fix direction |
+| 🟡 | [Performance (2D canvas interaction)](https://github.com/nghiazer/4H-Unfolder/issues/71) | Feels slow/laggy during pan/zoom/drag on moderately complex models (~600-700 faces); confirmed on both macOS (SwiftUI `Canvas`) and Windows. Not yet profiled — needs a proper pass (Instruments on macOS, or checking `PatternCanvasControl`'s render/hit-test path on Windows) to find root cause |
+| 🟢 | Docs | [Glossary](Glossary) is already complete. Quick-Start screenshots (steps 1/2/4) captured 2026-07-26 by driving a real running build via UI Automation — see `PARITY-PROGRESS.md` for the approach. Still open: 1 demo GIF for `Home.md` |
 
 ---
 
 ## Version history
 
 For released versions and their changes, see the git tags
-([`v0.0.1.A` … `v1.0.0.A`](https://github.com/nghiazer/4H-Unfolder/tags)) and
+([`v0.0.1.A` … `v1.1.0.A`](https://github.com/nghiazer/4H-Unfolder/tags)) and
 `4h-unfolder-win/BUGS_HISTORY.md` in the repo.
 
 > This roadmap reflects intent, not commitment — priorities may shift.

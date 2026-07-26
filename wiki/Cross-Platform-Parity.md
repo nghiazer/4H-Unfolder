@@ -5,7 +5,7 @@ is a native Swift port catching up to it. This page tracks where they match and 
 
 | | Windows | macOS |
 |--|---------|-------|
-| **Status** | ✅ Production `v1.0.0.A` | 🚧 Beta `v1.0.0-beta` |
+| **Status** | ✅ Production `v1.1.0.A` | 🚧 Beta `v1.0.0-beta` |
 | **Stack** | WPF · .NET 8 · C# | SwiftUI · SceneKit · Swift |
 | **Distribution** | Inno Setup installer + portable ZIP | Ad-hoc signed `.app` (Developer ID + notarize scaffolding ready in `build-release.sh`, pending a maintainer with a paid Apple Developer account) |
 

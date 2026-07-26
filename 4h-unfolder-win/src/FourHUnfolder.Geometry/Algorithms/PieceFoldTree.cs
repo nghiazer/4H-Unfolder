@@ -175,6 +175,6 @@ public sealed class PieceFoldTree
         var c = mesh.Vertices[f.C].Position;
         var n = Vector3.Cross(b - a, c - a);
         float len = n.Length();
-        return len > 1e-10f ? n / len : Vector3.UnitY;
+        return len > GeometryConstants.DegenerateFace ? n / len : Vector3.UnitY;
     }
 }

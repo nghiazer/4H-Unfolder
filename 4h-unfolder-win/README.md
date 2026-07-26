@@ -8,13 +8,13 @@
 A Pepakura-style paper model unfolder built with **WPF / .NET 8**.  
 Load a 3-D mesh, unfold it into a printable 2-D pattern, customise the layout, and export to SVG, PDF, or PNG.
 
-> Current version: **v1.0.0.A** (win-x64 self-contained EXE) — first stable release: Select Symmetrical Pair, configurable overlap-retry budget, plus the full GĐ1–GĐ4 papercraft-parity effort (PNG export/page, SVG cutting-machine layers, join connected cut edges, align pieces)
+> Current version: **v1.1.0.A** (win-x64 self-contained EXE) — full-codebase cross-review pass: group/undo bugs fixed, a `MainViewModel` lifetime leak on exit, a Release-build silent settings-save failure, untrusted-input hardening in the PDO loader and `.4hu` bundle loader, a PDF export crash on malformed colors
 
 ---
 
 ## Screenshot
 
-![4H-Unfolder v0.1.0.A](docs/screenshot-v0.1.0.A.png)
+![4H-Unfolder v1.1.0.A](docs/screenshot-v1.1.0.A.png)
 
 ---
 
@@ -22,8 +22,8 @@ Load a 3-D mesh, unfold it into a printable 2-D pattern, customise the layout, a
 
 | Package | Link |
 |---------|------|
-| **Installer** (recommended) | [4H-Unfolder-v1.0.0.A-setup.exe](https://github.com/NghiaZer/4H-Unfolder/releases/download/v1.0.0.A/4H-Unfolder-v1.0.0.A-setup.exe) |
-| **Portable ZIP** | [4H-Unfolder-v1.0.0.A-portable.zip](https://github.com/NghiaZer/4H-Unfolder/releases/download/v1.0.0.A/4H-Unfolder-v1.0.0.A-portable.zip) |
+| **Installer** (recommended) | [4H-Unfolder-v1.1.0.A-setup.exe](https://github.com/NghiaZer/4H-Unfolder/releases/download/v1.1.0.A/4H-Unfolder-v1.1.0.A-setup.exe) |
+| **Portable ZIP** | [4H-Unfolder-v1.1.0.A-portable.zip](https://github.com/NghiaZer/4H-Unfolder/releases/download/v1.1.0.A/4H-Unfolder-v1.1.0.A-portable.zip) |
 
 > **No runtime required** — fully self-contained win-x64 binary.  
 > Requires Windows 10 / 11 (x64).

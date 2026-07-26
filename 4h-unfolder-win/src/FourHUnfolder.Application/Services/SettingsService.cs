@@ -21,6 +21,12 @@ public class SettingsService
 
     public event EventHandler? SettingsChanged;
 
+    /// Raised when persisting settings to disk fails (e.g. file locked, disk full).
+    /// <see cref="SettingsChanged"/> still fires — the in-memory setting takes effect for
+    /// this session even though it won't survive a restart. Subscribers should surface this
+    /// to the user, since <see cref="Debug"/> logging is stripped from Release builds.
+    public event EventHandler<string>? SaveFailed;
+
     // ── lifecycle ─────────────────────────────────────────────────────────────
 
     /// Called once on startup. Falls back to defaults on error and logs the reason.
@@ -70,7 +76,8 @@ public class SettingsService
         }
         catch (IOException ex)
         {
-            Debug.WriteLine($"[SettingsService] Could not persist settings: {ex.Message}");
+            Trace.WriteLine($"[SettingsService] Could not persist settings: {ex.Message}");
+            SaveFailed?.Invoke(this, ex.Message);
         }
     }
 }
