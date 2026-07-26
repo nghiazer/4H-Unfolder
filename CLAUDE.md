@@ -142,7 +142,7 @@ the exact line from `find_definition`.
 
 ---
 
-## Current release: `v1.0.0.A` (Windows) / `v1.0.0-beta` (macOS) — branch `main`
+## Current release: `v1.1.0.A` (Windows) / `v1.0.0-beta` (macOS) — branch `main`
 
 > Public-facing plan + status live in the [wiki Roadmap](https://github.com/nghiazer/4H-Unfolder/wiki/Roadmap).
 > Full papercraft-parity plan, per-item status, and verification log: [`PARITY-PROGRESS.md`](PARITY-PROGRESS.md).
@@ -152,8 +152,28 @@ the exact line from `find_definition`.
 |----|----------|-------------|
 | TD-38-5/6 | 🟢 Low | Split Window / Change Coordinates — deferred as too complex / scope unclear, see `SESSION_PROGRESS.md` |
 | Performance | 🟢 Low | Profiled with a 3200-face synthetic mesh that has unavoidable overlaps (backlog Phase 8, 2026-07-25): the retry loop costs **33-56×** a single pass, not the ~9× its 8-attempt budget suggests — root cause is `OverlapDetector.CountOverlaps` (used to compare retry candidates) having no early exit, unlike `HasOverlaps` (~9-22× cheaper on the same mesh, both platforms). Real numbers + a concrete fix direction (give `CountOverlaps` an early-exit cap, or avoid recomputing it from scratch per candidate) in `PARITY-PROGRESS.md` — not fixed here, this was a profiling pass, not a redesign |
+| TD-44-1 | 🟡 Med | `BoundaryPolygonComputer` only traces a single boundary loop — a piece with a genuine hole (e.g. user joins all cut edges around a ring/washer segment) gets an incomplete/wrong outline-padding polygon, silently |
+| TD-44-2 | 🟢 Low | Non-manifold mesh topology (3+ faces sharing one edge) makes `PieceFoldTree.Build` resolve the wrong neighbour face, producing a bogus fold angle in the assembly animation for that edge |
+| TD-44-3 | 🟢 Low | `FlapMerger.SnapEps` (0.01) and `BoundaryPolygonComputer.SnapEps` (0.001) are two independently-defined "same unfolded vertex" tolerances, 10× apart, both outside `GeometryConstants` |
+| TD-44-4 | 🟢 Low | `ToggleMirrorInversion` calls `PushUndoState()` implying full undo coverage, but `EditSnapshot` doesn't capture mirror state — undo restores piece positions while the mesh stays mirrored |
+| TD-44-5 | 🟢 Low | Large lasso selections cause the 2D canvas to scroll-jump once per newly-selected piece instead of once total |
+| TD-44-6 | 🟢 Low | Edit Flaps dialog's "R =" angle field and Auto/Manual radios are fully bound in XAML but never read — the domain model (`GlueTabSideAngleDeg`/`GlueTabGenerator`) has no left/right angle concept |
+| TD-44-7 | 🟢 Low | Edit Flaps dialog captures tab-depth/angle defaults once at construction; since it's modeless and Settings only disables its own owner, both can be open together and "Apply to All" can silently revert a just-changed global setting |
 
-Resolved this release: macOS "port join connected cut edges from Windows" (GĐ3.3 — Windows
+Resolved this release: full-codebase Windows cross-review (4 parallel agents covering Domain/Geometry,
+Application/Infrastructure, MainViewModel+PatternCanvasControl, and the remaining App/WPF layer) — see
+[`PARITY-PROGRESS.md`](PARITY-PROGRESS.md) for the fix table. Highlights: `RerunUnfold` was silently
+wiping `UserGroupId` on almost every edit (grouping broke after any edge/flap change) and group-drag
+didn't move ungrouped-but-linked siblings, `AutoArrange` had no undo snapshot, `App.xaml.cs` disposed a
+throwaway `MainViewModel` instance on exit instead of the live one (temp-bundle dirs leaked), Release
+builds swallowed settings-save failures with zero signal (`Debug.WriteLine` is stripped outside DEBUG),
+`PdoMeshLoader` trusted unbounded counts/indices straight from file content, `PdfExporter` crashed the
+whole export on a malformed color string, and the title bar was still hardcoded to "v0.1.0.A". The 7
+lower-severity/rare-trigger findings above (TD-44-1..7) were deferred rather than risking an unreviewed
+geometry rewrite. Real Quick-Start screenshots were also captured, closing the "Docs" cross-cutting
+Roadmap item.
+
+Previously resolved: macOS "port join connected cut edges from Windows" (GĐ3.3 — Windows
 already had it), macOS Outline Padding wired into export/canvas, macOS undo unified to cover piece
 layout, macOS PNG export scale-factor fix, macOS STL import, macOS/Windows notarize+distribution
 scaffolding, Windows Select Symmetrical Pair (TD-38-4), and 3 small Windows items

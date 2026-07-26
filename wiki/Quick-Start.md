@@ -3,8 +3,6 @@
 This walkthrough takes a 3D model from import to a printable PDF in five steps.
 It assumes you've already [installed the app](Installation).
 
-> 📸 _Screenshot placeholders below — capture one per step and drop them in._
-
 ---
 
 ## 1. Import a mesh
@@ -16,7 +14,7 @@ It assumes you've already [installed the app](Installation).
 
 The model appears in the **3D viewport** on the left. Rotate with drag, zoom with scroll.
 
-> 🖼 _Screenshot: model loaded in 3D viewport._
+![Model loaded in the 3D viewport](https://raw.githubusercontent.com/nghiazer/4H-Unfolder/main/4h-unfolder-win/docs/quickstart-1-3d-viewport.png)
 
 ---
 
@@ -32,7 +30,7 @@ Press **Unfold**. The app:
 A **Setup dialog** lets you target a real-world size (e.g. "model should be 150 mm tall").
 The flat pieces show up in the **2D canvas** on the right, measured in millimetres.
 
-> 🖼 _Screenshot: 2D pattern with tabs and fold lines._
+![2D pattern with glue tabs and fold lines](https://raw.githubusercontent.com/nghiazer/4H-Unfolder/main/4h-unfolder-win/docs/quickstart-2-2d-pattern.png)
 
 **Red pieces = overlap.** If any piece is flagged as overlapping, see
 [step 4](#4-fix-overlaps-and-lay-out-pages) before printing.
@@ -61,7 +59,7 @@ _A dedicated **Editing Edges & Flaps** page is planned for the full reference._
 
 The goal: every piece sits inside a page boundary, nothing red.
 
-> 🖼 _Screenshot: pieces arranged across A4 pages._
+![Pieces auto-arranged across multiple A4 pages](https://raw.githubusercontent.com/nghiazer/4H-Unfolder/main/4h-unfolder-win/docs/quickstart-4-page-layout.png)
 
 ---
 

@@ -2,7 +2,51 @@
 
 > File theo dõi nội bộ cho công cuộc học hỏi từ 2 dự án papercraft mã nguồn mở và nâng cấp
 > 4H-Unfolder. Cập nhật mỗi khi hoàn thành một hạng mục.
-> Cập nhật gần nhất: **2026-07-24** (GĐ3.3 hoàn thành: join connected cut edges + align pieces cho macOS — Windows đã có sẵn).
+> Cập nhật gần nhất: **2026-07-26** (cross-review toàn bộ Windows codebase, v1.1.0.A).
+
+## Cross-review toàn bộ Windows (2026-07-26) — v1.1.0.A
+
+4 agent song song rà soát độc lập toàn bộ `4h-unfolder-win/src/` (Domain+Geometry,
+Application+Infrastructure, MainViewModel+PatternCanvasControl, phần App/WPF còn lại). 17 phát hiện
+tổng cộng; đã fix 9 cái + 1 bug phát hiện thêm khi tự chạy app thật để chụp screenshot Quick-Start
+(title bar hardcode "v0.1.0.A" cũ). 7 cái còn lại (rủi ro thấp / trigger hiếm / cần đổi domain model
+lớn hơn phạm vi review) đưa vào tech-debt `TD-44-1..7` trong `CLAUDE.md`, đồng thời tạo GitHub issue
+riêng cho từng cái.
+
+| # | File | Vấn đề | Cách fix |
+|---|------|--------|----------|
+| 1 | `MainViewModel.cs` (`RerunUnfold`) | `oldPos` dictionary không lưu `UserGroupId` — gần như mọi thao tác sửa cạnh/flap sau khi Group sẽ xoá âm thầm grouping | Đổi tuple 3→4 field, thêm `p.UserGroupId = pos.UserGroupId` khi restore |
+| 2 | `PatternCanvasControl.xaml.cs` (`Canvas_MouseMove`/`Canvas_MouseUp`) | Kéo 1 piece trong group không kéo theo piece cùng nhóm — filter chỉ theo `p.IsSelected`, bỏ qua `_multiDragOrigins` đã tính đúng | Đổi filter sang `_multiDragOrigins.ContainsKey(p.GroupId)` ở cả 2 nơi |
+| 3 | `MainViewModel.cs` (`AutoArrange`) | Command thiếu `PushUndoState()` — Ctrl+Z sau Auto-Arrange không khôi phục layout thủ công | Thêm `PushUndoState()` trước `RunAutoArrange()` |
+| 4 | `App.xaml.cs` | `MainViewModel` đăng ký `AddTransient` nhưng chỉ 1 instance thực dùng (`MainWindow` tạo); `OnExit` dispose một instance MỚI khác → temp dir của `.4hu` không bao giờ dọn | Đổi sang `AddSingleton` |
+| 5 | `SettingsService.cs` (`Save`) | Lỗi ghi file chỉ log qua `Debug.WriteLine` — bị strip khỏi Release build → lưu settings thất bại hoàn toàn âm thầm | Thêm event `SaveFailed`, đổi log sang `Trace.WriteLine`, `MainViewModel` hiện `StatusText` khi fail |
+| 6 | `PdoMeshLoader.cs` | Đọc `vtxCount`/`shapeCount`/`ptCount`/`edgeCount`/`geoCount`/`texCount` và vertex-index trực tiếp từ file, không giới hạn/validate — file .pdo hỏng có thể gây cấp phát nhiều GB hoặc out-of-range index | Thêm `CheckCount()` chặn trần hợp lý cho mọi count + validate vertex index trước khi dùng |
+| 7 | `PdfExporter.cs` (`HexToColor`) | Màu hex sai định dạng trong settings.json ném `FormatException` không bắt → hỏng toàn bộ export PDF nhiều trang | Bọc try/catch, fallback về đen + log |
+| 8 | `FlapOverride.cs` (`Deserialize`) | `PrimaryFaceId` hỏng bị âm thầm coi là -1 ("không giới hạn"), đổi hành vi glue tab mà không cảnh báo | Log warning khi `parts[1]` có mặt nhưng parse lỗi |
+| 9 | `AssemblyViewModel.cs` (`OnCurrentStepChanged`) | Kéo slider bước lắp ráp lúc đang autoplay không dừng timer — animation tự tiếp tục đè lên thao tác thủ công trong ~500ms | Gọi `StopAnimation()` khi `IsPlaying` và không phải do timer tự set |
+| 10 | `MainWindow.xaml` | Title bar hardcode "v0.1.0.A" — phát hiện khi mở app thật để chụp screenshot, không khớp version thực tế (v1.0.0.A tại thời điểm đó) | Sửa thành version hiện tại |
+
+Ngoài ra: thêm giới hạn zip-bomb cho `.4hu` bundle (`ProjectSerializer.LoadBundle`, cap 10 000 entry /
+500 MB uncompressed), và gộp hằng số ngưỡng trùng lặp (`PieceFoldTree`'s hardcoded `1e-10f` →
+`GeometryConstants.DegenerateFace`).
+
+**Kiểm chứng:** build 0 lỗi, 138/138 test pass sau toàn bộ thay đổi (cả trước và sau khi revert phần
+tooling tạm dùng để tự động hoá việc chụp screenshot — xem ghi chú dưới).
+
+**Ghi chú môi trường:** để chụp 3 screenshot Quick-Start (đã blocked từ Phase 8, xem Roadmap), phải tự
+build + chạy app thật (`dotnet build src/FourHUnfolder.App`, `Start-Process`) và lái UI bằng
+`System.Windows.Automation` (UIA) qua PowerShell — click toolbar button qua `InvokePattern`, chụp màn
+hình qua `System.Drawing.Graphics.CopyFromScreen` crop theo `BoundingRectangle` của cửa sổ. Native
+`OpenFileDialog` của WPF tự resolve theo cách không xác định được (không tương tác được ổn định qua
+UIA trong môi trường này) — giải pháp: thêm tạm 1 method `LoadMeshFromPath(path)` + 1 hook đọc biến
+môi trường `FOURHU_AUTOLOAD_PATH` trong `MainWindow` constructor để load thẳng 1 file cụ thể, dùng cho
+3 lần chụp, rồi **revert hoàn toàn** (`git diff` xác nhận sạch) trước khi commit — không phải tính năng
+sản phẩm. Phát hiện phụ: 3D viewport dùng camera cố định `Position="3,3,3"` (không auto-fit theo kích
+thước mesh) — mesh test phải ở scale ~1-2 đơn vị (kiểu cube mặc định Blender) mới hiển thị vừa khung
+hình; mesh lớn hơn (chục đơn vị) bị camera "chui vào" một góc. Không fix (không phải bug, chỉ là giả
+định ngầm về scale mesh nhập vào) — ghi chú lại để lần sau khỏi mất thời gian dò lại.
+
+---
 
 ## Cross-review GĐ1+GĐ2 (2026-07-22) — đã fix
 

@@ -38,7 +38,7 @@ public partial class App : System.Windows.Application
         sc.AddSingleton<ProjectSerializer>();
 
         // UI
-        sc.AddTransient<MainViewModel>();
+        sc.AddSingleton<MainViewModel>();
 
         Services = sc.BuildServiceProvider();
 

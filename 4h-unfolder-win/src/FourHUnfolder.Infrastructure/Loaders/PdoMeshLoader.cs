@@ -50,6 +50,23 @@ public sealed class PdoMeshLoader : IMeshLoader
     private const int PerPointBytes = 4 + 16 + 16 + 1 + 24 + 24; // = 85
     private const int PerEdgeBytes  = 16 + 2 + 4;                 // = 22
 
+    // Sanity caps on counts read directly from file content, so a corrupt/malicious
+    // file fails fast with a clear error instead of attempting a multi-GB allocation.
+    // Generous enough that no legitimate papercraft model should ever hit them.
+    private const uint MaxGeoCount   = 100_000;
+    private const uint MaxVtxCount   = 20_000_000;
+    private const uint MaxShapeCount = 5_000_000;
+    private const uint MaxPtCount    = 1_000_000;
+    private const uint MaxEdgeCount  = 20_000_000;
+    private const uint MaxTexCount   = 100_000;
+
+    private static void CheckCount(uint value, uint max, string what)
+    {
+        if (value > max)
+            throw new InvalidDataException(
+                $"PDO file is corrupt or malformed: implausible {what} = {value:N0} (max expected {max:N0}).");
+    }
+
     public Mesh Load(string filePath)
     {
         using var fs     = File.OpenRead(filePath);
@@ -98,6 +115,7 @@ public sealed class PdoMeshLoader : IMeshLoader
         var  mesh      = new Mesh();
         var  pdoLayout = new PdoLayout();
         uint geoCount  = reader.ReadUInt32();
+        CheckCount(geoCount, MaxGeoCount, "geometry count");
 
         for (uint gi = 0; gi < geoCount; gi++)
         {
@@ -108,6 +126,7 @@ public sealed class PdoMeshLoader : IMeshLoader
 
             // ── Vertices (raw doubles, NO cipher) ─────────────────────────
             uint vtxCount = reader.ReadUInt32();
+            CheckCount(vtxCount, MaxVtxCount, "vertex count");
             for (uint vi = 0; vi < vtxCount; vi++)
             {
                 float x = (float)reader.ReadDouble();
@@ -118,6 +137,7 @@ public sealed class PdoMeshLoader : IMeshLoader
 
             // ── Shapes → fan-triangulated faces ───────────────────────────
             uint shapeCount = reader.ReadUInt32();
+            CheckCount(shapeCount, MaxShapeCount, "shape count");
             for (uint si = 0; si < shapeCount; si++)
             {
                 int  materialId = reader.ReadInt32();  // unk11 = material/texture index
@@ -125,6 +145,7 @@ public sealed class PdoMeshLoader : IMeshLoader
                 reader.BaseStream.Seek(32, SeekOrigin.Current); // 4×double unk12
 
                 uint ptCount   = reader.ReadUInt32();
+                CheckCount(ptCount, MaxPtCount, "point count");
                 var  indices   = new int[ptCount];
                 var  uvIndices = new int[ptCount];
                 var  coords2D  = new Vector2[ptCount]; // Phase C: paper-space coords (mm)
@@ -132,7 +153,12 @@ public sealed class PdoMeshLoader : IMeshLoader
                 for (uint pi = 0; pi < ptCount; pi++)
                 {
                     // vertex index (0-based within this geo → add vtxBase for global)
-                    indices[pi] = (int)reader.ReadUInt32() + vtxBase; // 4 bytes
+                    int localVtxIdx = (int)reader.ReadUInt32(); // 4 bytes
+                    if (localVtxIdx < 0 || localVtxIdx >= vtxCount)
+                        throw new InvalidDataException(
+                            $"PDO file is corrupt: point references vertex {localVtxIdx}, " +
+                            $"but this geometry only has {vtxCount} vertices.");
+                    indices[pi] = localVtxIdx + vtxBase;
 
                     // coord: 2D paper layout (mm) — extract for Phase C/D
                     float cx = (float)reader.ReadDouble();             // 8 bytes
@@ -171,6 +197,7 @@ public sealed class PdoMeshLoader : IMeshLoader
             // ── Skip unk17 edge data (22 bytes per entry) ─────────────────
             // Phase D will parse these for fold/cut topology
             uint edgeCount = reader.ReadUInt32();
+            CheckCount(edgeCount, MaxEdgeCount, "edge count");
             reader.BaseStream.Seek((long)edgeCount * PerEdgeBytes, SeekOrigin.Current);
         }
 
@@ -184,6 +211,7 @@ public sealed class PdoMeshLoader : IMeshLoader
         try
         {
             uint texCount = reader.ReadUInt32();
+            CheckCount(texCount, MaxTexCount, "texture count");
             for (uint ti = 0; ti < texCount; ti++)
             {
                 var texName = ReadWStr(reader, key);

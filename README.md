@@ -8,7 +8,7 @@ Papercraft / pepakura unfolder — loads 3D meshes (`.obj`, `.pdo`) and unfolds 
 
 | Platform | Stack | Version | Status |
 |----------|-------|---------|--------|
-| **Windows** | WPF · .NET 8 · C# | v1.0.0.A | Production |
+| **Windows** | WPF · .NET 8 · C# | v1.1.0.A | Production |
 | **macOS** | Swift 5.9 · SwiftUI · SceneKit · Metal | v1.0.0-beta | Beta |
 
 ---

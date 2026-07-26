@@ -13,7 +13,7 @@ Security fixes land on the latest release of each platform.
 
 | Platform | Version | Supported |
 |----------|---------|:---------:|
-| Windows | `v1.0.0.A` (latest) | ✅ |
+| Windows | `v1.1.0.A` (latest) | ✅ |
 | Windows | older releases | ❌ |
 | macOS | `v1.0.0-beta` (latest) | ✅ |
 | macOS | older alphas/betas | ❌ |

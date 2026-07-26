@@ -957,7 +957,7 @@ public partial class PatternCanvasControl : UserControl
         // Move all selected pieces by same delta
         if (_multiDragOrigins != null && _vm != null)
         {
-            foreach (var p in _vm.Pieces.Where(p => p.IsSelected))
+            foreach (var p in _vm.Pieces.Where(p => _multiDragOrigins.ContainsKey(p.GroupId)))
             {
                 if (!_multiDragOrigins.TryGetValue(p.GroupId, out var origin)) continue;
                 double px = origin.X + delta.X / _pxPerMm;
@@ -1020,7 +1020,7 @@ public partial class PatternCanvasControl : UserControl
 
             // Expand page for each moved piece's rotated bounding box
             var movedPieces = _multiDragOrigins != null
-                ? _vm.Pieces.Where(p => p.IsSelected && _multiDragOrigins.ContainsKey(p.GroupId))
+                ? _vm.Pieces.Where(p => _multiDragOrigins.ContainsKey(p.GroupId))
                 : (IEnumerable<PieceViewModel>)[_dragging];
 
             foreach (var piece in movedPieces.Where(p => p.Faces.Length > 0))

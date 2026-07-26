@@ -307,6 +307,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _lastThemeMode = settingsService.Current.General.ThemeMode;
 
         _settingsService.SettingsChanged += OnSettingsChanged;
+        _settingsService.SaveFailed += (_, msg) => StatusText = $"Settings could not be saved: {msg}";
     }
 
     // ── settings shortcut ─────────────────────────────────────────────────────
@@ -1454,7 +1455,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         if (_currentMesh == null) return;
         var oldPos = Pieces.ToDictionary(p => p.GroupId,
-                                         p => (p.PositionX, p.PositionY, p.Rotation));
+                                         p => (p.PositionX, p.PositionY, p.Rotation, p.UserGroupId));
         var result = _unfoldService.Unfold(_currentMesh, _edgeOverrides, _settingsService.Current.Print, _flapOverrides,
                                             seedCount: _settingsService.Current.Print.OverlapRetrySeedCount);
         var groups = _unfoldService.ComputePieces(_currentMesh);
@@ -1471,6 +1472,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
                     p.PositionX = pos.PositionX;
                     p.PositionY = pos.PositionY;
                     p.Rotation  = pos.Rotation;
+                    p.UserGroupId = pos.UserGroupId;
                 }
                 else
                 {
@@ -1604,7 +1606,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
     // ── auto-arrange ───────────────────────────────────────────────────────────
 
     [RelayCommand]
-    private void AutoArrange() => RunAutoArrange();
+    private void AutoArrange()
+    {
+        PushUndoState();
+        RunAutoArrange();
+    }
 
     /// Strip-packs pieces into a horizontal page grid.
     /// Improvements over the naive approach:

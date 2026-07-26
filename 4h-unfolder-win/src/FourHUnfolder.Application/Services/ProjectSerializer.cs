@@ -111,7 +111,26 @@ public class ProjectSerializer
         tempDirOut = tempDir;
 
         using (var archive = ZipFile.OpenRead(inputPath))
+        {
+            // Guard against zip-bomb .4hu bundles (few KB compressed → many GB decompressed)
+            // shared by someone other than the user — ExtractToDirectory blocks zip-slip but
+            // not this. A legitimate bundle (mesh + textures + JSON state) never comes close.
+            const int MaxEntries = 10_000;
+            const long MaxTotalUncompressedBytes = 500L * 1024 * 1024; // 500 MB
+            if (archive.Entries.Count > MaxEntries)
+                throw new InvalidDataException(
+                    $"Invalid .4hu file: {archive.Entries.Count:N0} entries exceeds the {MaxEntries:N0} limit.");
+            long totalUncompressed = 0;
+            foreach (var e in archive.Entries)
+            {
+                totalUncompressed += e.Length;
+                if (totalUncompressed > MaxTotalUncompressedBytes)
+                    throw new InvalidDataException(
+                        "Invalid .4hu file: decompressed contents exceed the 500 MB limit.");
+            }
+
             archive.ExtractToDirectory(tempDir, overwriteFiles: true);
+        }
 
         var statePath = Path.Combine(tempDir, StateEntry);
         if (!File.Exists(statePath))

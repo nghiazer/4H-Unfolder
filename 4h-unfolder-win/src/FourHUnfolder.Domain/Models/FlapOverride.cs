@@ -22,7 +22,15 @@ public sealed record FlapOverride(FlapMode Mode, int PrimaryFaceId = -1)
             Debug.WriteLine($"[FlapOverride] Unrecognised override value, skipping: '{s}'");
             return null;
         }
-        int primaryFaceId = parts.Length >= 2 && int.TryParse(parts[1], out int pid) ? pid : -1;
+        int primaryFaceId = -1;
+        if (parts.Length >= 2)
+        {
+            if (int.TryParse(parts[1], out int pid))
+                primaryFaceId = pid;
+            else
+                Debug.WriteLine($"[FlapOverride] Corrupt PrimaryFaceId '{parts[1]}' in '{s}', " +
+                                 "treating as unrestricted (-1) — flap side restriction is lost.");
+        }
         return new FlapOverride(mode, primaryFaceId);
     }
 }

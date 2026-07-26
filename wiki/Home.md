@@ -10,7 +10,7 @@
 
 | Platform | Stack | Latest | Status |
 |----------|-------|--------|--------|
-| **Windows** | WPF · .NET 8 · C# | `v1.0.0.A` | ✅ Production |
+| **Windows** | WPF · .NET 8 · C# | `v1.1.0.A` | ✅ Production |
 | **macOS** | Swift · SwiftUI · SceneKit | `v1.0.0-beta` | 🚧 Beta |
 
 Downloads live on the [Releases page](https://github.com/nghiazer/4H-Unfolder/releases).

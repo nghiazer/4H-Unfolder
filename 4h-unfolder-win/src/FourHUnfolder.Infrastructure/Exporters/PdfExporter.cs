@@ -188,21 +188,31 @@ public class PdfExporter
 
     private static XColor HexToColor(string hex)
     {
+        string raw = hex;
         hex = hex.TrimStart('#');
-        if (hex.Length == 8) // AARRGGBB
+        try
         {
-            byte a = Convert.ToByte(hex[0..2], 16);
-            byte r = Convert.ToByte(hex[2..4], 16);
-            byte g = Convert.ToByte(hex[4..6], 16);
-            byte b = Convert.ToByte(hex[6..8], 16);
-            return XColor.FromArgb(a, r, g, b);
+            if (hex.Length == 8) // AARRGGBB
+            {
+                byte a = Convert.ToByte(hex[0..2], 16);
+                byte r = Convert.ToByte(hex[2..4], 16);
+                byte g = Convert.ToByte(hex[4..6], 16);
+                byte b = Convert.ToByte(hex[6..8], 16);
+                return XColor.FromArgb(a, r, g, b);
+            }
+            if (hex.Length == 6)
+            {
+                byte r = Convert.ToByte(hex[0..2], 16);
+                byte g = Convert.ToByte(hex[2..4], 16);
+                byte b = Convert.ToByte(hex[4..6], 16);
+                return XColor.FromArgb(r, g, b);
+            }
         }
-        if (hex.Length == 6)
+        catch (FormatException)
         {
-            byte r = Convert.ToByte(hex[0..2], 16);
-            byte g = Convert.ToByte(hex[2..4], 16);
-            byte b = Convert.ToByte(hex[4..6], 16);
-            return XColor.FromArgb(r, g, b);
+            // Malformed color string from settings.json — degrade to black rather than
+            // aborting the whole multi-page PDF export mid-document.
+            System.Diagnostics.Trace.WriteLine($"[PdfExporter] Invalid color '{raw}', using black.");
         }
         return XColors.Black;
     }
