@@ -135,9 +135,17 @@ struct GlueTabGenerator {
         guard edgeLen > GeometryConstants.degenerateTab else { return nil }
 
         let dir  = (p1 - p0) / edgeLen
-        // Perpendicular pointing away from face interior (outward)
+        // Perpendicular pointing away from face interior (outward). rawPerp's sign is arbitrary
+        // (whichever of the two perpendiculars .perp's fixed rotation formula happens to produce);
+        // flip it whenever it points TOWARD the centroid (positive dot with the vector from the
+        // edge to the centroid means "same general direction" = inward) so the result always
+        // points away, matching the C# reference's identical `if (dot(toCenter, perp) > 0) perp =
+        // -perp`. Issue #70: this ternary previously picked the branches backwards (kept rawPerp
+        // when it pointed inward, negated it when it already pointed outward), so every glue tab
+        // was generated on the wrong side of its edge — folding into the piece's own interior
+        // instead of away from it.
         let rawPerp = dir.perp
-        let outward = simd_dot(rawPerp, face.centroid - p0) > 0 ? rawPerp : -rawPerp
+        let outward = simd_dot(rawPerp, face.centroid - p0) > 0 ? -rawPerp : rawPerp
         let perp    = outward
 
         switch shape {
