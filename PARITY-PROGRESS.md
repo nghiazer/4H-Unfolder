@@ -1026,3 +1026,36 @@ history range).
   `swiftc -emit-module -module-name XCTest`, rồi `swiftc -typecheck -I <FourHUnfolderCore
   swiftmodule dir> -I <shim dir> <test file>`. Bắt được lỗi kiểu/cú pháp thật (đã tự kiểm chứng bằng
   cách cố tình chèn lỗi kiểu và xác nhận trình biên dịch báo lỗi) mà không cần chạy assertion thật.
+
+---
+
+## Fix issue #70 macOS: glue tab sinh sai hướng (folding vào trong piece) — 2026-08-18
+
+**Bug:** `GlueTabGenerator.swift` (`makeTab`) chọn nhánh outward-perpendicular ngược logic so với
+C# reference. C# (`GlueTabGenerator.cs`, `CreateTab`): `if (dot(toCenter, perp) > 0) perp = -perp`
+— nếu `perp` đang trỏ CÙNG phía với centroid (inward) thì đảo dấu để nó trỏ ra ngoài. Swift trước fix:
+`simd_dot(rawPerp, face.centroid - p0) > 0 ? rawPerp : -rawPerp` — làm ngược lại, giữ nguyên `rawPerp`
+khi nó trỏ vào trong (dot > 0, cùng phía centroid) và đảo dấu khi nó đã trỏ ra ngoài. Kết quả: **mọi**
+glue tab trên macOS được sinh ra ở phía sai của cạnh — gập vào chính bề mặt piece thay vì gập ra
+ngoài. Đã xác nhận `.perp` (SIMDExtensions.swift) khớp chính xác công thức xoay của C#
+(`(-dir.Y, dir.X)`), nên bug không nằm ở base rotation formula, chỉ ở nhánh ternary.
+
+**Fix:** đảo 2 nhánh ternary (`Sources/FourHUnfolderCore/Core/Algorithms/GlueTabGenerator.swift`,
+hàm `makeTab`) → `... > 0 ? -rawPerp : rawPerp`, khớp logic C# 1-1. Sửa kèm 2 test trong
+`GlueTabGeneratorTests.swift` vốn assert/document nhầm hướng cũ là đúng (`testTrapezoid_
+innerEdgeAboveBaseline` → đổi tên `testTrapezoid_innerEdgePointsAwayFromCentroid` + đảo
+`XCTAssertGreaterThan`→`XCTAssertLessThan`; sửa comment sai hướng ở `testTrapezoid_
+insetCappedAt45Percent` và `testRectangle_parallelEdges`, các assertion X-only ở 2 test đó không đổi
+vì không phụ thuộc dấu Y).
+
+**Verify:** scratch executable target tạm thời (`swift run`, xoá sau khi chạy) dựng 2 face tổng hợp
+— centroid ở +Y và centroid ở -Y — xác nhận tab luôn nằm ở phía ngược với centroid ở cả 2 trường hợp
+(không phải hardcode luôn trừ Y); `swift build` sạch; typecheck `GlueTabGeneratorTests.swift` +
+`TestMeshBuilders.swift` qua XCTest shim (không lỗi). Rà soát các chỗ khác dùng centroid/outward
+trong `Core/Algorithms/` — `PolygonOffset.swift` dùng cơ chế khác (CCW-winding `outwardNormal`, không
+phải ternary theo centroid) nên không bị ảnh hưởng; `UnfoldEngine.swift`'s `reconstructApex`
+(SIMDExtensions.swift) có logic side-check tương tự nhưng đã đúng (`(parentSign * c0Sign > 0) ? c1 :
+c0` — khớp đúng với comment "same side → dùng c1") — không phải cùng loại bug, không cần sửa.
+
+Issue không có repro cụ thể khi filed — root cause tìm được bằng so sánh trực tiếp với Windows
+reference thay vì từ 1 mesh repro thật.

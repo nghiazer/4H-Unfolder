@@ -54,7 +54,8 @@ final class GlueTabGeneratorTests: XCTestCase {
         s.glueTabSideAngleDeg = 45
         let tab = generate(singleCutFace(), settings: s)[0]
 
-        // p0=(0,0), p1=(10,0); perp points toward centroid (+Y)
+        // p0=(0,0), p1=(10,0), v2=(5,8) so the face interior is at +Y; perp points AWAY from the
+        // centroid (issue #70), i.e. -Y — X-coordinates here are unaffected by that sign either way.
         XCTAssertEqual(tab.p3.x, 4.5, accuracy: 0.01,
                        "Inset capped at 45% of edge length = 4.5mm")
         XCTAssertEqual(tab.p2.x, 5.5, accuracy: 0.01,
@@ -74,11 +75,13 @@ final class GlueTabGeneratorTests: XCTestCase {
         XCTAssertEqual(tab.p2.x, 7.0, accuracy: 0.01, "10 - 3 = 7mm from right side")
     }
 
-    func testTrapezoid_innerEdgeAboveBaseline() {
+    func testTrapezoid_innerEdgePointsAwayFromCentroid() {
+        // v2=(5,8) puts the face centroid above the base edge, so the outward tab (issue #70)
+        // extends below it, away from the face interior.
         var s = defaultSettings; s.glueTabShape = .trapezoid; s.glueTabDepthMm = 5
         let tab = generate(singleCutFace(), settings: s)[0]
-        XCTAssertGreaterThan(tab.p2.y, tab.p1.y, "Inner edge of tab is above the base edge")
-        XCTAssertGreaterThan(tab.p3.y, tab.p0.y)
+        XCTAssertLessThan(tab.p2.y, tab.p1.y, "Inner edge of tab is below the base edge")
+        XCTAssertLessThan(tab.p3.y, tab.p0.y)
     }
 
     // MARK: - Rectangle shape
@@ -86,8 +89,8 @@ final class GlueTabGeneratorTests: XCTestCase {
     func testRectangle_parallelEdges() {
         var s = defaultSettings; s.glueTabShape = .rectangle; s.glueTabDepthMm = 5
         let tab = generate(singleCutFace(), settings: s)[0]
-        XCTAssertEqual(tab.p3.x, tab.p0.x, accuracy: 0.001, "p3 is directly above p0")
-        XCTAssertEqual(tab.p2.x, tab.p1.x, accuracy: 0.001, "p2 is directly above p1")
+        XCTAssertEqual(tab.p3.x, tab.p0.x, accuracy: 0.001, "p3 is directly below p0")
+        XCTAssertEqual(tab.p2.x, tab.p1.x, accuracy: 0.001, "p2 is directly below p1")
     }
 
     func testRectangle_depthMatchesSettings() {

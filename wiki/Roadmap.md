@@ -11,6 +11,14 @@ public version. Priorities: 🔴 High · 🟡 Medium · 🟢 Low.
 
 ## Recently shipped
 
+Fixed after **v1.1.0.A** (2026-08-18):
+
+- ✅ **macOS glue tabs were generated on the wrong side of every cut edge**
+  ([#70](https://github.com/nghiazer/4H-Unfolder/issues/70)) — `GlueTabGenerator`'s
+  outward-direction check had its branches swapped relative to the Windows reference, so every tab
+  folded into the piece's own interior instead of away from it. Found by comparing directly against
+  the Windows implementation (the issue itself had no repro mesh attached).
+
 Delivered in **v1.1.0.A** (Windows) — full-codebase cross-review pass (2026-07-26):
 
 - ✅ **Grouping fixed** — `RerunUnfold` was silently clearing `UserGroupId` on almost every edge/flap
