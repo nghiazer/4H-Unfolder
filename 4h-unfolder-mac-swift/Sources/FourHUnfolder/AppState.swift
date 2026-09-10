@@ -18,7 +18,9 @@ enum CanvasMode: Equatable {
 @MainActor
 final class AppState: ObservableObject {
     @Published var mesh: Mesh?
-    @Published var unfoldResult: UnfoldResult?
+    @Published var unfoldResult: UnfoldResult? {
+        didSet { rebuildPieceLookupCache() }
+    }
     @Published var edgeOverrides: [Int: EdgeType] = [:]
     @Published var flapOverrides: [Int: FlapOverride] = [:]
     @Published var settings: AppSettings = .load()
@@ -394,9 +396,50 @@ final class AppState: ObservableObject {
     func fitToWindow() { fitToWindowTrigger &+= 1 }
 
     // MARK: - Piece offset helpers
+    //
+    // faceIdToPieceIndex / pieceCenterCache below are built once per unfoldResult (see
+    // rebuildPieceLookupCache) rather than recomputed on every call. Before this cache existed,
+    // pieceIndex(forFaceId:) did a linear `firstIndex { $0.contains(fid) }` scan over every piece
+    // and pieceCenter(for:) rebuilt a Set + filtered the full `result.faces` array from scratch —
+    // both O(faces) per call. Canvas draws call these once per face across ~8 render passes
+    // (drawFaces, drawEdges, drawTabs, drawCutLabels, drawFaceLabels, drawFoldAngles, drawSelection,
+    // drawVertexDots) every single frame during pan/zoom/drag, so the uncached cost was effectively
+    // O(faces²) per frame — the root cause of #71 (2D canvas feels laggy on moderately complex
+    // meshes, ~670 faces reproduced it). The cache turns each lookup into an O(1) dictionary/array
+    // read; it must be rebuilt whenever `unfoldResult` itself changes (new mesh, re-unfold), but not
+    // when only pieceOffsets/pieceRotations/selection change, since those don't affect piece
+    // membership or raw (pre-offset) geometry.
+
+    /// faceId → index into result.pieces. Rebuilt in rebuildPieceLookupCache().
+    private var faceIdToPieceIndex: [Int: Int] = [:]
+    /// Raw (pre-offset, pre-rotation) bbox center per piece index. Rebuilt alongside the map above.
+    private var pieceCenterCache: [SIMD2<Float>] = []
+
+    private func rebuildPieceLookupCache() {
+        guard let result = unfoldResult else {
+            faceIdToPieceIndex.removeAll()
+            pieceCenterCache.removeAll()
+            return
+        }
+        var faceById: [Int: UnfoldedFace] = [:]
+        faceById.reserveCapacity(result.faces.count)
+        for f in result.faces { faceById[f.faceId] = f }
+
+        var map: [Int: Int] = [:]
+        map.reserveCapacity(result.faces.count)
+        pieceCenterCache = result.pieces.enumerated().map { (pi, faceIds) in
+            for fid in faceIds { map[fid] = pi }
+            let faces = faceIds.compactMap { faceById[$0] }
+            guard !faces.isEmpty else { return .zero }
+            let allX = faces.flatMap { [$0.v0.x, $0.v1.x, $0.v2.x] }
+            let allY = faces.flatMap { [$0.v0.y, $0.v1.y, $0.v2.y] }
+            return SIMD2((allX.min()! + allX.max()!) / 2, (allY.min()! + allY.max()!) / 2)
+        }
+        faceIdToPieceIndex = map
+    }
 
     func pieceIndex(forFaceId fid: Int, result: UnfoldResult) -> Int? {
-        result.pieces.firstIndex { $0.contains(fid) }
+        faceIdToPieceIndex[fid]
     }
 
     func offset(forFaceId fid: Int, result: UnfoldResult) -> SIMD2<Float> {
@@ -418,13 +461,13 @@ final class AppState: ObservableObject {
 
     /// Bbox center of a piece's raw face positions (no offsets applied).
     /// Used as the rotation origin so the piece rotates around its own center.
+    /// `faceIds` is always some `result.pieces[pi]`, so its first element's cached piece index
+    /// recovers `pi` without a linear scan.
     func pieceCenter(for faceIds: [Int], result: UnfoldResult) -> SIMD2<Float> {
-        let faceSet = Set(faceIds)
-        let faces = result.faces.filter { faceSet.contains($0.faceId) }
-        guard !faces.isEmpty else { return .zero }
-        let allX = faces.flatMap { [$0.v0.x, $0.v1.x, $0.v2.x] }
-        let allY = faces.flatMap { [$0.v0.y, $0.v1.y, $0.v2.y] }
-        return SIMD2((allX.min()! + allX.max()!) / 2, (allY.min()! + allY.max()!) / 2)
+        guard let firstFid = faceIds.first,
+              let pi = faceIdToPieceIndex[firstFid],
+              pi < pieceCenterCache.count else { return .zero }
+        return pieceCenterCache[pi]
     }
 
     // MARK: - Texture cache (materialId → CGImage)
